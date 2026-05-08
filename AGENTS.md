@@ -1,5 +1,3 @@
-@AGENTS.md
-
 # VITAL_Services Service Rules
 
 Before making code changes in this service, you MUST review the local rules and documentation:
