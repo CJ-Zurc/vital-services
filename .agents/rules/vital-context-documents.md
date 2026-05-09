@@ -26,7 +26,7 @@ For cross-service work also consult:
 - `../.agents/rules/root-workspace-context.md`
 - `../.agents/rules/root-repo-routing.md`
 - `../Documents/VITAL_Integration_Guide_v1.md`
-- `../Documents/Auth_Backend_Integration_Guide_v4.md`
+- `../Documents/Auth_Backend_Integration_Guide_v5.md`
 - `../Documents/Audit_Logs_Integration_Guide_v2.md`
 
 ## Code-to-doc parity
