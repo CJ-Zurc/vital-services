@@ -1,36 +1,82 @@
-const express = require('express');
-require('dotenv').config();
-
-const correlationId = require('./middleware/correlationId');
-const trustedGateway = require('./middleware/trustedGateway');
-const internalRoutes = require('./routes/internal');
-const vitalRoutes = require('./routes/vital');
+const express = require("express");
+const { port, vitalWebUrl, internalServiceKey } = require("./config");
+const { requireInternalService } = require("./middleware/internal-auth");
+const paymongo = require("./paymongo");
 
 const app = express();
-const port = parseInt(process.env.PORT, 10) || 8009;
+app.use(express.json({ limit: "1mb" }));
 
-app.use(express.json());
-app.use(correlationId);
+function asyncHandler(fn) {
+  return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+}
 
-app.get('/healthz', (req, res) => {
-  res.status(200).json({ status: 'ok', service: 'vital-services' });
+app.get("/health", (_req, res) => {
+  res.json({ success: true, data: { service: "vital-services" } });
 });
 
-app.use('/internal', trustedGateway, internalRoutes);
-app.use('/vital', trustedGateway, vitalRoutes);
+app.post("/payments/paymongo/checkouts", requireInternalService, asyncHandler(async (req, res) => {
+  const { appointmentId, amount, description, successUrl, cancelUrl } = req.body || {};
+  if (!appointmentId || !amount || !successUrl || !cancelUrl) {
+    return res.status(400).json({ success: false, message: "appointmentId, amount, successUrl, and cancelUrl are required." });
+  }
+  const checkout = await paymongo.createCheckout({
+    appointmentId,
+    amount,
+    description: description || "VITAL consultation fee",
+    successUrl,
+    cancelUrl,
+  });
+  res.json({ success: true, data: checkout });
+}));
 
-app.use((err, req, res, _next) => {
-  console.error(JSON.stringify({
-    level: 'error',
-    correlation_id: req.correlationId,
-    message: err.message,
-    stack: err.stack,
-  }));
-  res.status(500).json({ error: 'internal_error', correlation_id: req.correlationId });
+app.get("/payments/paymongo/checkouts/:checkoutSessionId", requireInternalService, asyncHandler(async (req, res) => {
+  const status = await paymongo.retrieveCheckout(req.params.checkoutSessionId);
+  res.json({ success: true, data: status });
+}));
+
+app.post("/payments/paymongo/checkouts/:checkoutSessionId/expire", requireInternalService, asyncHandler(async (req, res) => {
+  const result = await paymongo.expireCheckout(req.params.checkoutSessionId);
+  res.json({ success: true, data: result });
+}));
+
+app.post("/payments/paymongo/refunds", requireInternalService, asyncHandler(async (req, res) => {
+  const { paymentId, amount, reason, appointmentId } = req.body || {};
+  if (!paymentId || !amount || !appointmentId) {
+    return res.status(400).json({ success: false, message: "paymentId, appointmentId, and amount are required." });
+  }
+  const refund = await paymongo.createRefund({ paymentId, amount, reason });
+  res.json({ success: true, data: refund });
+}));
+
+app.post("/jobs/appointments/auto-complete", requireInternalService, asyncHandler(async (_req, res) => {
+  const response = await fetch(`${vitalWebUrl}/api/internal/appointments/auto-complete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Service-Key": internalServiceKey,
+    },
+  });
+  const payload = await response.json().catch(() => null);
+  res.status(response.status).json(payload || { success: response.ok });
+}));
+
+app.post("/webhooks/paymongo", (_req, res) => {
+  res.status(202).json({
+    success: true,
+    message: "Webhook endpoint reserved for a later phase. Payment sync currently uses checkout retrieval.",
+  });
 });
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`vital-services listening on :${port}`);
+app.use((error, _req, res, _next) => {
+  const status = error.status || error.response?.status || 500;
+  const message =
+    error.response?.data?.errors?.[0]?.detail ||
+    error.response?.data?.errors?.[0]?.code ||
+    error.message ||
+    "Vital services request failed.";
+  res.status(status).json({ success: false, message });
 });
 
-module.exports = app;
+app.listen(port, () => {
+  console.log(`vital-services listening on ${port}`);
+});
