@@ -14,7 +14,7 @@ From `D:\repos\Capstone_BGH`:
 
 ```powershell
 docker compose --env-file .env.compose up -d --build vital-services-db vital-services-api
-curl http://localhost:8009/healthz
+curl http://localhost:8009/health
 ```
 
-Expected: `{"status":"ok","service":"vital-services"}`.
+Expected: `{"success":true,"data":{"service":"vital-services"}}`.

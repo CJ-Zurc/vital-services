@@ -45,9 +45,9 @@ Do not parse or trust other `X-User-*` headers without coordination with `BGH_AP
 
 ## 6. Auth-facing role aggregation
 
-- `GET /internal/users/{user_id}/roles` is the contract Auth calls during system role aggregation for the `vital` slug.
-- The response shape must be `{ "system": "vital", "user_id": "...", "roles": [...] }`.
-- This endpoint must be guarded by the same trusted-gateway check OR by the internal service key — confirm with `UHSE_AUTH/.agents/rules/` before changing the guard.
+- `VITAL_WEB` owns `GET /internal/users/{user_id}/roles` and derives roles from
+  its Prisma-backed VITAL records.
+- VITAL_Services must not duplicate that role source.
 
 ## 7. Audit publishing
 

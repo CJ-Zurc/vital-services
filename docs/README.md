@@ -1,6 +1,8 @@
 # VITAL_Services Documentation
 
-VITAL_Services is the consolidated VITAL backend for the BGH Unified Health Service Ecosystem. It hosts both appointment and telemedicine flows behind a single Express 5 API and replaces the prior `VITAL-APPOINTMENT` + `VITAL-TELEMEDICINE` repos.
+VITAL_Services is the consolidated VITAL backend for the BGH Unified Health
+Service Ecosystem. It hosts appointment and telemedicine flows behind one
+Express 5 API.
 
 ## Contents
 
@@ -19,5 +21,5 @@ VITAL_Services is the consolidated VITAL backend for the BGH Unified Health Serv
 - **Port:** `8009`
 - **System slug:** `vital`
 - **Browser path:** `/vital/*` via the Gateway
-- **Auth-facing:** `GET /internal/users/{user_id}/roles`
+- **Auth-facing role provider:** `VITAL_WEB`
 - **Sidecar DB:** `vital-services-db` on port `5435`

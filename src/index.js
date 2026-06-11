@@ -1,10 +1,14 @@
 const express = require("express");
 const { port, vitalWebUrl, internalServiceKey } = require("./config");
 const { requireInternalService } = require("./middleware/internal-auth");
+const correlationId = require("./middleware/correlationId");
+const trustedGateway = require("./middleware/trustedGateway");
+const vitalRouter = require("./routes/vital");
 const paymongo = require("./paymongo");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
+app.use(correlationId);
 
 function asyncHandler(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -66,6 +70,8 @@ app.post("/webhooks/paymongo", (_req, res) => {
     message: "Webhook endpoint reserved for a later phase. Payment sync currently uses checkout retrieval.",
   });
 });
+
+app.use(trustedGateway, vitalRouter);
 
 app.use((error, _req, res, _next) => {
   const status = error.status || error.response?.status || 500;

@@ -6,7 +6,7 @@ This is the priority cross-service doc for VITAL_Services. Read it before any ch
 
 ```
 browser  ──►  BGH_API_GATEWAY  ──►  VITAL_Services
-                  /vital/*           /vital/*
+                  /vital/*           /*
 ```
 
 Browsers must never call VITAL_Services on `:8009` directly. The Gateway:
@@ -14,7 +14,8 @@ Browsers must never call VITAL_Services on `:8009` directly. The Gateway:
 1. Verifies the session/JWT.
 2. Performs silent refresh and may emit `X-New-Access-Token` to the browser.
 3. Injects the trusted `X-Gateway-Secret` and `X-User-*` headers.
-4. Forwards `/vital/*` to `http://vital-services-api:8009`.
+4. Removes the `/vital` prefix and forwards the remaining path to
+   `http://vital-services-api:8009`.
 
 ## 2. Trust model
 
@@ -37,17 +38,17 @@ When VITAL_Services needs to:
 
 …it calls `AUTH_INTERNAL_BASE_URL` directly (e.g. `http://auth-api:8000/internal/...`).
 
-Pass `INTERNAL_API_KEY` (or the dedicated `AUTH_INTERNAL_SERVICE_KEY` when Auth requires per-caller keys) and propagate `X-Correlation-ID`.
+Send `INTERNAL_API_KEY` and the dedicated `AUTH_INTERNAL_SERVICE_KEY` when both
+are configured, and propagate `X-Correlation-ID`. Auth currently accepts either
+the shared key or the complete service-specific pair.
 
 **Never** loop these calls back through the Gateway.
 
 ## 4. Auth role aggregation contract
 
-`UHSE_AUTH` periodically (or on-demand) calls `/internal/users/{user_id}/roles` on every system that participates in the `vital` slug. VITAL_Services owns this endpoint for `vital`.
-
-- Response shape MUST be `{ "system": "vital", "user_id": "...", "roles": [...] }`.
-- Empty roles is a valid response (no VITAL-specific roles for this user).
-- Guard with `trustedGateway` OR with a dedicated internal-service key — coordinate with `UHSE_AUTH/.agents/rules/`.
+`UHSE_AUTH` calls `VITAL_WEB /internal/users/{user_id}/roles`. VITAL_WEB owns
+the Prisma records used to derive VITAL roles; VITAL_Services is not an Auth
+role provider.
 
 ## 5. Audit publishing
 

@@ -5,12 +5,12 @@ description: Structural and documentation rules for the VITAL_Services backend. 
 
 # VITAL_Services: Context Documents
 
-`VITAL_Services` is the consolidated VITAL backend (Node.js / Express 5). It replaces the prior `VITAL-APPOINTMENT` and `VITAL-TELEMEDICINE` services and owns:
+`VITAL_Services` is the consolidated VITAL backend (Node.js / Express 5) and owns:
 
 - VITAL appointment-domain backend flows
 - VITAL telemedicine-domain backend flows
 - The current `/vital/public*` and `/vital/staff*` path target shape
-- The Auth-facing `GET /internal/users/{user_id}/roles` endpoint that contributes to UHSE_AUTH role aggregation
+- Gateway-forwarded VITAL appointment and telemedicine API routes
 
 ## Required reading before edits
 
@@ -33,7 +33,6 @@ For cross-service work also consult:
 
 | Code area | Doc that must stay in sync |
 |---|---|
-| `src/routes/internal.js` | `docs/api_reference.md`, `docs/integration_guide.md` |
 | `src/routes/vital.js` | `docs/api_reference.md`, `docs/flows.md` |
 | `src/middleware/trustedGateway.js` | `docs/security.md`, `docs/integration_guide.md` |
 | `src/middleware/correlationId.js` | `docs/integration_guide.md` |

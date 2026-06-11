@@ -25,7 +25,7 @@ docker compose --env-file .env.compose logs -f vital-services-api
 
 ## Healthcheck
 
-The container's healthcheck hits `GET /healthz` on port `8009`. If startup loops without becoming healthy:
+The container's healthcheck hits `GET /health` on port `8009`. If startup loops without becoming healthy:
 
 1. `docker compose --env-file .env.compose logs vital-services-api`
 2. Check that `vital-services-db` reports healthy first (`pg_isready`).

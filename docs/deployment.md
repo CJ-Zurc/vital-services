@@ -9,7 +9,7 @@ The repo Dockerfile is multi-stage Node 20-alpine:
 1. `deps` — installs production node_modules from `package-lock.json`.
 2. `runner` — copies `node_modules` and `src/`, exposes `8009`, runs `node src/index.js`.
 
-A container healthcheck hits `GET /healthz` on `8009`.
+A container healthcheck hits `GET /health` on `8009`.
 
 ## Root compose entries
 
@@ -46,7 +46,7 @@ After startup:
 
 ```powershell
 # from the host
-curl http://localhost:8009/healthz
+curl http://localhost:8009/health
 # expected: {"status":"ok","service":"vital-services"}
 
 # trust check

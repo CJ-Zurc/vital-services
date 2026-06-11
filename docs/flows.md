@@ -31,7 +31,7 @@ UHSE_AUTH
   │  internal service key
   │  X-Correlation-ID
   ▼
-VITAL_Services /internal/users/{user_id}/roles
+VITAL_WEB /internal/users/{user_id}/roles
   │
   ▼
 { "system": "vital", "user_id": "...", "roles": [...] }

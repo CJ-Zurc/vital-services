@@ -4,25 +4,23 @@
 
 ## Public health
 
-### `GET /healthz`
+### `GET /health`
 
 - No auth.
 - Returns `200 { "status": "ok", "service": "vital-services" }`.
 - Used by Docker healthcheck and orchestrator probes.
 
-## Internal (Auth-facing)
+## Auth-facing role aggregation
 
-All `/internal/*` routes require `X-Gateway-Secret` (or, when called by Auth, the configured internal service key).
-
-### `GET /internal/users/{user_id}/roles`
-
-- Caller: `UHSE_AUTH` during system role aggregation for the `vital` slug.
-- Response: `{ "system": "vital", "user_id": "<id>", "roles": [<role>...] }`
-- Stub returns an empty roles array until role records exist.
+`GET /internal/users/{user_id}/roles` is owned by `VITAL_WEB`, whose Prisma
+records are the source of VITAL role markers. VITAL_Services does not expose
+that endpoint.
 
 ## Vital business (Gateway-facing)
 
-All `/vital/*` routes require `X-Gateway-Secret`. The Gateway maps browser-facing `/vital/*` paths onto these.
+All browser-facing `/vital/*` routes require `X-Gateway-Secret`. The Gateway
+removes the `/vital` prefix, so the downstream paths below are mounted as
+`/healthz`, `/appointments`, and `/telemedicine`.
 
 ### `GET /vital/healthz`
 

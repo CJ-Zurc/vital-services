@@ -13,29 +13,35 @@
 
 ```
 src/
-├── index.js                       Express bootstrap, middleware order, healthz
+├── index.js                       Express bootstrap, middleware order, health
 ├── middleware/
 │   ├── correlationId.js           Reads/generates X-Correlation-ID
+│   ├── internal-auth.js           Validates service-to-service credentials
 │   └── trustedGateway.js          Validates X-Gateway-Secret, extracts X-User-*
 └── routes/
-    ├── internal.js                /internal/* — Auth-facing role aggregation
-    └── vital.js                   /vital/* — appointment + telemedicine flows
+    └── vital.js                   Gateway-forwarded appointment + telemedicine flows
 ```
 
 ## Middleware order
 
 1. `express.json()` — body parsing
 2. `correlationId` — every request gets an ID, echoed on the response
-3. `trustedGateway` (mounted on `/internal` and `/vital`) — rejects untrusted callers
+3. `trustedGateway` (mounted on `/healthz`, `/appointments`, and
+   `/telemedicine`) — rejects untrusted Gateway callers
 4. Route handlers
 5. Error handler — logs with correlation ID, returns sanitized 500
 
-The `/healthz` endpoint is mounted **before** `trustedGateway` so the Docker healthcheck and orchestrator probes can reach it.
+The `/health` endpoint is mounted before protected internal routes so Docker
+healthchecks and orchestrator probes can reach it without credentials.
+
+The Gateway strips the `/vital` prefix before proxying. For example,
+`/vital/appointments` arrives here as `/appointments`.
 
 ## Persistence
 
 - One Postgres database (`vital_services_db`) shared across both VITAL domains.
-- The frontend (`VITAL_WEB`) uses Prisma against the same database where it needs read access for SSR; backend writes flow through the API.
+- `VITAL_WEB` owns its Prisma schema and local VITAL role markers. Its database
+  is separate from the VITAL_Services sidecar.
 
 ## Outbound dependencies
 
