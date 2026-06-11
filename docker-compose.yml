@@ -1,0 +1,43 @@
+name: vital-services
+
+services:
+  vital-services-paymongo:
+    container_name: vital-services-paymongo
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env.docker
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      HTTP_LOGGING_ENABLED: ${HTTP_LOGGING_ENABLED:-true}
+      VITAL_WEB_URL: http://vital-web-app:3001
+    ports:
+      - "4001:4001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - vital-network
+
+networks:
+  vital-network:
+    name: vital-network
+    external: true

@@ -1,2 +1,12 @@
-node_modules
+node_modules/
 .env
+.env.*
+!.env.docker.example
+coverage/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.tmp
