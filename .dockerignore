@@ -7,6 +7,10 @@ Dockerfile
 npm-debug.log
 .agents
 docs
+tests
 README.md
 CLAUDE.md
 AGENTS.md
+*.log
+coverage
+.pytest_cache

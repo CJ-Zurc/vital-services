@@ -24,8 +24,11 @@ module.exports = function trustedGateway(req, res, next) {
   req.user = {
     id: req.header('X-User-Id') || null,
     email: req.header('X-User-Email') || null,
-    roles: (req.header('X-User-Roles') || '').split(',').filter(Boolean),
-    systemContext: req.header('X-System-Context') || null,
+    system: req.header('X-User-System') || null,
+    systems: (req.header('X-User-Systems') || '').split(',').filter(Boolean),
+    roles: (req.header('X-User-System-Roles') || '').split(',').filter(Boolean),
+    isAdmin: (req.header('X-User-Is-Admin') || '').toLowerCase() === 'true',
+    isSuperAdmin: (req.header('X-User-Is-Super-Admin') || '').toLowerCase() === 'true',
   };
 
   next();

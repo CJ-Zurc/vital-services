@@ -1,6 +1,6 @@
 # Deployment
 
-VITAL_Services is wired into the BGH workspace via the **root** compose at `D:\repos\Capstone_BGH\compose.yaml`. There is no per-service compose file in this repo.
+VITAL_Services is wired into the BGH workspace via the **root** compose at `D:\repos\Capstone_BGH\compose.yaml`. It also provides a standalone `docker-compose.yml` for isolated local development.
 
 ## Image build
 
@@ -10,6 +10,16 @@ The repo Dockerfile is multi-stage Node 20-alpine:
 2. `runner` — copies `node_modules` and `src/`, exposes `8009`, runs `node src/index.js`.
 
 A container healthcheck hits `GET /health` on `8009`.
+
+## Local Compose
+
+VITAL_Services has its own `docker-compose.yml` file. You can run it standalone for local development.
+
+```powershell
+# From D:\repos\Capstone_BGH\VITAL_Services
+docker compose up -d --build
+docker compose logs -f vital-services-api
+```
 
 ## Root compose entries
 

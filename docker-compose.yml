@@ -1,0 +1,77 @@
+services:
+  vital-services-api:
+    container_name: vital-services-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-8009}:8009"
+    env_file:
+      - ./.env
+    environment:
+      # Override localhost with container names for Docker networking
+      POSTGRES_HOST: vital-services-db
+      POSTGRES_PORT: 5432
+      DATABASE_URL: postgresql://postgres:password@vital-services-db:5432/vital_services_db
+      AUTH_INTERNAL_BASE_URL: ${AUTH_INTERNAL_BASE_URL:-http://host.docker.internal:8000}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@host.docker.internal:5672/}
+    depends_on:
+      vital-services-db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const http=require('http');const port=process.env.PORT||8009;const req=http.get({host:'127.0.0.1',port,path:'/health'},res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));req.setTimeout(5000,()=>{req.destroy();process.exit(1);});",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - bgh-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  vital-services-db:
+    container_name: vital-services-db
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: vital_services_db
+    ports:
+      - "${POSTGRES_PORT:-5435}:5432"
+    volumes:
+      - vital_services_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vital_services_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - bgh-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+volumes:
+  vital_services_postgres_data:
+
+networks:
+  bgh-network:
+    external: true
+    name: bgh-network

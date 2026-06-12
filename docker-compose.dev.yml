@@ -1,0 +1,9 @@
+services:
+  vital-services-api:
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/dist
+    environment:
+      NODE_ENV: development
+    command: ["npm", "run", "dev"]

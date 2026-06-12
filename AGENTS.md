@@ -12,3 +12,13 @@ Before making code changes in this service, you MUST review the local rules and 
 - `../.agents/rules/root-repo-routing.md`
 - `../.agents/rules/root-workspace-context.md`
 - `../Documents/VITAL_Integration_Guide_v1.md`
+
+Stable rules:
+
+- Validate `X-Gateway-Secret` before trusting canonical `X-User-*` headers.
+- Preserve `X-Correlation-ID` across downstream and internal calls.
+- Do not connect to or query the Auth database; use protected Auth
+  `/internal/*` calls for trusted enrichment.
+- Keep actual env files schema-aligned with their examples without replacing
+  environment-specific secrets.
+- Keep memory limits in `docker-compose.yml`; dev overrides inherit them.

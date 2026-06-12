@@ -6,7 +6,7 @@ For every Gateway-forwarded request to `/healthz`, `/appointments`, or
 `/telemedicine`:
 
 1. **Reject** if `X-Gateway-Secret` does not equal `GATEWAY_SECRET`. Return `403 forbidden_untrusted_caller`.
-2. **Then** read `X-User-Id`, `X-User-Email`, `X-User-Roles`, `X-System-Context`.
+2. **Then** read `X-User-Id`, `X-User-Email`, `X-User-System`, `X-User-Systems`, `X-User-System-Roles`, `X-User-Is-Admin`, and `X-User-Is-Super-Admin`.
 3. **Then** authorize the action.
 
 Never read `X-User-*` before the secret check passes.
