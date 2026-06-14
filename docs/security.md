@@ -28,6 +28,10 @@ If/when added, use `JWT_SECRET` and `JWT_ALGORITHM` from env. Match Auth's setti
 | `INTERNAL_API_KEY` | `.env.bgh_api_gateway` `INTERNAL_API_KEY`, `.env.uhse_auth` `INTERNAL_API_KEY` |
 | `JWT_SECRET` | `.env.uhse_auth` `JWT_SECRET` |
 | `AUTH_INTERNAL_SERVICE_KEY` | A matching entry in `.env.uhse_auth` `INTERNAL_SERVICE_KEYS` |
+| `VITAL_WEB_TO_SERVICES_INTERNAL_SERVICE_KEY` | Matches VITAL_WEB's outbound payment credential |
+| `VITAL_SERVICES_TO_WEB_INTERNAL_SERVICE_KEY` | Matches VITAL_WEB's inbound job credential |
+
+PayMongo mutations require deterministic operation keys. Ambiguous network failures are persisted as `unknown` and must be reconciled rather than automatically retried.
 
 Rotate by changing all sides at once (Gateway, Auth, VITAL_Services) and restarting the affected containers.
 

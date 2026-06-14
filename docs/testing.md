@@ -1,8 +1,8 @@
 # Testing
 
-VITAL_Services is currently a scaffold; no test suite is checked in yet.
+VITAL_Services uses `node:test`. Payment-operation tests cover duplicate concurrency and ambiguous provider failures.
 
-When tests are added, use:
+Testing conventions:
 
 - `node:test` or `vitest` — pick one and stick with it.
 - A real Postgres for integration tests (matches workspace convention; do not mock the DB for integration paths).

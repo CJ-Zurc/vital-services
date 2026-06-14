@@ -10,6 +10,13 @@
 - Returns `200 { "status": "ok", "service": "vital-services" }`.
 - Used by Docker healthcheck and orchestrator probes.
 
+## Internal PayMongo operations
+
+- `POST /payments/paymongo/checkouts` requires `operationKey` plus appointment, amount, and callback fields.
+- `POST /payments/paymongo/refunds` requires `operationKey` plus payment, appointment, amount, and reason fields.
+- Responses expose `operationStatus`: `pending`, `completed`, `failed`, or `unknown`.
+- Repeated operation keys return saved state and never start a second provider call; reuse with a different payload returns `409`.
+
 ## Auth-facing role aggregation
 
 `GET /internal/users/{user_id}/roles` is owned by `VITAL_WEB`, whose Prisma

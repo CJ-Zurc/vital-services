@@ -2,53 +2,56 @@
 
 ## Stack
 
-- Node.js 20 (alpine in Docker)
+- Node.js 20 (Alpine in Docker)
 - Express 5 (CommonJS)
-- `jsonwebtoken` for JWT verification
-- `axios` for outbound HTTP (Auth control-plane calls)
 - PostgreSQL 16 sidecar (`vital-services-db`)
-- RabbitMQ for audit publishing (shared with the rest of the BGH stack)
+- RabbitMQ for audit publishing
+- PayMongo for checkout and refund provider operations
 
 ## Layout
 
-```
+```text
 src/
-├── index.js                       Express bootstrap, middleware order, health
-├── middleware/
-│   ├── correlationId.js           Reads/generates X-Correlation-ID
-│   ├── internal-auth.js           Validates service-to-service credentials
-│   └── trustedGateway.js          Validates X-Gateway-Secret, extracts X-User-*
-└── routes/
-    └── vital.js                   Gateway-forwarded appointment + telemedicine flows
+|-- index.js                 Express bootstrap, payment routes, and health
+|-- config.js                Runtime configuration and production validation
+|-- db.js                    Shared VITAL PostgreSQL connection pool
+|-- payment-operations.js    Durable payment operation claiming and replay
+|-- middleware/
+|   |-- correlationId.js     Reads or generates X-Correlation-ID
+|   |-- internal-auth.js     Validates directional service credentials
+|   `-- trustedGateway.js    Validates X-Gateway-Secret and X-User-* headers
+`-- routes/
+    `-- vital.js             Gateway-forwarded appointment and telemedicine flows
 ```
 
-## Middleware order
+## Middleware Order
 
-1. `express.json()` — body parsing
-2. `correlationId` — every request gets an ID, echoed on the response
-3. `trustedGateway` (mounted on `/healthz`, `/appointments`, and
-   `/telemedicine`) — rejects untrusted Gateway callers
-4. Route handlers
-5. Error handler — logs with correlation ID, returns sanitized 500
+1. `express.json()` parses request bodies.
+2. `correlationId` reads or creates one correlation ID and echoes it.
+3. Gateway routes validate `X-Gateway-Secret` before trusting `X-User-*`.
+4. Payment routes validate the `vital-web` directional credential.
+5. The error handler logs with the correlation ID and sanitizes responses.
 
-The `/health` endpoint is mounted before protected internal routes so Docker
-healthchecks and orchestrator probes can reach it without credentials.
-
-The Gateway strips the `/vital` prefix before proxying. For example,
-`/vital/appointments` arrives here as `/appointments`.
+The `/health` endpoint is available to Docker health checks without credentials.
+The Gateway strips the `/vital` prefix before proxying public VITAL routes.
 
 ## Persistence
 
-- One Postgres database (`vital_services_db`) shared across both VITAL domains.
-- `VITAL_WEB` owns its Prisma schema and local VITAL role markers. Its database
-  is separate from the VITAL_Services sidecar.
+- `vital_services_db` is shared by VITAL_WEB and VITAL_Services.
+- VITAL_WEB owns the Prisma schema, local role markers, appointments, and the
+  `payment_operations` ledger.
+- VITAL_Services atomically claims and reconciles payment operations in that
+  ledger before calling PayMongo.
+- A completed, failed, pending, or unknown operation is replayed by key instead
+  of issuing another provider request.
 
-## Outbound dependencies
+## Outbound Dependencies
 
-| Dep | Purpose | Direct or via Gateway? |
+| Dependency | Purpose | Path |
 |---|---|---|
-| `UHSE_AUTH /internal/*` | Identity enrichment, token validation | **Direct** (`AUTH_INTERNAL_BASE_URL`) |
-| RabbitMQ `audit.events` | Publish business audit envelopes | Direct (broker) |
-| `vital-services-db` | Persistence | Direct |
+| `UHSE_AUTH /internal/*` | Documented backend identity enrichment | Direct |
+| `VITAL_WEB /api/internal/*` | Appointment background jobs | Direct |
+| RabbitMQ `audit.events` | Business audit envelopes | Direct |
+| `vital-services-db` | Shared VITAL persistence and payment ledger | Direct |
 
-VITAL_Services never calls the Gateway as a client.
+VITAL_Services does not route backend enrichment back through the Gateway.

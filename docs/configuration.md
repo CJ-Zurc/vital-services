@@ -15,6 +15,8 @@ VITAL_Services reads its config from environment variables. In the root compose 
 |---|---|
 | `GATEWAY_SECRET` | Must equal `BGH_API_GATEWAY` `GATEWAY_SECRET`. |
 | `INTERNAL_API_KEY` | Shared workspace-wide internal key. |
+| `VITAL_WEB_TO_SERVICES_INTERNAL_SERVICE_KEY` | Preferred key accepted from caller `vital-web` for payment operations. |
+| `VITAL_SERVICES_TO_WEB_INTERNAL_SERVICE_KEY` | Key sent as caller `vital-services` for VITAL_WEB background jobs. |
 | `INTERNAL_SERVICE_NAME` | `vital-services`. Used in outbound auth headers. |
 | `GATEWAY_TRUST_ENABLED` | Set to `false` only in local debug; default `true`. |
 
@@ -43,6 +45,8 @@ VITAL_Services reads its config from environment variables. In the root compose 
 | `POSTGRES_PORT` | `5432` (internal); host maps to `5435`. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Sidecar credentials. |
 | `DATABASE_URL` | Convenience URL combining the above. |
+
+The shared database includes the Prisma-owned `payment_operations` ledger.
 
 ## RabbitMQ / Audit
 
