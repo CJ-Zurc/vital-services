@@ -44,6 +44,13 @@ const postgresLedger = {
         error.status = 409;
         throw error;
       }
+      if (operation.status === "failed") {
+        const updated = await client.query(
+          `UPDATE payment_operations SET status = 'pending', "updatedAt" = NOW() WHERE "operationKey" = $1 RETURNING *`,
+          [operationKey],
+        );
+        return { owner: true, operation: updated.rows[0] };
+      }
       return { owner: false, operation };
     });
   },

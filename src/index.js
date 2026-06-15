@@ -20,6 +20,10 @@ function createApp() {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
   app.use(correlationId);
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+  });
 
   app.get("/health", (_req, res) => {
     res.json({ success: true, data: { service: "vital-services" } });
