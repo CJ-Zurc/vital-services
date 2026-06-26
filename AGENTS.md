@@ -9,8 +9,7 @@ Before making code changes in this service, you MUST review the local rules and 
 
 **Cross-Service Work:** If your task spans multiple services, refer to the root workspace context:
 
-- `../.agents/rules/root-repo-routing.md`
-- `../.agents/rules/root-workspace-context.md`
+- `../AGENTS.md`
 - `../Documents/VITAL_Integration_Guide_v1.md`
 
 Stable rules:
