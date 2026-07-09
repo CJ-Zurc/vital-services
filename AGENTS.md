@@ -1,5 +1,8 @@
 # VITAL_Services Service Rules
 
+This file is the canonical guidance for agents working in `VITAL_Services`.
+`CLAUDE.md` and `GEMINI.md` point here.
+
 Before making code changes in this service, you MUST review the local rules and documentation:
 
 1. `.agents/rules/*`
@@ -21,3 +24,10 @@ Stable rules:
 - Keep actual env files schema-aligned with their examples without replacing
   environment-specific secrets.
 - Keep memory limits in `docker-compose.yml`; dev overrides inherit them.
+
+Local skills:
+
+- Use `.agents/skills/docker-rebuild/SKILL.md` when asked to rebuild or restart
+  VITAL Services containers.
+- Use `.agents/skills/git-commits/SKILL.md` when asked to draft or execute a
+  commit for this repo.

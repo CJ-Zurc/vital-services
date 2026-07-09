@@ -1,4 +1,4 @@
-# Claude Guidance
+# Gemini Guidance
 
 `AGENTS.md` is the canonical guidance for `VITAL_Services`.
 
