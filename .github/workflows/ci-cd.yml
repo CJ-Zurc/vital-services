@@ -1,0 +1,241 @@
+name: VITAL Services CI/CD
+
+on:
+  push:
+    branches: ["development", "staging", "main", "master"]
+  pull_request:
+    branches: ["development", "staging", "main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: vital-services-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Unit Tests and Linting
+    if: >
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/development')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check for duplicate development merge run
+        id: ci-gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== 'push' || context.ref !== 'refs/heads/development') {
+              core.setOutput('run', 'true');
+              return;
+            }
+
+            const { data: pullRequests } =
+              await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+              });
+            const mergedPullRequest = pullRequests.some((pullRequest) => pullRequest.merged_at);
+            core.setOutput('run', mergedPullRequest ? 'false' : 'true');
+
+            if (mergedPullRequest) {
+              core.notice('Skipping duplicate CI for a development push created by a merged PR.');
+            }
+
+      - name: Enforce branch flow
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ "${{ github.base_ref }}" = "staging" ] && [ "${{ github.head_ref }}" != "development" ]; then
+            echo "ERROR: Only development can be merged into staging."
+            exit 1
+          fi
+          if { [ "${{ github.base_ref }}" = "main" ] || [ "${{ github.base_ref }}" = "master" ]; } && [ "${{ github.head_ref }}" != "staging" ]; then
+            echo "ERROR: Only staging can be merged into main/master."
+            exit 1
+          fi
+
+      - name: Checkout
+        if: steps.ci-gate.outputs.run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        if: steps.ci-gate.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        if: steps.ci-gate.outputs.run == 'true'
+        run: npm ci
+
+      - name: Run ESLint
+        if: steps.ci-gate.outputs.run == 'true'
+        run: npm run lint
+
+      - name: Run tests
+        if: steps.ci-gate.outputs.run == 'true'
+        run: node --test --test-reporter=tap --test-reporter-destination=test-results.tap
+
+      - name: Upload Test Artifact
+        uses: actions/upload-artifact@v4
+        if: always() && steps.ci-gate.outputs.run == 'true'
+        with:
+          name: vital-services-test-results
+          path: test-results.tap
+          retention-days: 7
+
+  build-and-push:
+    name: Build and Push Docker Image
+    needs: [lint-and-test]
+    if: >
+      always() &&
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
+      (needs.lint-and-test.result == 'success' || needs.lint-and-test.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: image
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,format=short
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
+            type=raw,value=production,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+  deploy-staging:
+    name: Deploy to Staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    concurrency:
+      group: deploy-vital-services-staging
+      cancel-in-progress: false
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.STAGING_SERVER_HOST }}
+          username: ${{ secrets.STAGING_SERVER_USER }}
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          envs: DEPLOY_PATH
+          script_stop: true
+          script: |
+            set -euo pipefail
+            : "${DEPLOY_PATH:?Missing STAGING_DEPLOY_PATH}"
+
+            flock /tmp/bgh-staging-deploy.lock bash -lc '
+              set -euo pipefail
+
+              cd "$DEPLOY_PATH/VITAL_Services"
+              git fetch origin staging
+              git checkout staging
+              git pull --ff-only origin staging
+
+              cd "$DEPLOY_PATH"
+              docker compose --env-file .env.compose up -d --no-deps --build --force-recreate vital-services-api
+
+              for i in $(seq 1 30); do
+                if curl -fsS http://127.0.0.1:8009/health >/dev/null; then
+                  echo "vital-services-api healthy"
+                  exit 0
+                fi
+                sleep 2
+              done
+
+              docker compose --env-file .env.compose logs --tail=100 vital-services-api
+              exit 1
+            '
+
+  deploy-production:
+    name: Deploy to Production
+    needs: [build-and-push]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    concurrency:
+      group: deploy-vital-services-production
+      cancel-in-progress: false
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE_NAME: ghcr.io/${{ github.repository }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          SERVICE_NAME: ${{ vars.PRODUCTION_COMPOSE_SERVICE || 'vital-services-api' }}
+          HEALTHCHECK_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN || secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+          username: ${{ secrets.PRODUCTION_SERVER_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+          envs: IMAGE_NAME,IMAGE_TAG,DEPLOY_PATH,SERVICE_NAME,HEALTHCHECK_URL,GHCR_USERNAME,GHCR_READ_TOKEN
+          script_stop: true
+          script: |
+            set -euo pipefail
+            : "${DEPLOY_PATH:?Missing PRODUCTION_DEPLOY_PATH}"
+            : "${SERVICE_NAME:?Missing PRODUCTION_COMPOSE_SERVICE}"
+            cd "$DEPLOY_PATH"
+            printf "IMAGE_NAME=%s\nIMAGE_TAG=%s\n" "$IMAGE_NAME" "$IMAGE_TAG" > .deploy.env
+            echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+            if [ -f compose.yaml ]; then COMPOSE_FILE=compose.yaml; elif [ -f docker-compose.yml ]; then COMPOSE_FILE=docker-compose.yml; elif [ -f docker-compose.yaml ]; then COMPOSE_FILE=docker-compose.yaml; else echo "No compose file found in $DEPLOY_PATH" >&2; exit 1; fi
+            COMPOSE_ENV_ARGS=(--env-file .deploy.env)
+            if [ -f .env ]; then
+              COMPOSE_ENV_ARGS=(--env-file .env --env-file .deploy.env)
+            fi
+            for service in $SERVICE_NAME; do
+              docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" pull "$service"
+            done
+            docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" up -d --remove-orphans $SERVICE_NAME
+            if [ -n "${HEALTHCHECK_URL:-}" ]; then
+              for i in $(seq 1 30); do curl -fsS "$HEALTHCHECK_URL" >/dev/null && exit 0; sleep 2; done
+              echo "Health check failed: $HEALTHCHECK_URL" >&2
+              exit 1
+            fi
