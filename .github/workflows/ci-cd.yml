@@ -97,7 +97,7 @@ jobs:
     if: >
       always() &&
       github.event_name == 'push' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
+      (github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
       (needs.lint-and-test.result == 'success' || needs.lint-and-test.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
@@ -146,6 +146,7 @@ jobs:
 
   deploy-staging:
     name: Deploy to Staging
+    needs: [build-and-push]
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     environment:
@@ -158,26 +159,29 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN || secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.STAGING_SERVER_HOST }}
           username: ${{ secrets.STAGING_SERVER_USER }}
           key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-          envs: DEPLOY_PATH
+          envs: DEPLOY_PATH,IMAGE_TAG,GHCR_USERNAME,GHCR_READ_TOKEN
           script_stop: true
           script: |
             set -euo pipefail
             : "${DEPLOY_PATH:?Missing STAGING_DEPLOY_PATH}"
+            : "${IMAGE_TAG:?Missing image tag from build-and-push}"
 
             flock /tmp/bgh-staging-deploy.lock bash -lc '
               set -euo pipefail
 
-              cd "$DEPLOY_PATH/VITAL_Services"
-              git fetch origin staging
-              git checkout staging
-              git pull --ff-only origin staging
-
               cd "$DEPLOY_PATH"
-              docker compose --env-file .env.compose up -d --no-deps --build --force-recreate vital-services-api
+              echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+
+              export VITAL_SERVICES_IMAGE_TAG="$IMAGE_TAG"
+              docker compose --env-file .env.compose pull vital-services-api
+              docker compose --env-file .env.compose up -d --no-deps --force-recreate vital-services-api
 
               for i in $(seq 1 30); do
                 if curl -fsS http://127.0.0.1:8009/health >/dev/null; then
