@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { paymongoSecret } = require("./config");
+const { errorFields, log, safeTarget } = require("./logger");
 
 const api = axios.create({
   baseURL: "https://api.paymongo.com/v1",
@@ -7,6 +8,36 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
   timeout: 15000,
 });
+
+api.interceptors.request.use((config) => {
+  config.requestStartedAt = Date.now();
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => {
+    log("info", "http.outbound.completed", {
+      service: "paymongo",
+      method: response.config.method?.toUpperCase(),
+      target: safeTarget(`${response.config.baseURL || ""}${response.config.url || ""}`),
+      status: response.status,
+      durationMs: Date.now() - (response.config.requestStartedAt || Date.now()),
+    });
+    return response;
+  },
+  (error) => {
+    const config = error.config || {};
+    log("error", "http.outbound.failed", {
+      service: "paymongo",
+      method: config.method?.toUpperCase(),
+      target: safeTarget(`${config.baseURL || ""}${config.url || ""}`),
+      status: error.response?.status,
+      durationMs: Date.now() - (config.requestStartedAt || Date.now()),
+      ...errorFields(error),
+    });
+    return Promise.reject(error);
+  },
+);
 
 function requirePaymongoSecret() {
   if (!paymongoSecret) {
