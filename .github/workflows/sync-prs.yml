@@ -1,0 +1,24 @@
+name: PR Sync to Google Sheets
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, closed, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  sync-pr-event:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/github-script@v7
+        env: { GOOGLE_SHEET_URL: '${{ secrets.GOOGLE_SHEET_WEBAPP_URL }}' }
+        with:
+          script: |
+            if (!process.env.GOOGLE_SHEET_URL) { core.notice('GOOGLE_SHEET_WEBAPP_URL is not configured; skipping PR sync.'); return; }
+            const pr = context.payload.pull_request;
+            const ticket = pr.title.match(/\[([^\]]+)\]/)?.[1] || 'N/A';
+            const body = pr.body ? pr.body.replace(/[\r\n]+/g, ' ').slice(0, 150) : 'No description provided.';
+            const response = await fetch(process.env.GOOGLE_SHEET_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prs: [{ repository: context.repo.repo, title: pr.title, tickets: ticket, prLink: pr.html_url, description: body, date: pr.created_at.split('T')[0], author: pr.user.login, status: pr.merged ? 'MERGED' : pr.state.toUpperCase(), syncStatus: 'SUCCESS' }] }) });
+            if (!response.ok) core.setFailed(`Google Sheets returned HTTP ${response.status}.`);
