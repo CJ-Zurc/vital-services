@@ -63,3 +63,11 @@ curl http://localhost:8009/health
 curl -H "X-Gateway-Secret: $(Select-String -Path .env.vital_services -Pattern '^GATEWAY_SECRET' | %{ ($_ -split '=',2)[1] })" http://localhost:8009/internal/users/test/roles
 # expected: {"system":"vital","user_id":"test","roles":[]}
 ```
+
+## CI/CD and staging
+
+The service uses the shared branch-flow GitHub Actions pattern. It runs ESLint
+and Node tests, publishes immutable GHCR images, and deploys the exact staging
+SHA through root `compose.yaml` plus `compose.staging.yaml`. Production deploy
+is protected by `PRODUCTION_DEPLOY_ENABLED`; neither environment builds source
+on the server.

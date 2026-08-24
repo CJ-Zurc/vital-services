@@ -1,0 +1,21 @@
+name: Notify Root CI
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  notify-root:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ROOT_REPOSITORY: Capstone-BGH/Capstone_BGH
+        run: |
+          [ -n "$GH_TOKEN" ] || { echo "GH_PAT is not configured; skipping root CI re-trigger."; exit 0; }
+          branch="${{ github.head_ref }}"
+          pr=$(gh pr list --repo "$ROOT_REPOSITORY" --head "$branch" --state open --json number --jq '.[0].number' 2>/dev/null || true)
+          [ -n "$pr" ] || exit 0
+          run=$(gh run list --repo "$ROOT_REPOSITORY" --branch "$branch" --status failure --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)
+          [ -z "$run" ] || gh run rerun "$run" --failed --repo "$ROOT_REPOSITORY" || true

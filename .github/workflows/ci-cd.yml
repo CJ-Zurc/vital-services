@@ -147,8 +147,13 @@ jobs:
   deploy-staging:
     name: Deploy to Staging
     needs: [build-and-push]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    if: >
+      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/staging' &&
+      needs.build-and-push.result == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     environment:
       name: staging
     concurrency:
@@ -180,8 +185,8 @@ jobs:
               echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 
               export VITAL_SERVICES_IMAGE_TAG="$IMAGE_TAG"
-              docker compose --env-file .env.compose pull vital-services-api
-              docker compose --env-file .env.compose up -d --no-deps --force-recreate vital-services-api
+              docker compose -f compose.yaml -f compose.staging.yaml --env-file .env.compose pull vital-services-api
+              docker compose -f compose.yaml -f compose.staging.yaml --env-file .env.compose up -d --no-deps --force-recreate vital-services-api
 
               for i in $(seq 1 30); do
                 if curl -fsS http://127.0.0.1:8009/health >/dev/null; then
@@ -191,15 +196,21 @@ jobs:
                 sleep 2
               done
 
-              docker compose --env-file .env.compose logs --tail=100 vital-services-api
+              docker compose -f compose.yaml -f compose.staging.yaml --env-file .env.compose logs --tail=100 vital-services-api
               exit 1
             '
 
   deploy-production:
     name: Deploy to Production
     needs: [build-and-push]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: >
+      !cancelled() && github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
+      vars.PRODUCTION_DEPLOY_ENABLED == 'true' && needs.build-and-push.result == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     environment:
       name: production
     concurrency:
