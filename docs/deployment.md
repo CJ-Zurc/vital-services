@@ -71,3 +71,12 @@ and Node tests, publishes immutable GHCR images, and deploys the exact staging
 SHA through root `compose.yaml` plus `compose.staging.yaml`. Production deploy
 is protected by `PRODUCTION_DEPLOY_ENABLED`; neither environment builds source
 on the server.
+
+## Staging Environment Configuration
+
+Automated staging deployment targets the Azure VM (`172.197.219.24`):
+- Target deployment path: `/opt/bgh/Capstone_BGH`
+- Compose service: `vital-services-api`
+- Health check verification: `http://127.0.0.1:8009/health`
+- Automated authentication: `bgh_github_actions_staging` key pair
+
