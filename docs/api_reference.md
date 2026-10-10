@@ -1,54 +1,40 @@
-# API Reference
+# API reference
 
-> **Status:** scaffold. Concrete appointment and telemedicine endpoints will be added as the consolidated VITAL feature set lands. Routes listed here are the integration-critical ones the rest of the ecosystem depends on.
+The implementation is `src/index.js` and `src/routes/vital.js`. Paths in this
+table are service paths; Gateway removes `/vital` for its forwarded requests.
 
-## Public health
-
-### `GET /health`
-
-- No auth.
-- Returns `200 { "status": "ok", "service": "vital-services" }`.
-- Used by Docker healthcheck and orchestrator probes.
-
-## Internal PayMongo operations
-
-- `POST /payments/paymongo/checkouts` requires `operationKey` plus appointment, amount, and callback fields.
-- `POST /payments/paymongo/refunds` requires `operationKey` plus payment, appointment, amount, and reason fields.
-- Responses expose `operationStatus`: `pending`, `completed`, `failed`, or `unknown`.
-- Repeated operation keys return saved state and never start a second provider call; reuse with a different payload returns `409`.
-
-## Auth-facing role aggregation
-
-`GET /internal/users/{user_id}/roles` is owned by `VITAL_WEB`, whose Prisma
-records are the source of VITAL role markers. VITAL_Services does not expose
-that endpoint.
-
-## Vital business (Gateway-facing)
-
-All browser-facing `/vital/*` routes require `X-Gateway-Secret`. The Gateway
-removes the `/vital` prefix, so the downstream paths below are mounted as
-`/healthz`, `/appointments`, and `/telemedicine`.
-
-### `GET /vital/healthz`
-
-Smoke test through the trust-gateway path.
-
-### `GET /vital/appointments`  (placeholder)
-
-Will return paginated appointment records once the appointment domain ships.
-
-### `GET /vital/telemedicine`  (placeholder)
-
-Will return telemedicine sessions/providers once the telemedicine domain ships.
-
-## Headers
-
-Every response includes the request's `X-Correlation-ID`.
-
-## Errors
-
-| Status | Code | Meaning |
+| Method/path | Access | Current behavior |
 |---|---|---|
-| 403 | `forbidden_untrusted_caller` | Missing or invalid `X-Gateway-Secret` |
-| 500 | `gateway_secret_not_configured` | Service started without `GATEWAY_SECRET` |
-| 500 | `internal_error` | Unhandled exception (correlation ID returned) |
+| `GET /health` | Public health probe | `{"success":true,"data":{"service":"vital-services"}}` |
+| `POST /payments/paymongo/checkouts` | Internal VITAL_WEB caller | Create/replay a checkout operation |
+| `GET /payments/paymongo/checkouts/{checkoutSessionId}` | Internal VITAL_WEB caller | Retrieve provider checkout state |
+| `POST /payments/paymongo/checkouts/{checkoutSessionId}/expire` | Internal VITAL_WEB caller | Expire checkout |
+| `POST /payments/paymongo/refunds` | Internal VITAL_WEB caller | Create/replay a refund operation |
+| `POST /jobs/appointments/auto-complete` | Internal caller | Forward to VITAL_WEB `/api/internal/appointments/auto-complete` |
+| `POST /webhooks/paymongo` | Unauthenticated placeholder | `202` reservation message only; no signature verification or payment processing |
+| `GET /healthz` | Gateway trust | `{"status":"ok","scope":"vital"}` |
+| `GET /appointments` | Gateway trust | Empty `items` with an explicit scaffold note |
+| `GET /telemedicine` | Gateway trust | Empty `items` with an explicit scaffold note |
+
+Browser-facing operational records are owned by `VITAL_WEB` BFF routes and its
+Gateway `/vital/integrations/v1/*` projection. Auth role lookup also belongs to
+`VITAL_WEB /internal/users/{user_id}/roles`.
+
+## Payment mutation contract
+
+Checkout requires `operationKey`, `appointmentId`, `amount`, `successUrl`, and
+`cancelUrl`; `description` is optional. Refund requires `operationKey`,
+`paymentId`, `appointmentId`, and `amount`; `reason` is optional.
+
+Operations expose `pending`, `completed`, `failed`, or `unknown` status.
+Pending operations return `202`. Completed and unknown operations replay stored
+state; a matching failed operation is retried on resubmission. Reusing a key for
+different inputs or operation types returns `409`. An exception with a provider
+response is classified as failed; one without a response stays unknown for
+reconciliation. That classification does not independently establish whether
+the provider performed a mutation.
+
+`X-Correlation-ID` is read/generated and echoed. Gateway trust errors return
+`403 forbidden_untrusted_caller` or `500 gateway_secret_not_configured`.
+Internal authentication can return `401` or configuration failure; see
+[security](security.md). Do not treat placeholder webhook acceptance as delivery.

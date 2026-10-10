@@ -26,8 +26,9 @@ After validation, consume only:
 
 - `X-User-Id`
 - `X-User-Email`
-- `X-User-Roles` (comma-separated)
-- `X-System-Context`
+- `X-User-System`, `X-User-Systems`
+- `X-User-System-Roles` (effective-system roles)
+- `X-User-Is-Admin`, `X-User-Is-Super-Admin`
 
 Do not parse or trust other `X-User-*` headers without coordination with `BGH_API_GATEWAY`.
 
@@ -37,11 +38,13 @@ Do not parse or trust other `X-User-*` headers without coordination with `BGH_AP
 - `src/middleware/correlationId.js` reads or generates one and echoes it on the response.
 - Propagate the same ID on every outbound HTTP/RabbitMQ call so it appears in Loki, audit events, and Auth logs.
 
-## 5. Direct calls to UHSE_AUTH
+## 5. Direct calls to UHSE_AUTH (future integration)
 
-- Backend-to-Auth enrichment, token validation, role lookups, and `/internal/*` work go to `AUTH_INTERNAL_BASE_URL` directly.
+- No Auth client is currently implemented here. Future enrichment/control-plane
+  calls must go directly to Auth `/internal/*` with the documented caller key.
 - Never route Auth control-plane traffic back through `BGH_API_GATEWAY`.
-- Pass `INTERNAL_API_KEY` (or the dedicated `AUTH_INTERNAL_SERVICE_KEY` if Auth requires per-caller keys) on these calls.
+- Define and document the implemented configuration reader when adding that
+  client; do not infer a client from unused Auth keys in templates.
 
 ## 6. Auth-facing role aggregation
 
@@ -49,10 +52,12 @@ Do not parse or trust other `X-User-*` headers without coordination with `BGH_AP
   its Prisma-backed VITAL records.
 - VITAL_Services must not duplicate that role source.
 
-## 7. Audit publishing
+## 7. Audit publishing (when implemented)
 
-- Business events (appointment created, telemedicine session started, etc.) must be published to `RABBITMQ_URL` on the `AUDIT_EXCHANGE` (`audit.events`).
-- Event envelope and routing keys must follow `Documents/Audit_Logs_Integration_Guide_v2.md`. Do not invent new envelope shapes.
+- No audit publisher is currently implemented here. Future publication must use
+  the current HTTP-primary audit contract with RabbitMQ fallback, with its
+  configuration readers, failures, and tests documented explicitly.
+- Event envelope and routing keys must follow `Documents/Audit_Logs_Integration_Guide_v3.md`. Do not invent new envelope shapes.
 
 ## 8. Session staleness
 

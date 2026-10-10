@@ -5,7 +5,7 @@ description: Local Docker rebuild and run conventions for VITAL_Services.
 
 # Docker Rebuild Rules
 
-VITAL_Services runs through the **root** compose at `D:\repos\Capstone_BGH\compose.yaml`. There is no per-service compose file in this repo today.
+VITAL_Services runs through the **root** compose at `D:\repos\Capstone_BGH\compose.yaml`. The service also has `docker-compose.yml` for standalone work. Do not run both runtimes on the same ports.
 
 ## Targeted rebuild
 
