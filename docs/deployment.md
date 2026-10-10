@@ -57,11 +57,10 @@ After startup:
 ```powershell
 # from the host
 curl http://localhost:8009/health
-# expected: {"status":"ok","service":"vital-services"}
+# expected: {"success":true,"data":{"service":"vital-services"}}
 
-# trust check
-curl -H "X-Gateway-Secret: $(Select-String -Path .env.vital_services -Pattern '^GATEWAY_SECRET' | %{ ($_ -split '=',2)[1] })" http://localhost:8009/internal/users/test/roles
-# expected: {"system":"vital","user_id":"test","roles":[]}
+# Browser/Gateway trust surfaces are documented in api_reference.md.
+# Auth role aggregation is owned by VITAL_WEB, not this service.
 ```
 
 ## CI/CD and staging

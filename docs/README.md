@@ -1,8 +1,9 @@
 # VITAL_Services Documentation
 
 VITAL_Services is the consolidated VITAL backend for the BGH Unified Health
-Service Ecosystem. It hosts appointment and telemedicine flows behind one
-Express 5 API.
+Service Ecosystem. Its Express 5 API implements PayMongo operations and an appointment-job bridge.
+Gateway appointment/telemedicine handlers remain scaffolds; VITAL_WEB owns the
+operational workflows and Prisma schema.
 
 ## Contents
 
