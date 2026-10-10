@@ -1,64 +1,33 @@
 # Configuration
 
-VITAL_Services reads its config from environment variables. In the root compose stack the file is `.env.vital_services` (template at `.env.vital_services.example`).
+Root Compose supplies `.env.vital_services`; standalone Compose and native
+Node runs use `.env`. The implemented readers are `src/config.js`,
+`src/middleware/trustedGateway.js`, and `src/logger.js`.
 
-## Runtime
-
-| Key | Default | Notes |
-|---|---|---|
-| `PORT` | `8009` | Container exposes this; root compose maps to host. |
-| `NODE_ENV` | `development` | Use `production` in deployed stacks. |
-
-## Trust model
-
-| Key | Notes |
+| Key | Implemented use |
 |---|---|
-| `GATEWAY_SECRET` | Must equal `BGH_API_GATEWAY` `GATEWAY_SECRET`. |
-| `INTERNAL_API_KEY` | Shared workspace-wide internal key. |
-| `VITAL_WEB_TO_SERVICES_INTERNAL_SERVICE_KEY` | Preferred key accepted from caller `vital-web` for payment operations. |
-| `VITAL_SERVICES_TO_WEB_INTERNAL_SERVICE_KEY` | Key sent as caller `vital-services` for VITAL_WEB background jobs. |
-| `INTERNAL_SERVICE_NAME` | `vital-services`. Used in outbound auth headers. |
-| `GATEWAY_TRUST_ENABLED` | Set to `false` only in local debug; default `true`. |
+| `PORT` | API port; fallback `8009` |
+| `NODE_ENV` | `production` enables required configuration validation |
+| `DATABASE_URL` | Shared VITAL PostgreSQL database and payment-operation ledger |
+| `PAYMONGO_SECRET` | Provider credential; accepts `PAYMONGO_SECRET_KEY` alias |
+| `VITAL_WEB_URL` | Job callback base; root `http://vital-web:3001` |
+| `VITAL_WEB_TO_SERVICES_INTERNAL_SERVICE_KEY` | Preferred inbound payment/job credential for caller `vital-web` |
+| `VITAL_SERVICES_TO_WEB_INTERNAL_SERVICE_KEY` | Outbound credential for caller `vital-services` |
+| `VITAL_INTERNAL_SERVICE_KEY` | Legacy internal credential fallback |
+| `INTERNAL_API_KEY` | Legacy shared-key authentication |
+| `JWT_SECRET` | Legacy internal-key fallback; not a browser JWT verification flow |
+| `GATEWAY_SECRET` | Validates Gateway-forwarded scaffolds |
+| `GATEWAY_TRUST_ENABLED` | Defaults to enabled; local debug bypass only |
+| `LOG_LEVEL`, `HTTP_LOGGING_ENABLED` | Logger helper settings; current bootstrap also emits request lines |
 
-## JWT
+Production requires explicit provider secret, database URL, both directional
+keys, and `VITAL_WEB_URL`. Gateway secret is required when forwarding Gateway
+requests. Keep credential directions distinct.
 
-| Key | Notes |
-|---|---|
-| `JWT_SECRET` | Must equal `UHSE_AUTH` `JWT_SECRET`. |
-| `JWT_ALGORITHM` | `HS256` matches Auth. |
+Compose `POSTGRES_*` settings configure containers. The application pool uses
+`DATABASE_URL`; it does not build that URL from `POSTGRES_*` settings.
 
-## Auth direct calls
-
-| Key | Notes |
-|---|---|
-| `AUTH_INTERNAL_BASE_URL` | `http://auth-api:8000` inside compose. |
-| `AUTH_SYSTEM_SLUG` | `vital`. |
-| `AUTH_SYSTEM_CLIENT_ID` | Matches `SYSTEM_VITAL_CLIENT_ID` in `.env.uhse_auth`. |
-| `AUTH_SYSTEM_CLIENT_SECRET` | Matches `SYSTEM_VITAL_CLIENT_SECRET` in `.env.uhse_auth`. |
-| `AUTH_INTERNAL_SERVICE_KEY` | Matches the `vital-services` entry in Auth's `INTERNAL_SERVICE_KEYS` JSON. |
-
-## Postgres
-
-| Key | Notes |
-|---|---|
-| `POSTGRES_HOST` | `vital-services-db` inside compose. |
-| `POSTGRES_PORT` | `5432` (internal); host maps to `5435`. |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Sidecar credentials. |
-| `DATABASE_URL` | Convenience URL combining the above. |
-
-The shared database includes the Prisma-owned `payment_operations` ledger.
-
-## RabbitMQ / Audit
-
-| Key | Notes |
-|---|---|
-| `RABBITMQ_URL` | `amqp://guest:guest@bgh-rabbitmq:5672/`. |
-| `AUDIT_EXCHANGE` | `audit.events`. |
-| `AUDIT_TIMEZONE` | `Asia/Manila`. |
-
-## Observability
-
-| Key | Notes |
-|---|---|
-| `LOKI_ENDPOINT` | `http://bgh-loki:3100/loki/api/v1/push`. |
-| `PROMETHEUS_ENDPOINT` | `http://bgh-prometheus:9090/api/v1/write`. |
+Older Auth client, RabbitMQ audit, Loki, and Prometheus environment tables
+described desired integrations that are not read by the current service.
+Do not infer those features from a retained template key. Adding them requires
+implementation and contract verification.

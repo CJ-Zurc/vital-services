@@ -7,10 +7,9 @@ description: Structural and documentation rules for the VITAL_Services backend. 
 
 `VITAL_Services` is the consolidated VITAL backend (Node.js / Express 5) and owns:
 
-- VITAL appointment-domain backend flows
-- VITAL telemedicine-domain backend flows
-- The current `/vital/public*` and `/vital/staff*` path target shape
-- Gateway-forwarded VITAL appointment and telemedicine API routes
+- PayMongo checkout/status/expiration/refund operations
+- The internal VITAL_WEB appointment-job bridge
+- Gateway-forwarded appointment/telemedicine scaffolds; VITAL_WEB owns the operational domain
 
 ## Required reading before edits
 
@@ -23,11 +22,10 @@ description: Structural and documentation rules for the VITAL_Services backend. 
 
 For cross-service work also consult:
 
-- `../.agents/rules/root-workspace-context.md`
-- `../.agents/rules/root-repo-routing.md`
+- `../AGENTS.md`
 - `../Documents/VITAL_Integration_Guide_v1.md`
 - `../Documents/Auth_Backend_Integration_Guide_v5.md`
-- `../Documents/Audit_Logs_Integration_Guide_v2.md`
+- `../Documents/Audit_Logs_Integration_Guide_v3.md`
 
 ## Code-to-doc parity
 
@@ -45,4 +43,4 @@ If you add a new route, middleware, or env key, update its parity doc in the sam
 
 - `VITAL_Services` is **not** browser-facing. The browser must reach VITAL through the Gateway only.
 - `VITAL_Services` may call `UHSE_AUTH` directly via `/internal/*` for control-plane needs (token validation, identity enrichment) using `AUTH_INTERNAL_BASE_URL` — never via the Gateway.
-- `VITAL_Services` publishes audit events to RabbitMQ (`audit.events` exchange) — see `BGH_AUDIT_LOGS` integration guide.
+- RabbitMQ audit publishing is a future integration, not a checked-in side effect. Follow the current Audit Logs contract when implementing it.

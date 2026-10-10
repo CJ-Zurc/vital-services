@@ -11,14 +11,14 @@ For every Gateway-forwarded request to `/healthz`, `/appointments`, or
 
 Never read `X-User-*` before the secret check passes.
 
-## JWT verification
+## Internal authentication
 
-The service has `jsonwebtoken` available, but in normal operation it relies on the Gateway's verification + trusted-header projection. JWT verification inside VITAL_Services is only needed for:
-
-- direct WebSocket handshakes (telemedicine signalling), if added later
-- internal service-to-service tokens
-
-If/when added, use `JWT_SECRET` and `JWT_ALGORITHM` from env. Match Auth's settings exactly.
+Payment/job routes use `src/middleware/internal-auth.js`. The preferred caller
+is `vital-web` with `VITAL_WEB_TO_SERVICES_INTERNAL_SERVICE_KEY`. A valid shared
+`X-Internal-Api-Key` is also accepted; legacy service-key fallback remains.
+Normal requests do not verify a JWT here. `JWT_SECRET` is a legacy fallback
+value in configuration, not an implemented bearer verification contract.
+There is no current telemedicine WebSocket authentication flow in this service.
 
 ## Secrets
 
@@ -27,7 +27,6 @@ If/when added, use `JWT_SECRET` and `JWT_ALGORITHM` from env. Match Auth's setti
 | `GATEWAY_SECRET` | `.env.bgh_api_gateway` `GATEWAY_SECRET` |
 | `INTERNAL_API_KEY` | `.env.bgh_api_gateway` `INTERNAL_API_KEY`, `.env.uhse_auth` `INTERNAL_API_KEY` |
 | `JWT_SECRET` | `.env.uhse_auth` `JWT_SECRET` |
-| `AUTH_INTERNAL_SERVICE_KEY` | A matching entry in `.env.uhse_auth` `INTERNAL_SERVICE_KEYS` |
 | `VITAL_WEB_TO_SERVICES_INTERNAL_SERVICE_KEY` | Matches VITAL_WEB's outbound payment credential |
 | `VITAL_SERVICES_TO_WEB_INTERNAL_SERVICE_KEY` | Matches VITAL_WEB's inbound job credential |
 
