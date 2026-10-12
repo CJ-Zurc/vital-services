@@ -18,6 +18,8 @@ concurrency:
 jobs:
   lint-and-test:
     name: Unit Tests and Linting
+    outputs:
+      run_ci: ${{ steps.ci-gate.outputs.run }}
     if: >
       github.event_name == 'pull_request' ||
       github.event_name == 'workflow_dispatch' ||
@@ -68,7 +70,7 @@ jobs:
         if: steps.ci-gate.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -81,7 +83,19 @@ jobs:
 
       - name: Run tests
         if: steps.ci-gate.outputs.run == 'true'
-        run: node --test --test-reporter=tap --test-reporter-destination=test-results.tap
+        env:
+          EDA_TEST_ENABLED: 'false'
+        run: |
+          npm run generate
+          node --import tsx --test --test-reporter=tap --test-reporter-destination=test-results.tap test/*.test.js test/eda-*.test.ts
+
+      - name: Generate both clients and typecheck EDA backend
+        if: steps.ci-gate.outputs.run == 'true'
+        run: npm run typecheck
+
+      - name: Build EDA API and worker
+        if: steps.ci-gate.outputs.run == 'true'
+        run: npm run build
 
       - name: Upload Test Artifact
         uses: actions/upload-artifact@v4
@@ -90,6 +104,26 @@ jobs:
           name: vital-services-test-results
           path: test-results.tap
           retention-days: 7
+
+  eda-integration:
+    name: Isolated EDA PostgreSQL and RabbitMQ
+    needs: [lint-and-test]
+    if: >
+      needs.lint-and-test.result == 'success' &&
+      needs.lint-and-test.outputs.run_ci == 'true' &&
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/development'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run only the isolated EDA test project
+        run: bash docker/eda/run-integration.sh
 
   build-and-push:
     name: Build and Push Docker Image

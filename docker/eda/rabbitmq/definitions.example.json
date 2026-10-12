@@ -1,0 +1,11 @@
+{
+  "users": [
+    {"name": "vital_runtime", "password_hash": "REPLACE_WITH_SALTED_SHA256_HASH", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": []},
+    {"name": "vital_provision", "password_hash": "REPLACE_WITH_DIFFERENT_SALTED_SHA256_HASH", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": []}
+  ],
+  "vhosts": [{"name": "vital"}],
+  "permissions": [
+    {"user": "vital_runtime", "vhost": "vital", "configure": "^$", "write": "^vital\\.(profile\\.events|appointment\\.events|payment\\.events|records\\.events|messaging\\.events|video\\.events|retry|dead)$", "read": "^vital\\.(appointment-payment|platform-audit|platform-notification|profile-projection)$"},
+    {"user": "vital_provision", "vhost": "vital", "configure": "^vital\\.", "write": "^vital\\.", "read": "^vital\\."}
+  ]
+}

@@ -6,8 +6,17 @@
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js",
+    "build": "npm run generate && tsc -p tsconfig.json",
+    "typecheck": "npm run generate && tsc -p tsconfig.json --noEmit",
+    "generate": "prisma generate --config prisma/core.config.ts && prisma generate --config prisma/integrations.config.ts",
+    "migrate:core": "prisma migrate deploy --config prisma/core.config.ts",
+    "migrate:integrations": "prisma migrate deploy --config prisma/integrations.config.ts",
+    "start:eda": "node dist/entrypoints/api.js",
+    "start:worker": "node dist/entrypoints/worker.js",
+    "test:eda": "node --import tsx --test test/eda-*.test.ts",
+    "eda:inventory": "node scripts/eda/inventory.mjs",
     "lint": "eslint .",
-    "test": "node --test"
+    "test": "node --import tsx --test test/*.test.js test/eda-*.test.ts"
   },
   "repository": {
     "type": "git",
@@ -22,15 +31,28 @@
   },
   "homepage": "https://github.com/CJ-Zurc/vital-services#readme",
   "dependencies": {
+    "@prisma/adapter-pg": "7.8.0",
+    "@prisma/client": "7.8.0",
+    "amqplib": "^0.10.9",
     "axios": "^1.16.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.21.0"
+    "pg": "^8.21.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@prisma/internals": "7.8.0",
+    "@types/amqplib": "^0.10.7",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.20.0",
     "@eslint/js": "^9.0.0",
     "eslint": "^9.0.0",
-    "globals": "^15.0.0"
+    "globals": "^15.0.0",
+    "prisma": "7.8.0",
+    "tsx": "^4.22.0",
+    "typescript": "^5.9.3"
   }
 }

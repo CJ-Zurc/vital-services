@@ -1,0 +1,49 @@
+model OutboxEvent {
+  id               String    @id @default(uuid())
+  eventType        String
+  schemaVersion    Int       @default(1)
+  producer         String
+  aggregateId      String
+  aggregateVersion Int
+  correlationId    String
+  causationId      String?
+  occurredAt       DateTime  @default(now())
+  payload          Json
+  status           String    @default("pending")
+  attempts         Int       @default(0)
+  nextAttemptAt    DateTime  @default(now())
+  leaseOwner       String?
+  leaseUntil       DateTime?
+  publishedAt      DateTime?
+  lastErrorCode    String?
+  @@index([status, nextAttemptAt, leaseUntil])
+  @@index([producer, aggregateId, aggregateVersion])
+  @@map("outbox_events")
+}
+
+model InboxEvent {
+  consumerId  String
+  eventId     String
+  processedAt DateTime @default(now())
+  @@id([consumerId, eventId])
+  @@map("inbox_events")
+}
+
+model CommandOperation {
+  id            String    @id @default(uuid())
+  actorId       String
+  action        String
+  resourceId    String
+  operationId   String
+  requestHash   String
+  status        String    @default("pending")
+  result        Json?
+  errorCode     String?
+  leaseOwner    String?
+  leaseUntil    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  @@unique([actorId, operationId])
+  @@index([status, leaseUntil])
+  @@map("command_operations")
+}

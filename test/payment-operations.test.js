@@ -77,3 +77,25 @@ test("ambiguous provider failures remain unknown", async () => {
     (error) => error.operationStatus === "unknown",
   );
 });
+
+test("provider HTTP ambiguity is not permission to repeat checkout or refund", async () => {
+  for (const status of [408, 409, 429, 500, 502, 503, 504]) {
+    const ledger = createMemoryLedger();
+    let calls = 0;
+    const input = { ledger, operationKey: `refund:status-${status}`, operationType: "refund", payload: { amount: 500 },
+      execute: async () => { calls += 1; const error = new Error("secret provider diagnostics"); error.response = { status }; throw error; } };
+    await assert.rejects(runPaymentOperation(input), (error) => error.operationStatus === "unknown");
+    const replay = await runPaymentOperation(input);
+    assert.equal(replay.operationStatus, "unknown");
+    assert.equal(replay.error, "PROVIDER_OUTCOME_UNKNOWN");
+    assert.equal(calls, 1);
+  }
+});
+
+test("definite provider validation rejection is recorded without provider diagnostics", async () => {
+  const ledger = createMemoryLedger();
+  const input = { ledger, operationKey: "checkout:rejected", operationType: "checkout", payload: { amount: 500 },
+    execute: async () => { const error = new Error("secret diagnostics"); error.response = { status: 422 }; throw error; } };
+  await assert.rejects(runPaymentOperation(input), (error) => error.operationStatus === "failed");
+  assert.equal((await runPaymentOperation(input)).error, "PROVIDER_REQUEST_REJECTED");
+});

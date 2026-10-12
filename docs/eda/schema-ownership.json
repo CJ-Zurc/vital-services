@@ -1,0 +1,223 @@
+{
+  "sourceSchemaSha256": "7ba131a2a7b1747f4be51366a4fce50482c4c209cfcefa4bd4d1df3984a06f34",
+  "models": [
+    {
+      "model": "VitalUser",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "VitalPatient",
+      "database": "core",
+      "removedRelationsOrFields": [
+        "notifications",
+        "sentMessages",
+        "receivedMessages"
+      ]
+    },
+    {
+      "model": "VitalDoctor",
+      "database": "core",
+      "removedRelationsOrFields": [
+        "googleMeetConnection"
+      ]
+    },
+    {
+      "model": "VitalAdmin",
+      "database": "core",
+      "removedRelationsOrFields": [
+        "auditLogs"
+      ]
+    },
+    {
+      "model": "HospitalAffiliation",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "DoctorQr",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "Schedule",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "DoctorDateBlock",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "ExternalHealthRecord",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "HealthRecord",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "DoctorRecordAccess",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "Appointment",
+      "database": "core",
+      "removedRelationsOrFields": [
+        "payment",
+        "invoices",
+        "messages",
+        "notifications",
+        "concerns"
+      ]
+    },
+    {
+      "model": "AppointmentLog",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "PreConsultation",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "Consultation",
+      "database": "core",
+      "removedRelationsOrFields": [
+        "meetingProvider",
+        "meetingUrl",
+        "normalizedMeetingUrl",
+        "meetingUrlHash",
+        "meetingValidationStatus",
+        "videoApiSessionId",
+        "videoCallLink",
+        "linkGeneratedAt",
+        "linkSavedAt",
+        "googleSpaceName"
+      ]
+    },
+    {
+      "model": "Note",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "Report",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "Prescription",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "MedicalCertificate",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "MessageConversation",
+      "database": "core",
+      "removedRelationsOrFields": [
+        "auditEvents"
+      ]
+    },
+    {
+      "model": "AppointmentMessage",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "Feedback",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "ConsentRecord",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "SystemContent",
+      "database": "core",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "GoogleMeetConnection",
+      "database": "integrations",
+      "removedRelationsOrFields": [
+        "doctor"
+      ]
+    },
+    {
+      "model": "GoogleMeetOAuthState",
+      "database": "integrations",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "GoogleMeetGeneration",
+      "database": "integrations",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "Payment",
+      "database": "integrations",
+      "removedRelationsOrFields": [
+        "appointment"
+      ]
+    },
+    {
+      "model": "PaymentOperation",
+      "database": "integrations",
+      "removedRelationsOrFields": []
+    },
+    {
+      "model": "Invoice",
+      "database": "integrations",
+      "removedRelationsOrFields": [
+        "appointment"
+      ]
+    },
+    {
+      "model": "Notification",
+      "database": "replaced",
+      "replacement": "Central BGH inbox"
+    },
+    {
+      "model": "AuditLog",
+      "database": "replaced",
+      "replacement": "Content-free audit intent + BGH_AUDIT_LOGS"
+    },
+    {
+      "model": "GoogleMeetAudit",
+      "database": "replaced",
+      "replacement": "Content-free audit intent + BGH_AUDIT_LOGS"
+    },
+    {
+      "model": "MessageAuditEvent",
+      "database": "replaced",
+      "replacement": "Content-free audit intent + BGH_AUDIT_LOGS"
+    },
+    {
+      "model": "Message",
+      "database": "replaced",
+      "replacement": "Retired persistence; existing endpoint behavior retained"
+    },
+    {
+      "model": "AppointmentConcern",
+      "database": "replaced",
+      "replacement": "Retired persistence; existing endpoint behavior retained"
+    },
+    {
+      "model": "IntegrationSyncJob",
+      "database": "replaced",
+      "replacement": "Core outbox + Integrations delivery ledger"
+    }
+  ]
+}

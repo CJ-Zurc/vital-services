@@ -1,0 +1,621 @@
+// Initial extraction from development schema SHA256 7ba131a2a7b1747f4be51366a4fce50482c4c209cfcefa4bd4d1df3984a06f34
+generator client {
+  provider = "prisma-client"
+  moduleFormat = "cjs"
+  output = "../../src/eda/generated/core"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum EhrRecordOrigin {
+  none
+  preexisting
+  created_by_vital
+}
+
+enum AvailabilityType {
+  virtual
+  in_person
+  both
+}
+
+enum PaymentProvider {
+  gcash
+  maya
+  paymongo
+}
+
+enum ConsultationType {
+  virtual
+  in_person
+  both
+}
+
+enum SourceLabel {
+  bgh_uhse_record
+  external_patient_submitted
+}
+
+enum GrantType {
+  booking_consent
+  manual
+}
+
+enum AppointmentKind {
+  standard
+  follow_up
+}
+
+enum AppointmentStatus {
+  pending
+  approved
+  rejected
+  pending_patient_confirmation
+  pending_payment_verification
+  confirmed
+  rescheduled
+  cancelled
+  completed
+}
+
+enum MessageSenderRole {
+  patient
+  doctor
+}
+
+enum ConsentType {
+  registration
+  booking
+  medical_record
+}
+
+enum ContentType {
+  announcement
+  faq
+}
+
+enum TargetPortal {
+  patient
+  doctor
+  both
+}
+
+model VitalUser {
+  id     String    @id @default(uuid())
+  authId String    @unique
+  role   String
+
+  patient VitalPatient?
+  doctor  VitalDoctor?
+  admin   VitalAdmin?
+  appointmentMessages AppointmentMessage[]
+
+  @@map("vital_users")
+  version Int @default(0)
+}
+
+model VitalPatient {
+  userId               String    @id
+  user                 VitalUser @relation(fields: [userId], references: [id])
+  authId               String    @unique
+  profilePic           String?
+  isRecordAvailable    Boolean   @default(false)
+  ehrPatientId         String?   @unique
+  ehrRecordOrigin      EhrRecordOrigin @default(none)
+  existingEhrRecordNoticeDismissedAt DateTime?
+  isOnboardingComplete Boolean   @default(false)
+  emergencyContactName String?   @map("emergency_contact_name")
+  emergencyContactRelationship String? @map("emergency_contact_relationship")
+  emergencyContactPhone String?  @map("emergency_contact_phone")
+
+  appointments          Appointment[]
+  prescriptions         Prescription[]
+  medicalCertificates   MedicalCertificate[]
+  externalHealthRecords ExternalHealthRecord[]
+  healthRecords         HealthRecord[]
+  doctorRecordAccess    DoctorRecordAccess[]
+  feedback              Feedback[]
+  consentRecords        ConsentRecord[]
+
+  @@map("vital_patients")
+}
+
+model VitalDoctor {
+  userId           String            @id
+  user             VitalUser         @relation(fields: [userId], references: [id])
+  authId           String            @unique
+  role             String?
+  title            String?
+  specialty        String?
+  departmentExternalId String?    @map("department_external_id")
+  departmentName   String?        @map("department_name")
+  prcLicense       String?           @map("prc_license")
+  availabilityType AvailabilityType?
+  virtualFee       Decimal?          @db.Decimal(10, 2)
+  inPersonFee      Decimal?          @db.Decimal(10, 2)
+  starRating       Float             @default(0)
+  changedAt        DateTime?
+  bio              String?
+  education        String?
+  isDoctorOnboardingComplete Boolean @default(false)
+  termsAgreedAt    DateTime?
+
+  hospitalAffiliations HospitalAffiliation[]
+  paymentQrCodes       DoctorQr[]
+  scheduleSlots        Schedule[]
+  dateBlocks           DoctorDateBlock[]
+  appointments         Appointment[]
+  notes                Note[]
+  reports              Report[]
+  prescriptions        Prescription[]
+  medicalCertificates  MedicalCertificate[]
+  doctorRecordAccess   DoctorRecordAccess[]
+
+  @@map("vital_doctors")
+}
+
+model VitalAdmin {
+  userId String    @id
+  user   VitalUser @relation(fields: [userId], references: [id])
+  authId String    @unique
+
+  systemContent SystemContent[]
+
+  @@map("vital_admins")
+}
+
+model HospitalAffiliation {
+  id           String      @id @default(uuid())
+  haId         String?
+  doctorId     String
+  doctor       VitalDoctor @relation(fields: [doctorId], references: [userId])
+  hospitalName String
+
+  @@map("hospital_affiliations")
+}
+
+model DoctorQr {
+  id              String          @id @default(uuid())
+  doctorId        String
+  doctor          VitalDoctor     @relation(fields: [doctorId], references: [userId])
+  paymentProvider PaymentProvider
+  filePath        String
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+
+  @@map("doctor_qr_codes")
+}
+
+model Schedule {
+  id               String           @id @default(uuid())
+  doctorId         String
+  doctor           VitalDoctor      @relation(fields: [doctorId], references: [userId])
+  slotDate         DateTime         @db.Date
+  startTime        DateTime         @db.Time()
+  endTime          DateTime         @db.Time()
+  consultationType ConsultationType
+  isPublished      Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+
+  appointments Appointment[]
+
+  @@unique([doctorId, slotDate, startTime, endTime], name: "uq_no_overlap")
+  @@map("schedules")
+}
+
+model DoctorDateBlock {
+  id        String      @id @default(uuid())
+  doctorId  String      @map("doctor_id")
+  doctor    VitalDoctor @relation(fields: [doctorId], references: [userId], onDelete: Cascade)
+  startDate DateTime    @db.Date @map("start_date")
+  endDate   DateTime    @db.Date @map("end_date")
+  weekday   Int?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@index([doctorId, startDate, endDate])
+  @@map("doctor_date_blocks")
+}
+
+model ExternalHealthRecord {
+  id               String       @id @default(uuid())
+  patientId        String
+  patient          VitalPatient @relation(fields: [patientId], references: [userId])
+  externalRecordId String?
+  recordType       String?
+  description      String?
+  sourceLabel      String       @default("external_patient_submitted")
+  recordDate       DateTime?
+  createdAt        DateTime     @default(now())
+
+  @@map("external_health_records")
+}
+
+model HealthRecord {
+  id          String       @id @default(uuid())
+  patientId   String
+  patient     VitalPatient @relation(fields: [patientId], references: [userId])
+  hrecordId   String?
+    recordType  String?
+    sourceLabel SourceLabel
+    title       String
+    description String?
+    filePath    String?
+  recordDate  DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@map("health_records")
+}
+
+model DoctorRecordAccess {
+  id                          String       @id @default(uuid())
+  doctorId                    String
+  doctor                      VitalDoctor  @relation(fields: [doctorId], references: [userId])
+  patientId                   String
+  patient                     VitalPatient @relation(fields: [patientId], references: [userId])
+  grantType                   GrantType
+  isActive                    Boolean      @default(true)
+  grantedAt                   DateTime     @default(now())
+  invoicedAt                  DateTime?
+  revokedAt                   DateTime?
+  recordSnapshot              Json?
+  recordSnapshotCapturedAt    DateTime?
+  recordSnapshotAppointmentId String?
+
+  @@unique([doctorId, patientId])
+  @@map("doctor_record_access")
+}
+
+model Appointment {
+  id                 String            @id @default(uuid())
+  patientId          String
+  patient            VitalPatient      @relation(fields: [patientId], references: [userId])
+  doctorId           String
+  doctor             VitalDoctor       @relation(fields: [doctorId], references: [userId])
+  scheduleSlotId     String?
+  scheduleSlot       Schedule?         @relation(fields: [scheduleSlotId], references: [id])
+  sourceAppointmentId String?
+  sourceAppointment  Appointment?      @relation("AppointmentRescheduleProposals", fields: [sourceAppointmentId], references: [id])
+  rescheduleProposals Appointment[]     @relation("AppointmentRescheduleProposals")
+  patientRescheduleCount Int            @default(0)
+  doctorRescheduleCount  Int            @default(0)
+  appointmentKind     AppointmentKind   @default(standard)
+  followUpOfAppointmentId String?
+  followUpOfAppointment Appointment?    @relation("AppointmentFollowUps", fields: [followUpOfAppointmentId], references: [id])
+  followUpAppointments Appointment[]    @relation("AppointmentFollowUps")
+  consultationType   ConsultationType  @default(virtual)
+  status             AppointmentStatus @default(pending)
+  cancellationReason String?
+  rejectionReason    String?
+  ehrCaseId           String?           @unique
+  ehrCaseCreatedAt    DateTime?
+  followUpFlagged    Boolean           @default(false)
+  followUpTimeframe  DateTime?         @db.Date
+  doctorConfirmedAt  DateTime?
+  patientConfirmedAt DateTime?
+  completionDeadlineAt DateTime?
+  autoCompletedAt    DateTime?
+  completedAt        DateTime?
+  paperworkLockedAt  DateTime?
+  scheduledAt        DateTime
+  proposedEndAt      DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  statusLogs          AppointmentLog[]
+  preConsultation     PreConsultation?
+  consultation        Consultation?
+  report              Report?
+  prescriptions       Prescription[]
+  medicalCertificates MedicalCertificate[]
+  messageConversation MessageConversation?
+  feedback            Feedback?
+  consentRecords      ConsentRecord[]
+
+  @@index([followUpOfAppointmentId])
+  @@index([completionDeadlineAt])
+  @@map("appointments")
+  version Int @default(0)
+  billingLineageId String @default(uuid())
+  paymentProjection AppointmentPaymentProjection?
+}
+
+model AppointmentLog {
+  id            String      @id @default(uuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  fromStatus    String?
+  toStatus      String
+  changedByRole String?
+  note          String?
+  changedAt     DateTime    @default(now())
+
+  @@map("appointment_logs")
+}
+
+model PreConsultation {
+  id             String      @id @default(uuid())
+  appointmentId  String      @unique  
+  appointment    Appointment @relation(fields: [appointmentId], references: [id])
+  chiefComplaint String?
+  opqrst         Json?
+  isSubmitted    Boolean     @default(false)
+  submittedAt    DateTime?
+
+  @@map("pre_consultations")
+}
+
+model Consultation {
+  id                String      @id @default(uuid())
+  appointmentId     String      @unique
+  appointment       Appointment @relation(fields: [appointmentId], references: [id])
+  sessionStartedAt  DateTime?
+  sessionEndedAt    DateTime?
+
+  notes Note[]
+
+  @@map("consultations")
+  videoResourceId String? @unique
+}
+
+model Note {
+  id          String       @id @default(uuid())
+  consultId   String
+  consult     Consultation @relation(fields: [consultId], references: [id])
+  doctorId    String
+  doctor      VitalDoctor  @relation(fields: [doctorId], references: [userId])
+  note        String?
+  lastSavedAt DateTime     @default(now()) @updatedAt
+
+  @@map("notes")
+}
+
+model Report {
+  id               String      @id @default(uuid())
+  appointmentId    String      @unique
+  appointment      Appointment @relation(fields: [appointmentId], references: [id])
+  doctorId         String
+  doctor           VitalDoctor @relation(fields: [doctorId], references: [userId])
+  clinicalFindings String?
+  diagnosis        String?
+  recommendations  String?
+  status           String?
+  image            String?
+  isFinalized      Boolean     @default(false)
+  finalizedAt      DateTime?
+
+  @@map("reports")
+}
+
+model Prescription {
+  id                        String      @id @default(uuid())
+  appointmentId             String?
+  appointment               Appointment? @relation(fields: [appointmentId], references: [id])
+  patientId                 String
+  patient                   VitalPatient @relation(fields: [patientId], references: [userId])
+  doctorId                  String
+  doctor                    VitalDoctor @relation(fields: [doctorId], references: [userId])
+  medicationName            String
+  dosage                    String
+  frequency                 String
+  medicineLines             Json?
+  duration                  String?
+  specialInstructions       String?
+  doctorNameSnapshot        String?
+  doctorLicenseSnapshot     String?
+  filePath                  String?
+  accessCode                String      @unique
+  issuedAt                  DateTime    @default(now())
+  prescriptionValidityLimit DateTime?   @db.Date
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([appointmentId])
+  @@index([issuedAt])
+  @@map("prescriptions")
+}
+
+model MedicalCertificate {
+  id                    String      @id @default(uuid())
+  appointmentId         String?
+  appointment           Appointment? @relation(fields: [appointmentId], references: [id])
+  patientId             String
+  patient               VitalPatient @relation(fields: [patientId], references: [userId])
+  doctorId              String
+  doctor                VitalDoctor @relation(fields: [doctorId], references: [userId])
+  purpose               String?
+  diagnosis             String?
+  consultationDate      DateTime?   @db.Date
+  restStartDate         DateTime?   @db.Date
+  restEndDate           DateTime?   @db.Date
+  recommendation        String?
+  remarks               String?
+  doctorNameSnapshot    String?
+  doctorLicenseSnapshot String?
+  filePath              String?
+  endTime               DateTime?   @db.Time()
+  accessCode            String      @unique
+  generatedAt           DateTime    @default(now())
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([appointmentId])
+  @@index([generatedAt])
+  @@map("medical_certificates")
+}
+
+model MessageConversation {
+  id                String               @id @default(uuid())
+  appointmentId     String               @unique
+  appointment       Appointment          @relation(fields: [appointmentId], references: [id])
+  patientLastReadAt DateTime?
+  doctorLastReadAt  DateTime?
+  legalHoldAt       DateTime?
+  legalHoldReason   String?
+  createdAt         DateTime             @default(now())
+  messages          AppointmentMessage[]
+
+  @@map("message_conversations")
+  version Int @default(0)
+}
+
+model AppointmentMessage {
+  id              String              @id @default(uuid())
+  conversationId  String
+  conversation    MessageConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderUserId    String
+  sender          VitalUser           @relation(fields: [senderUserId], references: [id])
+  senderRole      MessageSenderRole
+  clientMessageId String
+  ciphertext      String              @db.Text
+  nonce           String
+  authTag         String
+  keyVersion      Int
+  createdAt       DateTime            @default(now())
+
+  @@unique([conversationId, senderUserId, clientMessageId])
+  @@index([conversationId, createdAt, id])
+  @@index([senderUserId, createdAt])
+  @@map("appointment_messages")
+}
+
+model Feedback {
+  id            String       @id @default(uuid())
+  appointmentId String       @unique
+  appointment   Appointment  @relation(fields: [appointmentId], references: [id])
+  patientId     String
+  patient       VitalPatient @relation(fields: [patientId], references: [userId])
+  doctorId      String?
+  starRating    Int
+  feedback      String?
+  submittedAt   DateTime     @default(now())
+
+  @@index([doctorId])
+  @@map("feedback")
+}
+
+model ConsentRecord {
+  id            String       @id @default(uuid())
+  patientId     String
+  patient       VitalPatient @relation(fields: [patientId], references: [userId])
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  consentType   ConsentType
+  accepted      Boolean
+  consentedAt   DateTime     @default(now())
+
+  @@map("consent_records")
+}
+
+model SystemContent {
+  id           String       @id @default(uuid())
+  adminId      String
+  admin        VitalAdmin   @relation(fields: [adminId], references: [userId])
+  contentType  ContentType
+  title        String
+  body         String
+  targetPortal TargetPortal
+  publishedAt  DateTime?
+  updatedAt    DateTime     @updatedAt
+
+  @@map("system_content")
+}
+
+model OutboxEvent {
+  id               String    @id @default(uuid())
+  eventType        String
+  schemaVersion    Int       @default(1)
+  producer         String
+  aggregateId      String
+  aggregateVersion Int
+  correlationId    String
+  causationId      String?
+  occurredAt       DateTime  @default(now())
+  payload          Json
+  status           String    @default("pending")
+  attempts         Int       @default(0)
+  nextAttemptAt    DateTime  @default(now())
+  leaseOwner       String?
+  leaseUntil       DateTime?
+  publishedAt      DateTime?
+  lastErrorCode    String?
+  @@index([status, nextAttemptAt, leaseUntil])
+  @@index([producer, aggregateId, aggregateVersion])
+  @@map("outbox_events")
+}
+
+model InboxEvent {
+  consumerId  String
+  eventId     String
+  processedAt DateTime @default(now())
+  @@id([consumerId, eventId])
+  @@map("inbox_events")
+}
+
+model CommandOperation {
+  id            String    @id @default(uuid())
+  actorId       String
+  action        String
+  resourceId    String
+  operationId   String
+  requestHash   String
+  status        String    @default("pending")
+  result        Json?
+  errorCode     String?
+  leaseOwner    String?
+  leaseUntil    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  @@unique([actorId, operationId])
+  @@index([status, leaseUntil])
+  @@map("command_operations")
+}
+
+
+model AppointmentPaymentProjection {
+  appointmentId String      @id
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  paymentId     String      @unique
+  sourceVersion Int
+  status        String
+  paidAt        DateTime?
+  observedAt    DateTime    @default(now())
+  @@map("appointment_payment_projections")
+}
+
+model SagaOperation {
+  id                    String   @id @default(uuid())
+  kind                  String
+  sourceAppointmentId   String
+  replacementAppointmentId String?
+  actorAuthId           String
+  expectedSourceVersion Int
+  requestHash           String
+  status                String   @default("preparing")
+  pivotCommittedAt      DateTime?
+  deadlineAt            DateTime
+  attempts              Int      @default(0)
+  nextAttemptAt         DateTime @default(now())
+  leaseOwner            String?
+  leaseUntil            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  @@index([status, nextAttemptAt, leaseUntil])
+  @@map("saga_operations")
+}
+
+model SlotReservation {
+  id            String   @id @default(uuid())
+  slotKey       String   @unique
+  doctorId      String
+  operationId   String   @unique
+  appointmentId String
+  startsAt      DateTime
+  endsAt        DateTime
+  leaseUntil    DateTime
+  status        String   @default("reserved")
+  @@index([doctorId, startsAt, endsAt])
+  @@map("slot_reservations")
+}

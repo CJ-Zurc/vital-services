@@ -1,0 +1,246 @@
+# Never merge this file with the active/root/staging Compose files.
+name: vital-eda-dev
+
+x-node: &node
+  image: ${EDA_NODE_IMAGE:-vital-eda-node:local}
+  build:
+    context: .
+    dockerfile: Dockerfile.eda
+    target: ${EDA_IMAGE_TARGET:-runtime}
+  profiles: [eda]
+  user: "1000:1000"
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:rw,noexec,nosuid,size=32m,uid=1000,gid=1000"]
+  mem_limit: 384m
+  cpus: 0.75
+  pids_limit: 128
+  restart: "no"
+  stop_grace_period: 20s
+  networks: [private]
+  logging: &logging
+    driver: json-file
+    options: {max-size: "10m", max-file: "2"}
+
+x-environment: &environment
+  NODE_ENV: production
+  EDA_DATABASE_SUFFIX: ${EDA_DATABASE_SUFFIX:-}
+  VITAL_EDA_ENABLED: ${VITAL_EDA_ENABLED:-false}
+  VITAL_EDA_PROFILE_WRITES_ENABLED: ${VITAL_EDA_PROFILE_WRITES_ENABLED:-false}
+  VITAL_EDA_CONSUMERS_ENABLED: ${VITAL_EDA_CONSUMERS_ENABLED:-false}
+  VITAL_EDA_DELIVERY_ENABLED: ${VITAL_EDA_DELIVERY_ENABLED:-false}
+  VITAL_EDA_PROVISION_BROKER: "false"
+  VITAL_DATABASE_CA_FILE: /run/secrets/db-ca.pem
+  VITAL_RABBITMQ_CA_FILE: /run/secrets/broker-ca.pem
+
+services:
+  web:
+    profiles: [eda]
+    build:
+      context: ../vital-web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: http://localhost:${EDA_WEB_PORT:-3101}
+        NEXT_PUBLIC_API_GATEWAY_URL: ${EDA_PUBLIC_GATEWAY_URL:-http://localhost:1}
+    user: "1000:1000"
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      VITAL_EDA_ENABLED: ${VITAL_EDA_ENABLED:-false}
+      VITAL_EDA_PROFILE_WRITES_ENABLED: ${VITAL_EDA_PROFILE_WRITES_ENABLED:-false}
+      VITAL_EDA_CONSUMERS_ENABLED: ${VITAL_EDA_CONSUMERS_ENABLED:-false}
+      VITAL_EDA_DELIVERY_ENABLED: ${VITAL_EDA_DELIVERY_ENABLED:-false}
+      VITAL_SERVICES_URL: https://api:8443
+      VITAL_SERVICE_CA_FILE: /run/secrets/service-ca.pem
+      # No legacy/shared Web database, storage credentials, or automatic migration.
+      DATABASE_URL: postgresql://disabled:disabled@127.0.0.1:1/disabled
+    secrets:
+      - {source: service_ca, target: service-ca.pem}
+    ports: ["127.0.0.1:${EDA_WEB_PORT:-3101}:3001"]
+    networks:
+      private: {}
+      ingress: {gw_priority: 1}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+
+  api:
+    <<: *node
+    command: [api]
+    environment:
+      <<: *environment
+      VITAL_EDA_API_PORT: "8443"
+      VITAL_API_TLS_CERT_FILE: /run/secrets/api-cert.pem
+      VITAL_API_TLS_KEY_FILE: /run/secrets/api-key.pem
+      VITAL_SERVICE_CA_FILE: /run/secrets/service-ca.pem
+      VITAL_BFF_SIGNING_KEY_ID: vital-bff-v1
+      VITAL_BFF_SIGNING_PUBLIC_KEY_FILE: /run/secrets/bff-public.pem
+    secrets:
+      - core_api_password
+      - integrations_api_password
+      - {source: db_ca, target: db-ca.pem}
+      - {source: service_ca, target: service-ca.pem}
+      - {source: api_cert, target: api-cert.pem}
+      - {source: api_key, target: api-key.pem}
+      - {source: bff_public, target: bff-public.pem}
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  worker:
+    <<: *node
+    command: [worker]
+    environment: *environment
+    secrets:
+      - core_worker_password
+      - integrations_worker_password
+      - rabbit_runtime_password
+      - {source: db_ca, target: db-ca.pem}
+      - {source: broker_ca, target: broker-ca.pem}
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+
+  postgres:
+    profiles: [eda]
+    image: postgres:16-bookworm
+    user: "999:999"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 128
+    restart: "no"
+    environment:
+      POSTGRES_USER: eda_bootstrap
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=peer
+      EDA_DATABASE_SUFFIX: ${EDA_DATABASE_SUFFIX:-}
+    entrypoint: [sh, /etc/eda/postgres/start.sh]
+    command: [postgres, -c, ssl=on, -c, ssl_cert_file=/run/eda/server.crt, -c, ssl_key_file=/run/eda/server.key, -c, hba_file=/etc/eda/postgres/pg_hba.conf, -c, ident_file=/etc/eda/postgres/pg_ident.conf, -c, password_encryption=scram-sha-256, -c, max_connections=40]
+    secrets:
+      - postgres_admin_password
+      - core_api_password
+      - integrations_api_password
+      - core_worker_password
+      - integrations_worker_password
+      - core_migrator_password
+      - integrations_migrator_password
+      - {source: db_cert, target: db-cert.pem}
+      - {source: db_key, target: db-key.pem}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/eda/postgres:/etc/eda/postgres:ro
+      - ./docker/eda/postgres/init.sh:/docker-entrypoint-initdb.d/10-eda.sh:ro
+    tmpfs:
+      - /run/eda:rw,noexec,nosuid,size=2m,uid=999,gid=999
+      - /var/run/postgresql:rw,noexec,nosuid,size=2m,uid=999,gid=999
+      - /tmp:rw,noexec,nosuid,size=16m,uid=999,gid=999
+    healthcheck:
+      test: [CMD, pg_isready, -U, eda_bootstrap, -d, postgres]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [private]
+    logging: *logging
+
+  rabbitmq:
+    profiles: [eda]
+    image: rabbitmq:4.1-management
+    hostname: rabbitmq
+    user: "999:999"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    restart: "no"
+    environment:
+      RABBITMQ_CONFIG_FILE: /etc/eda/rabbitmq/rabbitmq
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "+S 2:2"
+    secrets:
+      - {source: broker_definitions, target: broker-definitions.json}
+      - {source: broker_ca, target: broker-ca.pem}
+      - {source: broker_cert, target: broker-cert.pem}
+      - {source: broker_key, target: broker-key.pem}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./docker/eda/rabbitmq:/etc/eda/rabbitmq:ro
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, check_port_connectivity]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    networks: [private]
+    logging: *logging
+
+  minio:
+    profiles: [eda]
+    image: vital-eda-minio:local
+    build:
+      context: ./docker/eda/minio
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    restart: "no"
+    entrypoint: [sh, /etc/eda/minio/start.sh]
+    secrets: [minio_admin_user, minio_admin_password]
+    volumes:
+      - minio_data:/data
+      - ./docker/eda/minio:/etc/eda/minio:ro
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:9000/minio/health/live]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [private]
+    logging: *logging
+
+networks:
+  private: {internal: true}
+  ingress: {}
+
+volumes:
+  postgres_data: {}
+  rabbitmq_data: {}
+  minio_data: {}
+
+# Populate outside the repository and set EDA_SECRETS_DIR. No credentials ship here.
+secrets:
+  postgres_admin_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/postgres-admin-password"}
+  core_api_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/core-api-password"}
+  integrations_api_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/integrations-api-password"}
+  core_worker_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/core-worker-password"}
+  integrations_worker_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/integrations-worker-password"}
+  core_migrator_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/core-migrator-password"}
+  integrations_migrator_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/integrations-migrator-password"}
+  rabbit_runtime_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/rabbit-runtime-password"}
+  rabbit_provision_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/rabbit-provision-password"}
+  broker_definitions: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/broker-definitions.json"}
+  db_ca: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/db-ca.pem"}
+  db_cert: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/db-cert.pem"}
+  db_key: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/db-key.pem"}
+  broker_ca: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/broker-ca.pem"}
+  broker_cert: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/broker-cert.pem"}
+  broker_key: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/broker-key.pem"}
+  service_ca: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/service-ca.pem"}
+  api_cert: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/api-cert.pem"}
+  api_key: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/api-key.pem"}
+  bff_public: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/bff-public.pem"}
+  minio_admin_user: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/minio-admin-user"}
+  minio_admin_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/minio-admin-password"}

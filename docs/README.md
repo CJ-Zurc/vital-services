@@ -5,6 +5,13 @@ Service Ecosystem. Its Express 5 API implements PayMongo operations and an appoi
 Gateway appointment/telemedicine handlers remain scaffolds; VITAL_WEB owns the
 operational workflows and Prisma schema.
 
+The revised EDA migration is being implemented behind disabled-by-default
+entrypoints. This is not a completed extraction or staging release. See
+[EDA implementation status](eda/implementation-status.md),
+[schema ownership](eda/schema-ownership.json) and
+[route baseline](eda/route-baseline.json). Existing `npm start` remains the
+legacy runtime until coordinated acceptance and cutover.
+
 ## Contents
 
 - [architecture.md](./architecture.md) — service layout, route map, runtime shape

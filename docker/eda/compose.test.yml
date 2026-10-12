@@ -1,0 +1,23 @@
+# Use ONLY with -p vital-eda-test, fresh project-scoped volumes and suffix _test.
+name: vital-eda-test
+services:
+  api:
+    image: ${EDA_TOOLS_IMAGE:-vital-eda-tools:local}
+    build: {target: tools}
+    command: [test]
+    environment:
+      EDA_DATABASE_SUFFIX: _test
+      EDA_TEST_ENABLED: ${EDA_TEST_ENABLED:-false}
+      EDA_TEST_ISOLATED: ${EDA_TEST_ISOLATED:-}
+    secrets: !override
+      - core_worker_password
+      - integrations_worker_password
+      - core_migrator_password
+      - integrations_migrator_password
+      - rabbit_runtime_password
+      - rabbit_provision_password
+      - {source: db_ca, target: db-ca.pem}
+      - {source: broker_ca, target: broker-ca.pem}
+  postgres:
+    environment:
+      EDA_DATABASE_SUFFIX: _test

@@ -1,0 +1,45 @@
+model AppointmentPaymentProjection {
+  appointmentId String      @id
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  paymentId     String      @unique
+  sourceVersion Int
+  status        String
+  paidAt        DateTime?
+  observedAt    DateTime    @default(now())
+  @@map("appointment_payment_projections")
+}
+
+model SagaOperation {
+  id                    String   @id @default(uuid())
+  kind                  String
+  sourceAppointmentId   String
+  replacementAppointmentId String?
+  actorAuthId           String
+  expectedSourceVersion Int
+  requestHash           String
+  status                String   @default("preparing")
+  pivotCommittedAt      DateTime?
+  deadlineAt            DateTime
+  attempts              Int      @default(0)
+  nextAttemptAt         DateTime @default(now())
+  leaseOwner            String?
+  leaseUntil            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  @@index([status, nextAttemptAt, leaseUntil])
+  @@map("saga_operations")
+}
+
+model SlotReservation {
+  id            String   @id @default(uuid())
+  slotKey       String   @unique
+  doctorId      String
+  operationId   String   @unique
+  appointmentId String
+  startsAt      DateTime
+  endsAt        DateTime
+  leaseUntil    DateTime
+  status        String   @default("reserved")
+  @@index([doctorId, startsAt, endsAt])
+  @@map("slot_reservations")
+}

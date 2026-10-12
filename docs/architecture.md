@@ -5,7 +5,7 @@
 - Node.js 20 (Alpine in Docker)
 - Express 5 (CommonJS)
 - PostgreSQL 16 sidecar (`vital-services-db`)
-- RabbitMQ audit publishing is planned; no publisher is implemented in `src/`
+- The legacy runtime has no broker publisher; the disabled EDA runtime has its own outbox relay
 - PayMongo for checkout and refund provider operations
 
 ## Layout
@@ -45,9 +45,24 @@ The Gateway strips the `/vital` prefix before proxying public VITAL routes.
 - Completed, pending, and unknown operations return stored state without a new
   provider call. A matching failed operation is claimed again as pending and
   retried. Reusing the key with a different payload or operation type returns
-  `409`. Provider exceptions with a response become failed; exceptions without
-  a response become unknown. This classification is not proof that a provider
-  performed no side effect.
+  `409`. Only explicit 400/401/403/404/422 provider rejections become failed.
+  Timeouts, conflicts, rate limits, server errors and transport failures remain
+  unknown and are not automatically repeated. Stored failure diagnostics use
+  redacted codes. Provider calls reject all credentials except sandbox secrets.
+
+## Disabled EDA Runtime
+
+`src/eda/entrypoints/api.ts` and `worker.ts` target Node.js 22/TypeScript,
+separate Core/Integrations clients, module-owned event exchanges, transactional
+outbox/inbox, and a dedicated verified AMQPS broker. They require explicit
+`VITAL_EDA_ENABLED=true`; this flag is not permission for a shared cutover.
+The API currently exposes the Profile foundation only. Unsupported domain
+routes fail closed rather than falling back to legacy business writers.
+
+Outbox publication requires mandatory routing and publisher confirmation;
+receiving handlers commit inbox/effects before ACK. Bounded retries/DLQs do
+not establish exactly-once processing. See [implementation status](eda/implementation-status.md)
+for remaining domain and release gates.
 
 ## Outbound Dependencies
 

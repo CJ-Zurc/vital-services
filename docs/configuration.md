@@ -9,7 +9,7 @@ Node runs use `.env`. The implemented readers are `src/config.js`,
 | `PORT` | API port; fallback `8009` |
 | `NODE_ENV` | `production` enables required configuration validation |
 | `DATABASE_URL` | Shared VITAL PostgreSQL database and payment-operation ledger |
-| `PAYMONGO_SECRET` | Provider credential; accepts `PAYMONGO_SECRET_KEY` alias |
+| `PAYMONGO_SECRET` | Sandbox `sk_test_*` only; accepts `PAYMONGO_SECRET_KEY` alias; live/public credentials are rejected |
 | `VITAL_WEB_URL` | Job callback base; root `http://vital-web:3001` |
 | `VITAL_WEB_TO_SERVICES_INTERNAL_SERVICE_KEY` | Preferred inbound payment/job credential for caller `vital-web` |
 | `VITAL_SERVICES_TO_WEB_INTERNAL_SERVICE_KEY` | Outbound credential for caller `vital-services` |
@@ -18,7 +18,7 @@ Node runs use `.env`. The implemented readers are `src/config.js`,
 | `JWT_SECRET` | Legacy internal-key fallback; not a browser JWT verification flow |
 | `GATEWAY_SECRET` | Validates Gateway-forwarded scaffolds |
 | `GATEWAY_TRUST_ENABLED` | Defaults to enabled; local debug bypass only |
-| `LOG_LEVEL`, `HTTP_LOGGING_ENABLED` | Logger helper settings; current bootstrap also emits request lines |
+| `LOG_LEVEL`, `HTTP_LOGGING_ENABLED` | Structured redacted request logger settings |
 
 Production requires explicit provider secret, database URL, both directional
 keys, and `VITAL_WEB_URL`. Gateway secret is required when forwarding Gateway
@@ -31,3 +31,13 @@ Older Auth client, RabbitMQ audit, Loki, and Prometheus environment tables
 described desired integrations that are not read by the current service.
 Do not infer those features from a retained template key. Adding them requires
 implementation and contract verification.
+
+EDA configuration is separate in `.env.eda.example`. No existing `.env` was
+rewritten. All activation flags default off. Runtime database URLs identify
+different non-superuser roles for `vital_core` and `vital_integrations`; migration
+URLs are separate and must not be supplied to API/worker containers. Startup
+checks reject DDL rights, superuser capabilities and other-database CONNECT.
+PostgreSQL TLS is required in production and URL SSL overrides are rejected.
+API requires a process certificate/CA plus the BFF's RSA public key and key ID;
+worker requires a dedicated AMQPS vhost URL and CA. Delivery remains disabled
+until central ingestion credentials and verified HTTPS are configured.
