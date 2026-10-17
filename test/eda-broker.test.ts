@@ -3,7 +3,7 @@ import test from "node:test";
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import type { ConfirmChannel, Message, ChannelModel } from "amqplib";
-import { provisionTopology, publishConfirmed, publishBytesConfirmed, validateBrokerUrl } from "../src/eda/infrastructure/broker.js";
+import { consumeEvents, provisionTopology, publishConfirmed, publishBytesConfirmed, validateBrokerUrl } from "../src/eda/infrastructure/broker.js";
 import { makeEvent } from "../src/eda/infrastructure/outbox.js";
 
 type Callback = (error: Error | null) => void;
@@ -74,7 +74,12 @@ test("EDA retry topology resumes through a private named exchange without defaul
   await provisionTopology(connection);
   assert.ok(exchanges.includes("vital.resume"));
   const retries = queues.filter((queue) => queue.name.includes(".retry."));
-  assert.equal(retries.length, 12);
+  assert.equal(retries.length, 42);
+  assert.ok(bindings.some(([queue, exchange, key]) => queue === 'vital.messaging-state' && exchange === 'vital.messaging.events' && key === 'vital.messaging.changed'));
+  assert.ok(bindings.some(([queue, exchange, key]) => queue === 'vital.video-workflow' && exchange === 'vital.appointment.events' && key === 'vital.video.workflow.finalization.requested'));
+  assert.ok(bindings.some(([queue, exchange, key]) => queue === 'vital.video-state' && exchange === 'vital.video.events' && key === 'vital.video.generation.changed'));
+  assert.ok(bindings.some(([queue, exchange, key]) => queue === "vital.records-artifact" && exchange === "vital.records.events" && key === "vital.records.artifact.requested"));
+  assert.ok(bindings.some(([queue, exchange, key]) => queue === "vital.appointment-confirmation" && exchange === "vital.payment.events" && key === "vital.payment.completed"));
   for (const queue of retries) {
     assert.equal(queue.arguments["x-dead-letter-exchange"], "vital.resume");
     assert.equal(queue.arguments["x-dead-letter-strategy"], "at-least-once");
@@ -82,5 +87,19 @@ test("EDA retry topology resumes through a private named exchange without defaul
     assert.ok(Number(queue.arguments["x-max-length-bytes"]) > 0);
     assert.ok(bindings.some(([name, exchange, key]) => name === queue.name.split(".retry.")[0] &&
       exchange === "vital.resume" && key === queue.arguments["x-dead-letter-routing-key"]));
+  }
+});
+
+test("EDA consumer and retry channel closure mark the worker unhealthy for recovery", async () => {
+  for (const closed of ["consumer", "publisher"]) {
+    const consumer = Object.assign(new EventEmitter(), { async prefetch() {}, async consume() { return { consumerTag: "test" }; },
+      async cancel() {}, async close() {} });
+    const publisher = Object.assign(new EventEmitter(), { async close() {} });
+    const connection = { async createChannel() { return consumer; }, async createConfirmChannel() { return publisher; } } as unknown as ChannelModel;
+    const subscription = await consumeEvents(connection, "profile-sync", async () => {});
+    assert.equal(subscription.healthy(), true);
+    (closed === "consumer" ? consumer : publisher).emit("close");
+    assert.equal(subscription.healthy(), false);
+    await subscription.close();
   }
 });

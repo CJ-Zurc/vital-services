@@ -92,12 +92,53 @@ model VitalUser {
   doctor  VitalDoctor?
   admin   VitalAdmin?
   appointmentMessages AppointmentMessage[]
+  profileSyncIntents ProfileSyncIntent[]
 
   @@map("vital_users")
   version Int @default(0)
 }
 
+model ProfileWorkflow {
+  id                 String   @id @db.Uuid
+  actorAuthId        String
+  actorRole          String
+  targetAuthId       String
+  kind               String
+  inputHash          String
+  expectedVersion    Int
+  state              String   @default("prepared")
+  receipt            Json?
+  prepareOperationId String   @db.Uuid
+  commitOperationId  String?  @db.Uuid
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  @@index([actorAuthId, targetAuthId, state])
+  @@map("profile_workflows")
+}
+
+model ProfileSyncIntent {
+  id            String   @id @default(uuid()) @db.Uuid
+  profileId     String
+  profile       VitalUser @relation(fields: [profileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  authId        String
+  sourceVersion Int
+  destination   String
+  requestId     String   @unique @db.Uuid
+  requestHash   String
+  payload       Json
+  createdAt     DateTime @default(now())
+  @@unique([profileId, sourceVersion, destination])
+  @@index([authId, sourceVersion])
+  @@map("profile_sync_intents")
+}
+
 model VitalPatient {
+  recordFreezes RecordsEpisodeFreeze[]
+  recordGrants RecordsEpisodeGrant[]
+  recordSnapshots RecordsSnapshot[]
+  recordWorkflows RecordsWorkflow[]
+  recordDocuments RecordsDocument[]
+  recordAssets RecordsFileAsset[]
   userId               String    @id
   user                 VitalUser @relation(fields: [userId], references: [id])
   authId               String    @unique
@@ -124,6 +165,10 @@ model VitalPatient {
 }
 
 model VitalDoctor {
+  recordGrants RecordsEpisodeGrant[]
+  recordSnapshots RecordsSnapshot[]
+  recordWorkflows RecordsWorkflow[]
+  recordDocuments RecordsDocument[]
   userId           String            @id
   user             VitalUser         @relation(fields: [userId], references: [id])
   authId           String            @unique
@@ -190,6 +235,7 @@ model DoctorQr {
 }
 
 model Schedule {
+  version Int @default(0)
   id               String           @id @default(uuid())
   doctorId         String
   doctor           VitalDoctor      @relation(fields: [doctorId], references: [userId])
@@ -207,6 +253,7 @@ model Schedule {
 }
 
 model DoctorDateBlock {
+  version Int @default(0)
   id        String      @id @default(uuid())
   doctorId  String      @map("doctor_id")
   doctor    VitalDoctor @relation(fields: [doctorId], references: [userId], onDelete: Cascade)
@@ -269,6 +316,15 @@ model DoctorRecordAccess {
 }
 
 model Appointment {
+  recordFreeze RecordsEpisodeFreeze?
+  recordGrants RecordsEpisodeGrant?
+  recordSnapshots RecordsSnapshot[]
+  recordWorkflows RecordsWorkflow[]
+  recordDocuments RecordsDocument[]
+  recordAssets RecordsFileAsset[]
+  recordsBlockCode String?
+  expiryProcessedAt DateTime?
+  maintenanceDueAt DateTime @default(now())
   id                 String            @id @default(uuid())
   patientId          String
   patient            VitalPatient      @relation(fields: [patientId], references: [userId])
@@ -319,6 +375,9 @@ model Appointment {
   @@map("appointments")
   version Int @default(0)
   billingLineageId String @default(uuid())
+  associationVersion Int @default(1)
+  billingQuotes AppointmentBillingQuote[]
+  billingIntents AppointmentBillingIntent[]
   paymentProjection AppointmentPaymentProjection?
 }
 
@@ -331,6 +390,7 @@ model AppointmentLog {
   changedByRole String?
   note          String?
   changedAt     DateTime    @default(now())
+  billingIntents AppointmentBillingIntent[]
 
   @@map("appointment_logs")
 }
@@ -357,10 +417,14 @@ model Consultation {
   notes Note[]
 
   @@map("consultations")
-  videoResourceId String? @unique
+  videoResourceId String?
+  videoResourceVersion Int?
+  @@index([videoResourceId])
 }
 
 model Note {
+  protectedPayload Json?
+  snapshotId String? @db.Uuid
   id          String       @id @default(uuid())
   consultId   String
   consult     Consultation @relation(fields: [consultId], references: [id])
@@ -373,6 +437,8 @@ model Note {
 }
 
 model Report {
+  protectedPayload Json?
+  snapshotId String? @db.Uuid
   id               String      @id @default(uuid())
   appointmentId    String      @unique
   appointment      Appointment @relation(fields: [appointmentId], references: [id])
@@ -454,10 +520,14 @@ model MessageConversation {
   doctorLastReadAt  DateTime?
   legalHoldAt       DateTime?
   legalHoldReason   String?
+  purgedAt          DateTime?
+  holdHistory       MessageLegalHold[]
+  purge             MessagePurge?
   createdAt         DateTime             @default(now())
   messages          AppointmentMessage[]
 
   @@map("message_conversations")
+  @@index([createdAt, id])
   version Int @default(0)
 }
 
@@ -577,15 +647,78 @@ model CommandOperation {
 model AppointmentPaymentProjection {
   appointmentId String      @id
   appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  paymentId     String      @unique
+  paymentId     String
+  billingLineageId String?
+  associationVersion Int @default(1)
+  reviewRequired Boolean @default(false)
   sourceVersion Int
   status        String
   paidAt        DateTime?
   observedAt    DateTime    @default(now())
   @@map("appointment_payment_projections")
+  @@index([paymentId])
+}
+
+model AppointmentBillingQuote {
+  billingLineageId String @id
+  appointmentId String
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  patientAuthId String
+  doctorAuthId String
+  consultationType String
+  amountCentavos BigInt
+  currency String @default("PHP")
+  createdAt DateTime @default(now())
+  intents AppointmentBillingIntent[]
+  @@map("appointment_billing_quotes")
+}
+
+model AppointmentBillingIntent {
+  deliveryStatus String @default("pending")
+  deliveryLeaseOwner String?
+  deliveryLeaseUntil DateTime?
+  deliveryAttempts Int @default(0)
+  nextDeliveryAt DateTime @default(now())
+  deliveryErrorCode String?
+  id String @id @db.Uuid
+  appointmentId String
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  billingLineageId String
+  quote AppointmentBillingQuote @relation(fields: [billingLineageId], references: [billingLineageId], onDelete: Restrict)
+  appointmentVersion Int
+  associationVersion Int
+  actorAuthId String
+  operationId String @db.Uuid
+  requestHash String
+  kind String @default("checkout")
+  state String @default("prepared")
+  expiresAt DateTime
+  committedAt DateTime?
+  ownerLogId String?
+  ownerLog AppointmentLog? @relation(fields: [ownerLogId], references: [id], onDelete: Restrict)
+  ownerOperationId String?
+  replacementAppointmentId String?
+  expectedPaymentVersion Int?
+  createdAt DateTime @default(now())
+  @@unique([actorAuthId, operationId])
+  @@index([appointmentId, appointmentVersion, kind])
+  @@map("appointment_billing_intents")
 }
 
 model SagaOperation {
+  expectedReplacementVersion Int?
+  billingLineageId String?
+  associationVersion Int?
+  actorRole String?
+  correlationId String?
+  reservationId String?
+  requiredParticipants Json?
+  prepareReceipts Json?
+  targetRequest Json?
+  fence Int @default(0)
+  ownerLogId String?
+  lastErrorCode String?
+  completedAt DateTime?
   id                    String   @id @default(uuid())
   kind                  String
   sourceAppointmentId   String
@@ -606,9 +739,206 @@ model SagaOperation {
   @@map("saga_operations")
 }
 
+model AppointmentWorkflow {
+  videoSelectionHash String?
+  videoTargetVersion Int?
+  videoProcessingState String @default("pending")
+  videoReceipt Json?
+  videoCorrelationId String?
+  targetAppointmentId String?
+  externalStartedAt DateTime?
+  id String @id @db.Uuid
+  appointmentId String
+  actorAuthId String
+  kind String
+  inputHash String
+  expectedVersion Int
+  state String @default("prepared")
+  receipt Json?
+  prepareOperationId String @db.Uuid
+  commitOperationId String? @db.Uuid
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([appointmentId, state])
+  @@map("appointment_workflows")
+}
+
+model RecordsEpisodeGrant {
+  appointmentId String @id
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  patientId String
+  patient VitalPatient @relation(fields: [patientId], references: [userId], onDelete: Restrict)
+  doctorId String
+  doctor VitalDoctor @relation(fields: [doctorId], references: [userId], onDelete: Restrict)
+  associationVersion Int
+  appointmentVersion Int
+  status String
+  snapshotId String? @db.Uuid
+  frozenSnapshotId String? @db.Uuid
+  paperworkCutoffAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([doctorId, patientId, status])
+  @@map("records_episode_grants")
+}
+
+model RecordsSnapshot {
+  freezes RecordsEpisodeFreeze[]
+  id String @id @db.Uuid
+  workflowId String @unique @db.Uuid
+  appointmentId String
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  patientId String
+  patient VitalPatient @relation(fields: [patientId], references: [userId], onDelete: Restrict)
+  doctorId String
+  doctor VitalDoctor @relation(fields: [doctorId], references: [userId], onDelete: Restrict)
+  appointmentVersion Int
+  associationVersion Int
+  ehrPatientId String
+  ehrCaseId String
+  sourceHash String
+  normalizationVersion Int @default(1)
+  protectedPayload Json
+  receiptMetadata Json
+  capturedAt DateTime @default(now())
+  assets RecordsSnapshotAsset[]
+  @@index([appointmentId, capturedAt])
+  @@map("records_snapshots")
+}
+
+model RecordsEpisodeFreeze {
+  appointmentId String @id
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  patientId String
+  patient VitalPatient @relation(fields: [patientId], references: [userId], onDelete: Restrict)
+  snapshotId String @db.Uuid
+  snapshot RecordsSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  protectedPayload Json
+  cutoffAt DateTime
+  createdAt DateTime @default(now())
+  @@map("records_episode_freezes")
+}
+
+model RecordsWorkflow {
+  id String @id @db.Uuid
+  actorAuthId String
+  patientId String
+  patient VitalPatient @relation(fields: [patientId], references: [userId], onDelete: Restrict)
+  doctorId String
+  doctor VitalDoctor @relation(fields: [doctorId], references: [userId], onDelete: Restrict)
+  appointmentId String?
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  expectedVersion Int
+  associationVersion Int?
+  ehrPatientId String
+  ehrCaseId String?
+  kind String
+  inputHash String
+  recovery Boolean @default(false)
+  state String @default("prepared")
+  prepareOperationId String @db.Uuid
+  commitOperationId String? @db.Uuid
+  receiptMetadata Json?
+  resourceId String? @db.Uuid
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([actorAuthId, state, expiresAt])
+  @@map("records_workflows")
+}
+
+model RecordsDocument {
+  id String @id @db.Uuid
+  patientId String
+  patient VitalPatient @relation(fields: [patientId], references: [userId], onDelete: Restrict)
+  doctorId String
+  doctor VitalDoctor @relation(fields: [doctorId], references: [userId], onDelete: Restrict)
+  appointmentId String?
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  kind String
+  accessCode String @unique
+  protectedPayload Json
+  assetId String @unique @db.Uuid
+  asset RecordsFileAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  issuedAt DateTime @default(now())
+  @@index([patientId, issuedAt, id])
+  @@index([doctorId, appointmentId])
+  @@map("records_documents")
+}
+
+model RecordsFileAsset {
+  id String @id @db.Uuid
+  patientId String
+  patient VitalPatient @relation(fields: [patientId], references: [userId], onDelete: Restrict)
+  appointmentId String?
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  kind String
+  version Int @default(0)
+  state String @default("quarantine")
+  protectedPayload Json
+  objectKey String @unique
+  publishedKey String? @unique
+  contentHash String?
+  publishedHash String?
+  mimeType String
+  byteLength BigInt
+  scanEvidence Json?
+  createdAt DateTime @default(now())
+  document RecordsDocument?
+  operations RecordsOperation[]
+  snapshots RecordsSnapshotAsset[]
+  @@index([patientId, state, createdAt])
+  @@map("records_file_assets")
+}
+
+model RecordsOperation {
+  preparedArtifact Json?
+  id String @id @db.Uuid
+  resourceId String @db.Uuid
+  asset RecordsFileAsset @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  actorAuthId String
+  patientId String
+  kind String
+  state String @default("pending")
+  version Int @default(0)
+  attempts Int @default(0)
+  leaseOwner String?
+  leaseUntil DateTime?
+  nextAttemptAt DateTime @default(now())
+  errorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  capacity RecordsArtifactCapacity?
+  @@index([state, nextAttemptAt, leaseUntil])
+  @@map("record_operations")
+}
+
+model RecordsArtifactCapacity {
+  id Int @id @db.SmallInt
+  operationId String? @unique @db.Uuid
+  operation RecordsOperation? @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  operationFence Int?
+  leaseOwner String?
+  leaseUntil DateTime?
+  @@map("records_artifact_capacity")
+}
+
+model RecordsSnapshotAsset {
+  snapshotId String @db.Uuid
+  snapshot RecordsSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  assetId String @db.Uuid
+  asset RecordsFileAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  @@id([snapshotId, assetId])
+  @@map("records_snapshot_assets")
+}
+
 model SlotReservation {
+  fence Int @default(1)
+  releasedAt DateTime?
+  consumedAt DateTime?
   id            String   @id @default(uuid())
-  slotKey       String   @unique
+  slotKey       String
   doctorId      String
   operationId   String   @unique
   appointmentId String
@@ -618,4 +948,68 @@ model SlotReservation {
   status        String   @default("reserved")
   @@index([doctorId, startsAt, endsAt])
   @@map("slot_reservations")
+}
+
+model MessageLegalHold {
+  id String @id @db.Uuid
+  conversationId String
+  conversation MessageConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reasonCode String
+  protectedReference Json
+  placedByAuthId String
+  placedAt DateTime @default(now())
+  releasedByAuthId String?
+  releasedAt DateTime?
+  @@index([conversationId, placedAt])
+  @@map("message_legal_holds")
+}
+
+model MessagePurge {
+  conversationId String @id
+  conversation MessageConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  purgedAt DateTime
+  expiredAt DateTime
+  removedMessages Int
+  version Int
+  @@map("message_purges")
+}
+
+model MessageRetentionScan {
+  id String @id
+  afterId String?
+  upperId String?
+  scanStartedAt DateTime?
+  lastCompletedAt DateTime?
+  nextRunAt DateTime @default(now())
+  leaseOwner String?
+  leaseUntil DateTime?
+  scanned Int @default(0)
+  eligible Int @default(0)
+  purged Int @default(0)
+  @@map("message_retention_scans")
+}
+
+model MessagingEligibilitySource {
+  appointmentId String @id
+  sourceVersion Int
+  updatedAt DateTime @updatedAt
+  @@map("messaging_eligibility_sources")
+}
+
+model AppointmentCommandPreparation {
+  id String @id @db.Uuid
+  actorAuthId String
+  actorRole String
+  commandId String @db.Uuid
+  action String
+  resource String
+  browserHash String
+  bindingHash String
+  expectedVersion Int
+  expectedSourceVersion Int?
+  sourceAppointmentId String?
+  createdAt DateTime @default(now()) @db.Timestamp(3)
+
+  @@unique([actorAuthId, commandId])
+  @@map("appointment_command_preparations")
 }

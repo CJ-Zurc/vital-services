@@ -4,11 +4,25 @@ import amqp, { type ConfirmChannel, type ChannelModel, type ConsumeMessage, type
 import { z } from "zod";
 import { exchangeFor, parseEvent, type EventEnvelope, type EventType, type Producer } from "../contracts/events.js";
 
+const appointmentFacts=['vital.appointment.requested','vital.appointment.approved','vital.appointment.confirmed','vital.appointment.rejected',
+  'vital.appointment.rescheduled','vital.appointment.cancelled','vital.appointment.completed','vital.appointment.expired','vital.appointment.completion_acknowledged'] as const;
 export const subscriptions = [
   { id: "appointment-payment", producer: "payment", types: ["vital.payment.completed", "vital.payment.changed"] },
+  { id: "appointment-confirmation", producer: "payment", types: ["vital.payment.completed", "vital.payment.changed"] },
+  { id: "appointment-saga", producer: "appointment", types: ["vital.appointment.participant.requested"] },
+  // Required owners are not yet activated. Their separate bounded durable queues
+  // retain committed facts; do not run success-shaped placeholder consumers.
+  { id: "records-appointment", producer: "appointment", types: appointmentFacts },
+  { id: "records-artifact", producer: "records", types: ["vital.records.artifact.requested","vital.records.snapshot.captured","vital.records.artifact.ready"] },
+  { id: "video-appointment", producer: "appointment", types: appointmentFacts },
+  { id: 'video-workflow',producer:'appointment',types:['vital.video.workflow.finalization.requested'] },
+  { id: 'video-state',producer:'video',types:['vital.video.resource.changed','vital.video.generation.changed'] },
+  { id: "messaging-appointment", producer: "appointment", types: appointmentFacts },
+  { id: "messaging-state", producer: "messaging", types: ["vital.messaging.changed"] },
   { id: "platform-audit", producer: "*", types: ["vital.audit.requested"] },
   { id: "platform-notification", producer: "appointment", types: ["vital.notification.requested"] },
   { id: "profile-projection", producer: "profile", types: ["vital.profile.changed"] },
+  { id: "profile-sync", producer: "profile", types: ["vital.profile.sync.requested"] },
 ] as const;
 const producers: Producer[] = ["profile", "appointment", "payment", "records", "messaging", "video"];
 
@@ -121,7 +135,9 @@ export async function consumeEvents(connection: ChannelModel, subscriptionId: st
     }
   };
   consumer.on("error", () => { failed = true; });
+  consumer.on("close", () => { failed = true; });
   retryPublisher.on("error", () => { failed = true; });
+  retryPublisher.on("close", () => { failed = true; });
   const { consumerTag } = await consumer.consume(`vital.${subscriptionId}`, (message) => {
     if (!message) { failed = true; return; }
     const task = handle(message).catch(async () => {

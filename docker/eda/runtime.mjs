@@ -49,6 +49,15 @@ if (mode === 'api' || mode === 'worker') {
   environment.EDA_TEST_RABBITMQ_URL = broker('runtime', 'vital_test');
   environment.EDA_TEST_RABBITMQ_PROVISION_URL = broker('provision', 'vital_test');
   environment.EDA_TEST_RABBITMQ_CA_FILE = '/run/secrets/broker-ca.pem';
+  environment.EDA_TEST_SERVICE_CA_FILE = '/run/secrets/test-service-ca.pem';
+  environment.EDA_TEST_API_CERT_FILE = '/run/secrets/test-api-cert.pem';
+  environment.EDA_TEST_API_KEY_FILE = '/run/secrets/test-api-key.pem';
+  environment.EDA_TEST_WEB_CERT_FILE = '/run/secrets/test-web-cert.pem';
+  environment.EDA_TEST_WEB_KEY_FILE = '/run/secrets/test-web-key.pem';
+  // Privileged fixture teardown is available only after separate isolated Records opt-in.
+  if (environment.EDA_TEST_RECORDS_ENABLED === 'true') {
+    environment.EDA_TEST_CORE_MIGRATOR_URL = database('core', 'migrator');
+  }
   commands = [['--import', 'tsx', '--test', 'test/eda-integration.test.ts']];
 } else throw new Error('Expected api, worker, migrate, provision or test mode.');
 

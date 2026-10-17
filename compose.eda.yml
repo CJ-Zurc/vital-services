@@ -34,6 +34,7 @@ x-environment: &environment
   VITAL_EDA_PROVISION_BROKER: "false"
   VITAL_DATABASE_CA_FILE: /run/secrets/db-ca.pem
   VITAL_RABBITMQ_CA_FILE: /run/secrets/broker-ca.pem
+  NODE_EXTRA_CA_CERTS: /run/secrets/minio-ca.pem
 
 services:
   web:
@@ -58,12 +59,29 @@ services:
       VITAL_EDA_PROFILE_WRITES_ENABLED: ${VITAL_EDA_PROFILE_WRITES_ENABLED:-false}
       VITAL_EDA_CONSUMERS_ENABLED: ${VITAL_EDA_CONSUMERS_ENABLED:-false}
       VITAL_EDA_DELIVERY_ENABLED: ${VITAL_EDA_DELIVERY_ENABLED:-false}
-      VITAL_SERVICES_URL: https://api:8443
+      GATEWAY_URL: ${GATEWAY_URL:-http://bgh-gateway:8080}
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-}
+      VITAL_AUTH_CLIENT_ID: ${VITAL_AUTH_CLIENT_ID:-bgh_vital_client}
+      VITAL_AUTH_CLIENT_SECRET: ${VITAL_AUTH_CLIENT_SECRET:-}
+      AUTH_INTERNAL_URL: ${AUTH_INTERNAL_URL:-https://auth.invalid}
+      VITAL_WEB_AUTH_REGISTRATION_KEY: ${VITAL_WEB_AUTH_REGISTRATION_KEY:-}
+      VITAL_WEB_TO_AUTH_INTERNAL_SERVICE_KEY: ${VITAL_WEB_TO_AUTH_INTERNAL_SERVICE_KEY:-}
+      VITAL_INTERNAL_SERVICE_KEY: ${VITAL_INTERNAL_SERVICE_KEY:-}
+      ANALYTICS_TO_VITAL_WEB_INTERNAL_SERVICE_KEY: ${ANALYTICS_TO_VITAL_WEB_INTERNAL_SERVICE_KEY:-}
+      TRACE_API_URL: ${TRACE_API_URL:-https://trace.invalid}
+      VITAL_BFF_SERVICE_AUTH_ID: ${VITAL_BFF_SERVICE_AUTH_ID:-}
+      VITAL_EDA_API_URL: https://api:8443
+      VITAL_BFF_SIGNING_KEY_ID: vital-bff-v1
+      VITAL_BFF_SIGNING_PRIVATE_KEY_FILE: /run/secrets/bff-private.pem
+      VITAL_BFF_TLS_CERT_FILE: /run/secrets/bff-cert.pem
+      VITAL_BFF_TLS_KEY_FILE: /run/secrets/bff-key.pem
       VITAL_SERVICE_CA_FILE: /run/secrets/service-ca.pem
-      # No legacy/shared Web database, storage credentials, or automatic migration.
-      DATABASE_URL: postgresql://disabled:disabled@127.0.0.1:1/disabled
+      # BFF transport only: no database, storage/provider execution or retired job keys.
     secrets:
       - {source: service_ca, target: service-ca.pem}
+      - {source: bff_private, target: bff-private.pem}
+      - {source: bff_cert, target: bff-cert.pem}
+      - {source: bff_key, target: bff-key.pem}
     ports: ["127.0.0.1:${EDA_WEB_PORT:-3101}:3001"]
     networks:
       private: {}
@@ -81,6 +99,7 @@ services:
     environment:
       <<: *environment
       VITAL_EDA_API_PORT: "8443"
+      VITAL_EDA_API_HEALTH_FILE: /tmp/vital-api-health.json
       VITAL_API_TLS_CERT_FILE: /run/secrets/api-cert.pem
       VITAL_API_TLS_KEY_FILE: /run/secrets/api-key.pem
       VITAL_SERVICE_CA_FILE: /run/secrets/service-ca.pem
@@ -94,22 +113,38 @@ services:
       - {source: api_cert, target: api-cert.pem}
       - {source: api_key, target: api-key.pem}
       - {source: bff_public, target: bff-public.pem}
+      - {source: minio_ca, target: minio-ca.pem}
     depends_on:
       postgres: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, docker/eda/health.mjs, api]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   worker:
     <<: *node
     command: [worker]
-    environment: *environment
+    environment:
+      <<: *environment
+      VITAL_EDA_WORKER_HEALTH_FILE: /tmp/vital-worker-health.json
     secrets:
       - core_worker_password
       - integrations_worker_password
       - rabbit_runtime_password
       - {source: db_ca, target: db-ca.pem}
       - {source: broker_ca, target: broker-ca.pem}
+      - {source: minio_ca, target: minio-ca.pem}
     depends_on:
       postgres: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, docker/eda/health.mjs, worker]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   postgres:
     profiles: [eda]
@@ -192,6 +227,7 @@ services:
     build:
       context: ./docker/eda/minio
     user: "1000:1000"
+    read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: 256m
@@ -199,12 +235,19 @@ services:
     pids_limit: 128
     restart: "no"
     entrypoint: [sh, /etc/eda/minio/start.sh]
-    secrets: [minio_admin_user, minio_admin_password]
+    secrets:
+      - minio_admin_user
+      - minio_admin_password
+      - {source: minio_cert, target: minio-cert.pem}
+      - {source: minio_key, target: minio-key.pem}
+      - {source: minio_ca, target: minio-ca.pem}
     volumes:
       - minio_data:/data
       - ./docker/eda/minio:/etc/eda/minio:ro
+    tmpfs:
+      - /run/minio-tls:rw,noexec,nosuid,size=2m,uid=1000,gid=1000,mode=0700
     healthcheck:
-      test: [CMD, curl, -fsS, http://127.0.0.1:9000/minio/health/live]
+      test: [CMD, curl, -fsS, --cacert, /run/secrets/minio-ca.pem, https://minio:9000/minio/health/live]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -242,5 +285,11 @@ secrets:
   api_cert: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/api-cert.pem"}
   api_key: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/api-key.pem"}
   bff_public: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/bff-public.pem"}
+  bff_private: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/bff-private.pem"}
+  bff_cert: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/bff-cert.pem"}
+  bff_key: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/bff-key.pem"}
   minio_admin_user: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/minio-admin-user"}
   minio_admin_password: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/minio-admin-password"}
+  minio_cert: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/minio-cert.pem"}
+  minio_key: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/minio-key.pem"}
+  minio_ca: {file: "${EDA_SECRETS_DIR:-./docker/eda/local-secrets}/minio-ca.pem"}

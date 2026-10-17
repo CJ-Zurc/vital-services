@@ -21,8 +21,10 @@ Profile foundation routes: GET `/profile/me`, POST `/profile/materialize`, GET
 `/profile/doctor/me`, all relative to `/internal/v1`. Profile service role lookup
 requires `profile.roles.read` and the exact target Auth UUID. Other Profile
 routes require exact own Auth UUID resource and named scopes. Onboarding and
-specialty updates require trusted EHR/TRACE preparation receipts and remain
-unavailable until their contracts are implemented.
+specialty updates use the prepared Profile workflow contracts in
+`../eda-profile.md`; writes remain disabled by default and live external
+acceptance is still required. Admin operations require target-bound scopes and
+an independent current Core admin marker, including stored-result replay.
 
 Web keeps browser `/api/*`, Auth callbacks/SSO, `/vital/integrations/v1/*`,
 file responses and directional Analytics exports through tested adapters.
@@ -33,13 +35,21 @@ protection; both must pass negative tests before activation.
 
 ## Committed Facts
 
+Payment patient read/checkout/reconcile and private admin review contracts are
+implemented behind default-off gates. The reviewed ownership inventory is
+`payment-ownership.md`; exact scopes, command recovery and deferred participants
+are in `payment-reconciliation.md`. Web retains its existing POST/PATCH payment
+paths through v1 DTO adapters; no public review APIs are added. Payment consumers
+update inbox/projections only, never appointment confirmation or access grants.
+
 The initial version-one catalog is executable in `src/eda/contracts/events.ts`.
 The stable envelope contains eventId/type/version/producer/time, aggregate ID
 and version, correlation/causation IDs and strict content-minimal data.
 
 | Fact | Owner | Initial receiving handler |
 | --- | --- | --- |
-| profile.changed | Profile | Profile projection/delivery foundation |
+| profile.changed | Profile | Minimal current Core revision projection, no competing audit |
+| profile.sync.requested | Profile | Committed Core intent to Integrations delivery ledger |
 | payment.completed / payment.changed | Payment | Appointment payment projection |
 | appointment.approved/confirmed/rescheduled/cancelled/completed | Appointment | Lifecycle handlers still pending |
 | messaging.changed | Messaging | UI eligibility/fan-out work still pending |
@@ -98,7 +108,7 @@ No new email/SMS or legacy broker/socket path is enabled.
 ## Release Dependencies
 
 Gateway namespace/streaming and Web trust adapters must ship together. Profile
-must preserve Auth role and stale/mirror contracts before Web session reads move.
+must preserve Auth role and stale/mirror contracts before target Web session reads activate.
 Payment/Video must preserve appointment approval/reschedule semantics before
 their state split activates. Central services must demonstrate unique indices
 and atomic ingestion. EHR recovery is read-only and cannot create cases after

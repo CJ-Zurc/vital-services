@@ -8,6 +8,7 @@ src/eda/generated/
 !.env.eda.example
 !.env.docker.example
 coverage/
+.artifacts/
 *.log
 npm-debug.log*
 .DS_Store
@@ -15,3 +16,5 @@ Thumbs.db
 .idea/
 .vscode/
 *.tmp
+/test-results.tap
+/docs/eda/route-current.json

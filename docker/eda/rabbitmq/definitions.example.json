@@ -5,7 +5,7 @@
   ],
   "vhosts": [{"name": "vital"}],
   "permissions": [
-    {"user": "vital_runtime", "vhost": "vital", "configure": "^$", "write": "^vital\\.(profile\\.events|appointment\\.events|payment\\.events|records\\.events|messaging\\.events|video\\.events|retry|dead)$", "read": "^vital\\.(appointment-payment|platform-audit|platform-notification|profile-projection)$"},
+    {"user": "vital_runtime", "vhost": "vital", "configure": "^$", "write": "^vital\\.(profile\\.events|appointment\\.events|payment\\.events|records\\.events|messaging\\.events|video\\.events|retry|dead)$", "read": "^vital\\.(appointment-payment|appointment-confirmation|appointment-saga|records-appointment|records-artifact|video-appointment|video-workflow|video-state|messaging-appointment|messaging-state|platform-audit|platform-notification|profile-projection|profile-sync)$"},
     {"user": "vital_provision", "vhost": "vital", "configure": "^vital\\.", "write": "^vital\\.", "read": "^vital\\."}
   ]
 }

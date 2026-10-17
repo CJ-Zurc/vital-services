@@ -3,6 +3,7 @@ import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient as CorePrismaClient } from "../generated/core/client.js";
 import { PrismaClient as IntegrationsPrismaClient } from "../generated/integrations/client.js";
+import { utcPgTypes,configureUtcDateParameters } from "./utc-types.js";
 
 export { CorePrismaClient, IntegrationsPrismaClient };
 
@@ -21,7 +22,7 @@ export function validateDatabaseBoundary(coreUrl: string, integrationsUrl: strin
 
 export async function verifyRuntimePrivileges(pool: pg.Pool, ownDatabase: string, otherDatabase: string) {
   const result = await pool.query<{ safe: boolean }>(`SELECT
-    current_database()=$1 AND NOT r.rolsuper AND NOT r.rolcreatedb AND NOT r.rolcreaterole AND NOT r.rolbypassrls
+    current_database()=$1 AND current_setting('TimeZone')='UTC' AND NOT r.rolsuper AND NOT r.rolcreatedb AND NOT r.rolcreaterole AND NOT r.rolbypassrls
     AND NOT has_database_privilege(current_user,$1,'CREATE')
     AND NOT has_database_privilege(current_user,$2,'CONNECT')
     AND NOT has_schema_privilege(current_user,'public','CREATE') AS safe
@@ -33,11 +34,12 @@ export function createDatabases(mode: "api" | "worker", environment: NodeJS.Proc
   const coreUrl = environment.VITAL_CORE_DATABASE_URL ?? "";
   const integrationsUrl = environment.VITAL_INTEGRATIONS_DATABASE_URL ?? "";
   validateDatabaseBoundary(coreUrl, integrationsUrl);
+  configureUtcDateParameters();
   const caFile = environment.VITAL_DATABASE_CA_FILE;
   if (environment.NODE_ENV === "production" && !caFile) throw new Error("Verified PostgreSQL TLS is required in production.");
   const ssl = caFile ? { ca: readFileSync(caFile, "utf8"), rejectUnauthorized: true } : undefined;
   const max = mode === "api" ? 4 : 2;
-  const limits = { max, ssl, connectionTimeoutMillis: 5000, idleTimeoutMillis: 30_000,
+  const limits = { max, ssl, types:utcPgTypes,options:"-c timezone=UTC",connectionTimeoutMillis: 5000, idleTimeoutMillis: 30_000,
     statement_timeout: 10_000, query_timeout: 12_000, lock_timeout: 5000 };
   const corePool = new pg.Pool({ connectionString: coreUrl, ...limits });
   const integrationsPool = new pg.Pool({ connectionString: integrationsUrl, ...limits });

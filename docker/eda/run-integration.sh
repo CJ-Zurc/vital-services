@@ -7,17 +7,21 @@ umask 077
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 cd "$root"
 project=vital-eda-test
+if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+  [[ "${RUNNER_OS:-}" == Linux && "${RUNNER_ENVIRONMENT:-}" == github-hosted && "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]] || { echo 'Disposable hosted runner required' >&2; exit 1; }
+  project="vital-eda-test-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+fi
 for executable in docker openssl node mktemp; do
   command -v "$executable" >/dev/null || { printf 'Missing CI dependency: %s\n' "$executable" >&2; exit 1; }
 done
 docker info >/dev/null 2>&1 || { echo 'Docker engine is unavailable; integration tests did NOT run.' >&2; exit 1; }
 docker compose version >/dev/null
 
-lock_dir="${TMPDIR:-/tmp}/vital-eda-test.bootstrap.lock"
+lock_dir="${TMPDIR:-/tmp}/$project.bootstrap.lock"
 mkdir "$lock_dir" 2>/dev/null || { echo 'Another test bootstrap or a stale lock exists; refusing to touch it.' >&2; exit 1; }
 secrets_dir=''
 started=false
-compose=(docker compose -p "$project" -f compose.eda.yml -f docker/eda/compose.tools.yml -f docker/eda/compose.test.yml --profile eda)
+compose=(docker compose --env-file /dev/null -p "$project" -f compose.eda.yml -f docker/eda/compose.tools.yml -f docker/eda/compose.test.yml --profile eda)
 
 cleanup() {
   local status=$?
@@ -57,19 +61,19 @@ for kind in container network volume; do
   fi
 done
 # Also reject collisions with unlabelled resources bearing our exact Compose names.
-for name in vital-eda-test_postgres_data vital-eda-test_rabbitmq_data vital-eda-test_minio_data; do
+for name in "${project}_postgres_data" "${project}_rabbitmq_data" "${project}_minio_data"; do
   if docker volume inspect "$name" >/dev/null 2>&1; then
     echo 'Existing test-named volume found; refusing to reuse or delete it.' >&2
     exit 1
   fi
 done
-for name in vital-eda-test_private vital-eda-test_ingress; do
+for name in "${project}_private" "${project}_ingress"; do
   if docker network inspect "$name" >/dev/null 2>&1; then
     echo 'Existing test-named network found; refusing to reuse or delete it.' >&2
     exit 1
   fi
 done
-if [ -n "$(docker ps -aq --filter 'name=^/vital-eda-test[-_]')" ]; then
+if [ -n "$(docker ps -aq --filter "name=^/${project}[-_]")" ]; then
   echo 'Existing test-named container found; refusing startup and deletion.' >&2
   exit 1
 fi
@@ -90,8 +94,8 @@ for name in postgres-admin core-api integrations-api core-worker integrations-wo
   openssl rand -hex 32 > "$secrets_dir/$name-password"
 done
 
-for service in db broker; do
-  if [ "$service" = db ]; then host=postgres; else host=rabbitmq; fi
+for service in db broker minio; do
+  if [ "$service" = db ]; then host=postgres; elif [ "$service" = broker ]; then host=rabbitmq; else host=minio; fi
   openssl req -x509 -newkey rsa:2048 -nodes -days 2 -sha256 \
     -keyout "$secrets_dir/$service-ca-key.pem" -out "$secrets_dir/$service-ca.pem" \
     -subj "/CN=vital-eda-test-$service-ca" \
@@ -104,6 +108,22 @@ for service in db broker; do
   openssl x509 -req -days 2 -sha256 -in "$secrets_dir/$service.csr" \
     -CA "$secrets_dir/$service-ca.pem" -CAkey "$secrets_dir/$service-ca-key.pem" -CAcreateserial \
     -extfile "$secrets_dir/$service.ext" -out "$secrets_dir/$service-cert.pem" >/dev/null 2>&1
+done
+
+# Synthetic process certificates are used only by the opt-in mTLS test server.
+openssl req -x509 -newkey rsa:2048 -nodes -days 2 -sha256 \
+  -keyout "$secrets_dir/test-service-ca-key.pem" -out "$secrets_dir/test-service-ca.pem" \
+  -subj '/CN=vital-eda-test-process-ca' -addext 'basicConstraints=critical,CA:TRUE' \
+  -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
+for service in api web; do
+  if [ "$service" = api ]; then common_name=vital-api.test; usage=serverAuth; else common_name=vital-web; usage=clientAuth; fi
+  openssl req -new -newkey rsa:2048 -nodes -sha256 -keyout "$secrets_dir/test-$service-key.pem" \
+    -out "$secrets_dir/test-$service.csr" -subj "/CN=$common_name" >/dev/null 2>&1
+  printf 'subjectAltName=DNS:%s\nextendedKeyUsage=%s\nkeyUsage=critical,digitalSignature,keyEncipherment\nbasicConstraints=critical,CA:FALSE\n' \
+    "$common_name" "$usage" > "$secrets_dir/test-$service.ext"
+  openssl x509 -req -days 2 -sha256 -in "$secrets_dir/test-$service.csr" -CA "$secrets_dir/test-service-ca.pem" \
+    -CAkey "$secrets_dir/test-service-ca-key.pem" -CAcreateserial -extfile "$secrets_dir/test-$service.ext" \
+    -out "$secrets_dir/test-$service-cert.pem" >/dev/null 2>&1
 done
 
 # RabbitMQ's salted SHA-256 format is base64(salt[4] + SHA256(salt + password)).
@@ -125,8 +145,10 @@ node --input-type=module -e '
 # Single-file bind mounts must be readable by service UIDs. The parent temp
 # directory remains 0700; private CA signing keys are never mounted.
 chmod 0644 "$secrets_dir"/*-password "$secrets_dir"/*-cert.pem "$secrets_dir"/db-key.pem \
-  "$secrets_dir"/broker-key.pem "$secrets_dir"/db-ca.pem "$secrets_dir"/broker-ca.pem \
+  "$secrets_dir"/broker-key.pem "$secrets_dir"/minio-key.pem "$secrets_dir"/minio-ca.pem "$secrets_dir"/db-ca.pem "$secrets_dir"/broker-ca.pem \
   "$secrets_dir"/broker-definitions.json
+chmod 0644 "$secrets_dir"/test-service-ca.pem "$secrets_dir"/test-api-cert.pem "$secrets_dir"/test-api-key.pem \
+  "$secrets_dir"/test-web-cert.pem "$secrets_dir"/test-web-key.pem
 
 "${compose[@]}" config --quiet
 echo 'Isolated CI environment: EDA_TEST_ENABLED, EDA_TEST_ISOLATED, EDA_DATABASE_SUFFIX configured.'

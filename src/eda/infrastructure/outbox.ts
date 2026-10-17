@@ -41,6 +41,10 @@ export async function appendSqlOutbox(tx: PoolClient, input: OutboxInput) {
     (id,"eventType","schemaVersion",producer,"aggregateId","aggregateVersion","correlationId","causationId","occurredAt",payload,status,attempts,"nextAttemptAt")
     VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9::jsonb,'pending',0,NOW())`,
   [event.eventId, event.eventType, event.producer, event.aggregateId, event.aggregateVersion, event.correlationId, event.causationId, event.occurredAt, JSON.stringify(event.data)]);
+  if (event.producer === 'appointment' && event.eventType.startsWith('vital.appointment.')) {
+    // Delivered after commit; this hint contains no clinical or financial state.
+    await tx.query('SELECT pg_notify($1,$2)::text', ['vital_appointment_events', JSON.stringify({ appointmentId: event.aggregateId, kind: 'eligibility' })]);
+  }
   return event;
 }
 

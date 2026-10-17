@@ -1,5 +1,48 @@
 # Architecture
 
+## Revised EDA Candidate
+
+The inactive Node 22/TypeScript candidate is organized by business ownership:
+
+```text
+src/eda/
+  modules/
+    appointment/          Scheduling, lifecycle, billing authorization and sagas
+    payment/              Sandbox provider operations and financial ledger
+    profile/              Patient/doctor markers, onboarding, consent, QR and sync
+    records/              VITAL clinical documents, snapshots and file ownership
+    video/                Meet credentials, generation and resource associations
+    messaging/            Encrypted chat, eligibility, receipts and retention
+    portal-integrations/  Scoped foreign readers and doctor-marker workflows
+    platform-delivery/    Shared durable audit/notification/sync delivery ledger
+    composition/          Typed cross-feature dashboards, without operational SQL
+  contracts/              Actor, event and owning-module interface contracts
+  infrastructure/         Database clients, trust, broker, outbox and bounded HTTP
+  http/                   Thin private routers and common middleware
+  workers/                Dispatch through the single shared worker
+  entrypoints/            Separate API and worker process modes
+  generated/              Generated Core and Integrations Prisma clients
+```
+
+Folders are not additional services or databases. Appointment/Profile/Records/
+Messaging use Core; Payment/Video/delivery use Integrations as already defined.
+The two schemas and migration histories stay under `prisma/core` and
+`prisma/integrations`. Cross-feature calls retain typed owner contracts; database
+placement does not define a catch-all feature folder. The old `modules/core` and
+`modules/integrations` folders and forwarding paths have been removed.
+
+The Web candidate is frontend/BFF-only. The unchanged deployed legacy release is
+pinned separately. API/worker entrypoints intentionally refuse activation while
+the global target flag is off. Source checks do not establish runtime acceptance.
+The sections below describe legacy runtime reference behavior unless identified
+as candidate contracts; do not use them to enable independent EDA deployment.
+
+Messaging is an additional default-off Core module in the target runtime, not a
+new HTTP service/container/database. Appointment owns lifecycle eligibility;
+message writes share calendar/appointment locks, encrypt bodies, and journal
+only replay references. The existing worker handles inbox-deduplicated lifecycle
+and Messaging invalidations plus approval-gated retention. SSE is not activated.
+
 ## Stack
 
 - Node.js 20 (Alpine in Docker)
@@ -56,7 +99,11 @@ The Gateway strips the `/vital` prefix before proxying public VITAL routes.
 separate Core/Integrations clients, module-owned event exchanges, transactional
 outbox/inbox, and a dedicated verified AMQPS broker. They require explicit
 `VITAL_EDA_ENABLED=true`; this flag is not permission for a shared cutover.
-The API currently exposes the Profile foundation only. Unsupported domain
+The target API includes guarded Profile, Payment, Appointment and Records
+contracts, with one shared worker and module interfaces. Records owns encrypted
+episode snapshots/documents and durable file/artifact operations in Core; EHR
+remains the clinical owner. Each module/processor stays disabled by default.
+Unsupported or missing-owner domain
 routes fail closed rather than falling back to legacy business writers.
 
 Outbox publication requires mandatory routing and publisher confirmation;

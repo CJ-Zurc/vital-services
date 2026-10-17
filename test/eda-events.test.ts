@@ -8,7 +8,8 @@ function paymentEvent() {
   return { eventId: randomUUID(), eventType: "vital.payment.completed", schemaVersion: 1,
     producer: "payment", occurredAt: new Date().toISOString(), aggregateId: paymentId,
     aggregateVersion: 1, correlationId: randomUUID(), causationId: null,
-    data: { appointmentId: randomUUID(), paymentId, paymentVersion: 1, paidAt: new Date().toISOString() } };
+    data: { appointmentId: randomUUID(), paymentId, paymentVersion: 1, billingLineageId: randomUUID(),
+      associationVersion: 1, reviewRequired: false, paidAt: new Date().toISOString() } };
 }
 
 test("EDA events validate owned committed facts and module exchange selection", () => {
@@ -37,4 +38,28 @@ test("EDA notification intents permit only first-rollout in-app template metadat
   assert.equal(parseEvent(event).eventType, "vital.notification.requested");
   assert.throws(() => parseEvent({ ...event, data: { ...event.data, parameters: { reason: "private content" } } }));
   assert.throws(() => parseEvent({ ...event, data: { ...event.data, channel: "sms" } }));
+});
+
+test("EDA payment events require lineage association and review fencing", () => {
+  const event = paymentEvent();
+  for (const field of ["billingLineageId", "associationVersion", "reviewRequired"]) {
+    const data: Record<string, unknown> = { ...event.data };
+    delete data[field];
+    assert.throws(() => parseEvent({ ...event, data }));
+  }
+  for (const patch of [{ billingLineageId: "invalid" }, { associationVersion: 0 },
+    { associationVersion: 1.5 }, { reviewRequired: "true" }, { checkoutUrl: "https://provider.test" }]) {
+    assert.throws(() => parseEvent({ ...event, data: { ...event.data, ...patch } }));
+  }
+});
+
+test("EDA payment changed events accept only current financial statuses", () => {
+  const event = paymentEvent();
+  const { paidAt: _paidAt, ...data } = event.data;
+  for (const status of ["pending", "paid", "failed", "refund_pending", "refunded", "refund_failed", "non_refundable"]) {
+    assert.equal(parseEvent({ ...event, eventType: "vital.payment.changed", data: { ...data, status } }).data.status, status);
+  }
+  for (const status of ["confirmed", "unpaid", "not_needed", "processing"]) {
+    assert.throws(() => parseEvent({ ...event, eventType: "vital.payment.changed", data: { ...data, status } }));
+  }
 });

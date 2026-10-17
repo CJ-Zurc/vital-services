@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "../src/eda/generated/core/client.js";
-import type { ProfileCommandGuard } from "../src/eda/modules/core/profile.js";
-import { createProfileCommandGuard } from "../src/eda/modules/core/profile-commands.js";
+import type { ProfileCommandGuard } from "../src/eda/modules/profile/profile.js";
+import { createProfileCommandGuard } from "../src/eda/modules/profile/profile-commands.js";
+import { requestHash as canonicalHash } from "../src/eda/infrastructure/security.js";
 
 type Command = Parameters<ProfileCommandGuard>[1];
 function fixture() {
@@ -21,13 +22,18 @@ function fixture() {
 }
 
 test("EDA command guard returns the stored result without reexecuting a matching mutation", async () => {
-  const { tx, command } = fixture();
+  const { tx, command, row } = fixture();
   const guard = createProfileCommandGuard();
   let effects = 0;
   const execute = async () => { effects++; return { value: "committed" }; };
   assert.deepEqual(await guard(tx, command, execute), { value: "committed" });
   assert.deepEqual(await guard(tx, command, execute), { value: "committed" });
   assert.equal(effects, 1);
+  assert.equal(row()!.requestHash, canonicalHash("PROFILE-COMMAND", command.operation, {
+    role: command.actor.role, targetAuthId: command.actor.authId, input: command.input,
+    transportHash: command.metadata!.requestHash,
+  }));
+  assert.notEqual(row()!.requestHash, command.metadata!.requestHash);
 });
 
 test("EDA command guard rejects reused operation IDs with different action resource or body", async () => {
@@ -35,21 +41,28 @@ test("EDA command guard rejects reused operation IDs with different action resou
   const guard = createProfileCommandGuard();
   await guard(tx, command, async () => ({ value: "committed" }));
   for (const changed of [{ ...command, operation: "materialize" as const },
-    { ...command, actor: { ...command.actor, resource: randomUUID() } },
+    { ...command, input: { emergencyContactName: "Changed" } },
+    { ...command, actor: { ...command.actor, role: "doctor" as const } },
     { ...command, metadata: { ...command.metadata!, requestHash: "b".repeat(64) } }]) {
     await assert.rejects(guard(tx, changed, async () => { assert.fail("conflicting replay must not execute"); }),
       (error: unknown) => error instanceof Error && "code" in error && error.code === "COMMAND_REPLAY_CONFLICT");
   }
+  const resource = randomUUID();
+  await assert.rejects(guard(tx, { ...command, actor: { ...command.actor, resource } }, async () => assert.fail()),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "ACTOR_SCOPE_DENIED");
+  await assert.rejects(guard(tx, { ...command, targetAuthId: resource, actor: { ...command.actor, resource } }, async () => assert.fail()),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "COMMAND_REPLAY_CONFLICT");
 });
 
-test("EDA command guard blocks missing metadata pending work and unaccepted integration writes", async () => {
+test("EDA command guard blocks missing metadata and pending work; domain workflows own integration verification", async () => {
   const { tx, command, row } = fixture();
   const guard = createProfileCommandGuard();
   const execute = async () => { assert.fail("denied command must not execute"); };
   await assert.rejects(guard(tx, { ...command, metadata: undefined }, execute));
-  await assert.rejects(guard(tx, { ...command, operation: "patient.onboarding" }, execute));
-  await assert.rejects(guard(tx, { ...command, operation: "doctor.update", input: { specialty: "Cardiology" } }, execute));
   await guard(tx, command, async () => ({ value: "committed" }));
   row()!.status = "pending";
   await assert.rejects(guard(tx, command, execute));
+  const prepared = fixture();
+  assert.deepEqual(await guard(prepared.tx, { ...prepared.command, operation: "workflow.prepare" },
+    async () => ({ state: "prepared" })), { state: "prepared" });
 });

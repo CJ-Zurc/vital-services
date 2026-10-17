@@ -19,6 +19,12 @@ export class DomainError extends Error {
   }
 }
 
+export class AppointmentPendingConflictsError extends DomainError {
+  constructor(public readonly conflictIds: string[]) {
+    super(409, 'APPOINTMENT_SLOT_PENDING_CONFLICTS', 'Review competing pending requests before approval.');
+  }
+}
+
 export function requireScope(actor: Actor, scope: string, resource: string) {
   if (!actor.scopes.includes(scope) || actor.resource !== resource) {
     throw new DomainError(403, "ACTOR_SCOPE_DENIED", "The delegated action is not permitted.");

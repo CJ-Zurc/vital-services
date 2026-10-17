@@ -1,161 +1,205 @@
-# Core Profile Extraction (Inactive Staging)
+# Core Profile Workflows (Disabled by Default)
 
-This is the first Core-owned profile module, not a production cutover. Existing
-Web profile/onboarding routes and Auth-facing role aggregation remain active and
-unchanged. Do not mount this router in the current runtime or switch Web callers
-until the parent completes extraction, command replay, integrations, deployment,
-and end-to-end validation. No configuration or default route enables it here.
+The bounded [remaining ownership checkpoint](eda/profile-remaining-ownership.md)
+adds authenticated registration consent bootstrap and a transaction-local
+schedule upgrade interface. Parent wiring, public Auth registration and secured
+asset metadata remain separate coordination gates.
 
-## Ownership and Contracts
+This slice is not a production cutover. The legacy Web writer and Auth role
+provider remain unchanged until the parent accepts and enables extraction.
+Neither this module nor its router enables writes by default. The existing
+signed mTLS BFF delegation middleware must run before this router; receipts are
+trusted only because its assertion binds the HTTP action, resource and whole
+request body. Do not mount this router on a headers-only or browser boundary.
 
-- Core retains the original VitalUser, VitalPatient, VitalDoctor, VitalAdmin,
-  HospitalAffiliation, and DoctorQr fields. Schema generation is parent-owned.
-- Imports use `src/eda/generated/core/client.ts`, `contracts/actor.ts`, the
-  `CorePrismaClient` type in `infrastructure/databases.ts`, and
-  `infrastructure/outbox.ts`. The instantiated Core dependency is always passed.
-- `VitalUser.authId` is the canonical Auth UUID. `VitalUser.id` and marker
-  `userId` are local Core IDs. These are never interchangeable.
-- Only the validated `res.locals.actor` supplies identity and canonical role.
-  The router does not read identity headers, tokens, credentials, or body roles.
-  Service actors cannot bootstrap profiles. SuperAdmin is not a bypass.
-- No Web/Next imports, shared Web database queries, or outbound Auth/EHR/TRACE
-  endpoints are introduced. Auth identity and EHR composition remain in Web.
+## Ownership
 
-## Staged API
+Core owns VitalUser and the patient, doctor and admin markers. Auth UUIDs
+(`authId`) are not local Core user IDs (`userId`). Identity, credentials,
+address hierarchy validation and external Auth/EHR/TRACE operations remain
+BFF/provider-owned. No network calls execute inside Core transactions.
 
-`createProfileRouter(core, { commandGuard? })` returns an Express 5 Router.
-The one-argument form permits reads but every mutation returns 503.
-`createProfileModule(core, commandGuard?)` has the same default-off write policy.
-There is no singleton import; tests inject a structural stub.
+`createProfileModule(core, commandGuard?)` and
+`createProfileRouter(core, {commandGuard?, syncStatuses?})` are injected factories.
+The one-argument forms allow reads but mutations fail with 503.
+`createProfileCommandGuard()` requires signed command metadata from
+`res.locals.command`: UUID `operationId` and lowercase SHA-256 `requestHash`.
+The signed transport hash and independently computed canonical command
+action/role/target/input hash bind replay. Reusing a command ID for another
+action, role, resource, body or signed request returns 409. Results and domain
+effects commit in the same serializable transaction, with bounded retries for
+Prisma serialization/uniqueness races.
 
-| Method | Relative Path | Rules and Response |
-| --- | --- | --- |
-| GET | `/me` | Own patient/doctor/admin actor, `profile.read` scope, exact own Auth UUID resource; `{success,data: VitalUser with local markers}`. Missing profile returns `data:null`; no implicit write. |
-| POST | `/materialize` | Empty object only, `profile.materialize` scope, exact own Auth UUID resource. Verified own canonical role creates/repairs the local marker. Existing markers are retained; unchanged bootstrap emits no event. |
-| GET | `/roles/:authId` | Only service role, `profile.roles.read` scope, and resource exactly equal to the requested Auth UUID. Returns the existing-compatible `success/system/user_id/roles/data` envelope; role order is admin, doctor, patient. |
-| GET/PATCH | `/patient/me` | Patient only, `profile.read`/`profile.write` scope respectively, exact own Auth UUID resource. `{success,data:{vitalPatient}}`; PATCH adds the existing success message. |
-| GET/PATCH | `/doctor/me` | Doctor only, `profile.read`/`profile.write` scope respectively, exact own Auth UUID resource. `{success,data:{vitalDoctor}}`; PATCH adds the existing success message. |
+## API and Delegation
 
-Read DTOs explicitly select the original local scalar fields. No Auth profile,
-EHR summary, booking profile, session headers, tokens, or credentials are invented.
-Hospital affiliations and DoctorQr remain in Core but their mutation workflows
-are not part of this slice. Absent role markers read as null; PATCH returns 404.
-Missing validated actors return 401, role/resource violations 403, invalid input
-400, already-completed onboarding/role mismatches 409, inactive writes 503.
-Unexpected errors are sanitized to 500 without database details.
+Paths below are relative to `/profile`; the parent currently mounts the API
+under `/internal/v1/profile`. Responses use `{success:true,data}`.
+
+| Method | Path | Scope | Exact Resource |
+| --- | --- | --- | --- |
+| GET | /me, /patient/me, /doctor/me | profile.read | own Auth UUID |
+| POST | /materialize | profile.materialize | own Auth UUID |
+| PATCH | /patient/me, /doctor/me | profile.write | own Auth UUID |
+| GET | /roles/:authId | profile.roles.read | requested Auth UUID |
+| GET | /admin/doctors, /admin/membership | profile.admin.read | admin's own Auth UUID |
+| POST | /workflows | profile.write for self, profile.admin.write for admin | subject Auth UUID |
+| GET | /workflows/:id | same write scope as prepare | subject Auth UUID |
+| POST | /workflows/:id/commit | same write scope as prepare | subject Auth UUID |
+| POST/PATCH | /admin/doctors | profile.admin.write | target Auth UUID |
+
+Self patient/doctor APIs require the corresponding canonical role; /me and
+/materialize accept patient, doctor or admin, never service. /roles requires
+service role. Admin APIs and workflows require BOTH delegated admin role/scope
+AND an independent VitalAdmin marker whose related VitalUser has the same Auth
+UUID and local user ID. A VitalUser.role value alone, or SuperAdmin, is no bypass.
+All markers remain preserved during verified materialization or provisioning.
+
+GET /admin/doctors returns `{items:[doctor scalars + syncStatus],total}`.
+GET /admin/membership returns
+`{memberships:{patient:string[],doctor:string[],admin:string[]},counts:{patients,doctors,admins,accounts}}`.
+Membership arrays contain Auth UUIDs; accounts is patients + doctors for legacy
+dashboard parity, not a deduplicated identity count. The parent may inject
+`syncStatuses(authIds):Promise<Map<authId,'pending'|'failed'|'synced'>>`.
+Absent/missing/failed status lookup reports pending, never assumes synced.
+The callback runs after Core transactions; this module does not read Integrations.
+
+## Workflow Contract
+
+Prepare: POST /profile/workflows
+
+```json
+{"workflowId":"UUID","kind":"patient.onboarding","targetAuthId":"optional UUID","input":{}}
+```
+
+Kinds: patient.onboarding, doctor.onboarding, doctor.provision, doctor.specialty,
+doctor.update. Self workflows default targetAuthId to the actor's Auth UUID and
+reject another identity. Admin provision/specialty require targetAuthId explicitly.
+Provisioning rejects credentials, email, names and authority fields: the BFF must
+first create or resolve identity through Auth and later attest the verified
+target Auth UUID in the receipt. Core cannot create an Auth identity.
+Before the Auth creation/recovery call, the BFF must preflight GET
+/profile/admin/membership with profile.admin.read and the admin's own Auth UUID
+resource. This independently checks the current Core marker before any external
+identity mutation; signed current-session delegation is still required.
+
+Prepare returns
+`{workflowId,kind,targetAuthId,inputHash,expectedVersion,state:'prepared'|'committed'}`.
+The hash is exactly `requestHash('PROFILE', kind, input)` from
+infrastructure/security, also called canonicalHash by the BFF. Hash the original
+allowlisted JSON input; canonical key ordering makes object order irrelevant.
+expectedVersion is the current VitalUser.version, or -1 for a not-yet-materialized
+provision target. Prepare checks merged onboarding prerequisites before the BFF
+does external work. Retrying prepare with the same binding returns its state.
+
+Status: GET /profile/workflows/:id returns the same minimal status, never input
+or receipt. Only the original actor/role and exact target resource may read it.
+
+Commit: POST /profile/workflows/:id/commit
+
+```json
+{"input":{},"receipt":{"operationId":"workflow UUID","inputHash":"canonical hash"}}
+```
+
+Patient receipt must contain exactly:
+`{ehrPatientId,ehrRecordOrigin:'preexisting'|'created_by_vital',operationId,inputHash}`.
+Doctor/onboarding/provision/specialty/update receipt must contain exactly:
+`{department:{id,name},authId?,operationId,inputHash}`.
+authId is mandatory for doctor.provision and must equal targetAuthId; when present
+in other doctor receipts it must also match. The verified department name must
+equal the submitted, normalized specialty. Authority-bearing department IDs
+are accepted only from the receipt, not the input.
+
+Receipt operationId is the stable workflowId, not the signed request ID.
+Prepare and commit require distinct signed command IDs, each different from
+workflowId. Reusing the prepare command ID for commit returns 409. A fresh commit
+checks actor/role, target, kind, exact input hash, receipt binding, expectedVersion
+and prepared state. It commits once; exact signed command replay returns its
+stored result without new effects. A different commit ID after completion, a
+changed profile version or any receipt/hash/operation mismatch returns 409.
+Authorization violations remain 403, invalid input 400, absent profile/workflow
+404. Failure rolls back receipt/state, command and all Profile effects.
+
+Commit data is `{workflowId,kind,targetAuthId,inputHash,expectedVersion,state:'committed',data:profileScalars}`.
+Doctor results include syncStatus at the router boundary.
+POST /admin/doctors and PATCH /admin/doctors are convenience commit aliases:
+body `{workflowId,input,receipt}`, for doctor.provision and doctor.specialty
+respectively. They require an already prepared matching workflow and return
+`{doctor:profileScalars+syncStatus}`. They do not accept arbitrary identities
+or bypass receipt/version verification. Each alias has its own command action.
+
+ProfileWorkflow stores only binding identifiers, hash, expectedVersion,
+prepare/commit IDs, minimal receipt and state/timestamps. No submitted onboarding
+input, clinical information or bearer tokens are stored there or in command
+results. Command rows store only hashes and safe Core response scalars.
 
 ## Field Allowlists
 
-Patient PATCH accepts `emergencyContactName` (1-160 trimmed characters),
-`emergencyContactRelationship` (1-80), and `emergencyContactPhone`. Contact edits
-validate the merged stored/new contact as a complete trio, matching Web booking
-validation. Only `09XXXXXXXXX` or `+639XXXXXXXXX` mobile numbers are accepted;
-spaces, parentheses, and hyphens are removed and numbers normalize to +63.
+Patient direct PATCH accepts emergencyContactName (1-160 trimmed characters),
+emergencyContactRelationship (1-80) and emergencyContactPhone. The merged contact
+must be a complete trio. Philippine mobile formats 09XXXXXXXXX/+639XXXXXXXXX
+normalize to +63 after spaces, parentheses and hyphens are removed.
 
-Patient onboarding requires `isOnboardingComplete:true` plus an `onboarding`
-object. This object retains the existing snake-case validation names:
-`consent_accepted:true`, `date_of_birth`, `sex`, `contact_number`,
-`address_island_group`, `address_province_region`, `address_province`,
-`address_city_municipality`, `address_barangay`, `address_street`,
-`address_postal_code`, `address_country`, `philhealth_identification_number`;
-optional `address_barangay_psgc`, `blood_type`, and `religion`.
-Past valid dates, male/female sex, phone formats, minimum five-character street,
-180-character street maximum, postal/PhilHealth formats, and the NCR province
-exception match the existing validation with additional bounded lengths.
-Already-completed onboarding returns 409. These inputs are not persisted as
-Core profile columns. Auth identity, optional clinical BMI/allergy writes, live
-PSGC validation, and EHR self-create/update remain integration-owned.
+Patient onboarding workflow input uses the existing patientPatchSchema completion
+shape: isOnboardingComplete:true plus onboarding containing consent_accepted:true,
+date_of_birth, sex, contact_number, address_island_group,
+address_province_region, address_province, address_city_municipality,
+address_barangay, address_street, address_postal_code, address_country and
+philhealth_identification_number; optional address_barangay_psgc, blood_type,
+religion and emergency-contact fields. Valid past dates, phone/postal/PhilHealth
+formats and the NCR province exception remain enforced. The BFF validates real
+address hierarchy and completes EHR work. Core atomically writes EHR record
+link/origin/availability/completion at commit. ConsentRecord persistence remains
+outside this Profile phase.
+Direct PATCH cannot complete onboarding even through a permissive command guard.
 
-The parent guard must verify address hierarchy and successful EHR onboarding
-before calling `execute({patientRecord:{ehrPatientId,ehrRecordOrigin}})`. Without this
-trusted result, completion fails closed with 503. Only `preexisting` or
-`created_by_vital` origins are accepted. Clients cannot set record IDs, origins,
-record availability, or completion to false. The trusted integration result sets
-the original patient record fields and completion together in Core.
+Doctor input preserves doctorPatch camel-case title, specialty, prcLicense,
+availabilityType (virtual/in_person/both), virtualFee, inPersonFee, bio, education,
+isDoctorOnboardingComplete, plus the existing terms_accepted flag. Fees are finite,
+nonnegative Decimal(10,2), at most two fractional digits. Completion requires
+isDoctorOnboardingComplete:true, terms_accepted:true and merged nonempty title,
+specialty, PRC license, bio and availability. Workflow input must supply specialty
+explicitly so the receipt binds its verified department. Provision and doctor.update
+accept doctorPatch fields without completion/terms; doctor.specialty accepts only
+specialty. All doctor workflow kinds require a nonempty specialty.
 
-Doctor PATCH accepts original camel-case `title`, `specialty`, `prcLicense`,
-`availabilityType` (virtual/in_person/both), `virtualFee`, `inPersonFee`, `bio`,
-and `education`. Nullable text is bounded at 80/160/80/5000/3000 characters,
-respectively. Fees accept null, finite nonnegative numbers, or complete decimal
-strings, with at most two fractional digits and a Decimal(10,2) maximum.
-Authority-bearing `role`, rating, department IDs, relations, timestamps, and
-Prisma arguments are rejected. Specialty remains locked after completion when
-an existing specialty is set, matching the Web profile rule.
+Direct doctor PATCH cannot set specialty or onboarding completion. Pre-completion
+specialty edits use doctor.update workflows; after completion specialty changes
+remain admin-only. Core sets changedAt and termsAgreedAt. Body role/rating/department
+IDs, Auth/EHR fields, arbitrary Prisma arguments, credentials and unknown fields
+are rejected by strict allowlists.
 
-Doctor completion requires `isDoctorOnboardingComplete:true`,
-`terms_accepted:true`, and nonempty title, specialty, PRC license, bio, and valid
-availability, using merged stored/new fields. The parent guard must supply a
-TRACE-verified `specialty` through `execute({specialty})`; absent confirmation fails closed with 503.
-Core assigns `termsAgreedAt` and `changedAt`; neither is client-controlled.
+## Atomic Effects and Schema
 
-All objects are strict Zod allowlists. Unknown fields, Auth/EHR identity patches,
-arbitrary nested Prisma writes, empty patches, and cross-actor IDs are rejected.
+Each changed mutation increments VitalUser.version then calls the parent-owned
+recordProfileEffects(tx, actor, actualSubjectUser, exactOperation, metadata).
+Operations: materialize, patient.update, patient.onboarding, doctor.update,
+doctor.onboarding, doctor.provision, doctor.specialty. Subject authId/role are
+always the user's, not the admin actor's. The helper appends one source fact,
+one audit intent and Core sync intents on the same transaction. Provision,
+doctor onboarding and every verified specialty edit pass doctorMirror:true plus
+departmentExternalId/departmentName; other changes still request Auth-stale.
 
-## Commands and Source Events
+ProfileSyncIntent records immutable request IDs/hashes, sourceVersion and minimal
+provider bodies; uniqueness is (profileId,sourceVersion,destination), with a
+unique requestId and an (authId,sourceVersion) index. The parent owns delivery and
+its latest-required-intent status projection. No delivery network call occurs here.
 
-The optional `ProfileCommandGuard` is an injection contract for the parent, not
-a completed command/replay implementation. It receives the Core transaction,
-`{actor,operation,input?,metadata?}` with parsed allowlisted input, and an
-`execute(verification?)` callback returning the domain result. Operations are
-`materialize`, `patient.update`, `patient.onboarding`, `doctor.update`, and
-`doctor.onboarding`. The module itself enforces the named scopes and exact
-resource. The guard must enforce durable command claims and trusted integration
-confirmations, call `execute` at most once for a fresh command (or return a stored
-replay result), persist the returned result on the SAME supplied transaction, and
-return it. It must throw on denial or failed finalization so profile/event/command
-changes roll back together. A permissive execute-only guard is only a test fixture,
-never production wiring. The parent must finish durable replay before enabling writes.
+The additive Core migration creates profile_workflows and profile_sync_intents
+without touching existing baseline SQL. Maintained Core schema and Core bootstrap
+fragment both include these models. No migrations are applied by this change.
 
-Mutation methods accept optional `ProfileCommandMetadata` as their final argument:
-`{operationId: UUID, requestHash: lowercase SHA-256 hex}`. The router forwards this
-from trusted `res.locals.command`, never headers or body. Parent middleware must
-verify signed UUID jti and method/path/body hash binding before populating it;
-the command wrapper must require this metadata when writes are enabled.
+## Verification and Remaining Gates
 
-Guards execute inside retryable serializable Core transactions. They must not
-perform external network mutations in that transaction or treat a retry as a
-new external operation. Use parent-managed, already-confirmed integration facts.
-The module retries Prisma serialization/bootstrap uniqueness races up to three
-attempts; other failures propagate and roll back.
+Focused local command: `node --import tsx --test test/eda-profile.test.ts`.
+Typecheck after coordinated Core-only client generation:
+`node_modules/.bin/tsc -p tsconfig.json --noEmit`.
 
-Every committed changed mutation atomically increments `VitalUser.version`
-from its schema default 0 and calls the parent's `appendOutbox` on that same
-transaction with:
-
-```text
-eventType: vital.profile.changed
-producer: profile
-aggregateId: local VitalUser.id
-aggregateVersion: incremented VitalUser.version
-correlationId: validated actor.correlationId
-data: {authId, role, operation, actorAuthId}
-```
-
-Event operations use the parent's allowlist: `materialized`, `profile_updated`,
-or `onboarded`. The parent helper generates the event UUID. Profile changes and
-revision increments roll back if source-event persistence fails. Events contain
-no emergency contacts, clinical data, credentials, or tokens.
-
-## Parent Registration and Mounting
-
-Test registration entry: `test/eda-profile.test.ts` (Node test runner).
-The parent's `test/eda-*.test.ts` glob already includes it. Focused command after
-parent dependencies and generated clients are available:
-
-```powershell
-node --import tsx --test test/eda-profile.test.ts
-```
-
-Proposed staging mount only, after trusted actor middleware and a bounded JSON
-parser: `app.use('/profile', validatedActorMiddleware, createProfileRouter(core))`.
-This exposes `/profile/me`, `/profile/materialize`, `/profile/roles/:authId`,
-`/profile/patient/me`, and `/profile/doctor/me`; mutations still remain off.
-Enabling later requires the parent-owned command guard and confirmed integrations.
-Gateway/browser aliases and Auth role-provider cutover are separate parent work;
-do not change the current Web `/internal/users/:user_id/roles` route yet.
-
-Tests cover actor isolation, missing actors, default-off writes, verified role
-bootstrap, local ID distinction, ordered role lookup, strict allowlists, contact
-validation, bounded fees, onboarding prerequisites, specialty locking, command
-denial, event revisions, and transactional rollback. Mocks do not replace a real
-Postgres serializable-concurrency or deployment/cutover test.
+Tests cover strict actor/scope/resource checks, independent admin DB membership,
+default-off writes, local/Auth ID distinction, canonical hashes, distinct step
+IDs, durable replay, receipt forgery, one-time/version binding, transient inputs,
+Auth-attested provisioning, verified departments, admin revocation, audit/
+sync effects, honest pending status and transaction rollback. Structural mocks
+do not replace PostgreSQL serializable-concurrency or signed mTLS/provider E2E
+acceptance. Parent app/callback wiring, broker/delivery acceptance and Web writer
+cutover remain separate work. No commits, deployment, DB reset or container
+verification are performed here.
