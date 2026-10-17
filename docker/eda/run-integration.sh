@@ -28,6 +28,14 @@ cleanup() {
   trap - EXIT INT TERM
   # Preflight excludes all existing project resources. Only our created project is removed.
   if [ "$started" = true ]; then
+    if [ "$status" -ne 0 ]; then
+      "${compose[@]}" ps --all || true
+      # Health probes contain no credentials. Never dump container environments
+      # or generated secret/definition files into a public CI log.
+      for container in $("${compose[@]}" ps --all -q); do
+        docker inspect --format '{{.Name}} status={{.State.Status}} oom={{.State.OOMKilled}} error={{.State.Error}} {{if .State.Health}}{{range .State.Health.Log}}probe_exit={{.ExitCode}} {{.Output}}{{end}}{{end}}' "$container" || true
+      done
+    fi
     if ! "${compose[@]}" down --volumes --timeout 15; then
       echo 'Cleanup failed for newly created vital-eda-test resources; inspect before retrying.' >&2
       status=1
