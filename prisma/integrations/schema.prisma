@@ -1,0 +1,426 @@
+// Initial extraction from development schema SHA256 7ba131a2a7b1747f4be51366a4fce50482c4c209cfcefa4bd4d1df3984a06f34
+generator client {
+  provider = "prisma-client"
+  moduleFormat = "cjs"
+  output = "../../src/eda/generated/integrations"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum PaymentProvider {
+  gcash
+  maya
+  paymongo
+}
+
+enum PaymentStatus {
+  unpaid
+  pending
+  pending_verification
+  approved
+  paid
+  failed
+  rejected
+  refund_pending
+  refunded
+  refund_failed
+  non_refundable
+}
+
+enum PaymentOperationStatus {
+  pending
+  completed
+  failed
+  unknown
+}
+
+model GoogleMeetConnection {
+  id             String   @id @default(uuid())
+  doctorId       String   @unique
+  googleSubject  String?
+  email          String?
+  scopes         String[] @default([])
+  accessToken    String?
+  refreshToken   String?
+  expiresAt      DateTime?
+  status         String   @default("disconnected")
+  revision       Int      @default(0)
+  refreshLease   String?
+  refreshLeaseUntil DateTime?
+  updatedAt      DateTime @updatedAt
+  generations    GoogleMeetGeneration[]
+  @@map("google_meet_connections")
+}
+
+model GoogleMeetOAuthState {
+  operationId String? @unique @db.Uuid
+  state String @default("prepared")
+  executionStartedAt DateTime?
+  callbackHash String?
+  outcome String?
+  id             String @id
+  doctorId       String
+  authId         String
+  bindingHash    String
+  secret         String
+  returnTo       String
+  expiresAt      DateTime
+  @@index([expiresAt])
+  @@map("google_meet_oauth_states")
+}
+
+model GoogleMeetGeneration {
+  commandHash String?
+  executionLeaseOwner String?
+  executionLeaseUntil DateTime?
+  reservedWorkflowId String?
+  failureCode String?
+  id             String @id @default(uuid())
+  doctorId       String
+  connectionId   String
+  connection     GoogleMeetConnection @relation(fields: [connectionId], references: [id])
+  connectionRevision Int
+  requestId      String
+  purpose        String
+  appointmentId  String
+  status         String @default("creating")
+  spaceName      String?
+  meetingUrl     String?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+  claimedAppointmentId String? @unique
+  @@unique([doctorId, requestId])
+  @@index([createdAt])
+  @@index([doctorId, createdAt])
+  @@map("google_meet_generations")
+  version Int @default(0)
+  billingLineageId String
+  providerAttemptStartedAt DateTime?
+}
+
+model Payment {
+  providerOriginAppointmentId String?
+  id              String          @id @default(uuid())
+  appointmentId   String          @unique
+  paymentProvider PaymentProvider
+  providerMode    String          @default("sandbox")
+  proofFilePath   String?
+  referenceNumber String?
+  amount          Decimal?        @db.Decimal(10, 2)
+  currency        String          @default("PHP")
+  status          PaymentStatus   @default(unpaid)
+  checkoutSessionId String?       @unique
+  checkoutUrl     String?
+  paymentIntentId String? @unique
+  paymongoPaymentId String? @unique
+  refundId        String? @unique
+  refundReason    String?
+  refundEligible  Boolean?
+  latestWebhookEventId String?    @unique
+  rejectionReason String?
+  submittedAt     DateTime        @default(now())
+  verifiedAt      DateTime?
+  paidAt          DateTime?
+  failedAt        DateTime?
+  refundRequestedAt DateTime?
+  refundedAt      DateTime?
+  billingLineageId String @unique
+  associationVersion Int @default(1)
+  appointmentVersion Int @default(0)
+  amountCentavos BigInt?
+  patientAuthId String?
+  doctorAuthId String?
+  checkoutState String?
+  reviewRequired Boolean @default(false)
+  reviewCode String?
+  nextReconcileAt DateTime?
+  reconcileLeaseOwner String?
+  reconcileLeaseUntil DateTime?
+  lastReconciledAt DateTime?
+  reconcileFailures Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoice Invoice?
+
+  @@map("payments")
+  @@index([nextReconcileAt, reconcileLeaseUntil])
+  version Int @default(0)
+}
+
+model PaymentOperation {
+  id            String                 @id @default(uuid())
+  operationKey  String                 @unique
+  operationType String
+  requestHash   String
+  status        PaymentOperationStatus @default(pending)
+  providerId    String?
+  result        Json?
+  error         String?
+  correlationId String?
+  paymentId String?
+  actorAuthId String?
+  authorizationIntentId String?
+  requestBody Json?
+  executionStartedAt DateTime?
+  leaseOwner String?
+  leaseUntil DateTime?
+  firstAttemptAt DateTime?
+  nextAttemptAt DateTime?
+  attempts Int @default(0)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([status, updatedAt])
+  @@index([paymentId, operationType])
+  @@index([status, nextAttemptAt, leaseUntil])
+  @@map("payment_operations")
+}
+
+model Invoice {
+  id               String      @id @default(uuid())
+  paymentId        String      @unique
+  payment          Payment     @relation(fields: [paymentId], references: [id])
+  appointmentId    String
+  filePath         String?
+  patientName      String?
+  doctorName       String?
+  consultationDate DateTime?   @db.Date
+  service          String?
+  paymentMethod    String?
+  generatedAt      DateTime    @default(now())
+  amountCentavos BigInt?
+  currency String @default("PHP")
+  billingLineageId String?
+  completedIntentId String? @unique
+
+  @@map("invoices")
+}
+
+model OutboxEvent {
+  id               String    @id @default(uuid())
+  eventType        String
+  schemaVersion    Int       @default(1)
+  producer         String
+  aggregateId      String
+  aggregateVersion Int
+  correlationId    String
+  causationId      String?
+  occurredAt       DateTime  @default(now())
+  payload          Json
+  status           String    @default("pending")
+  attempts         Int       @default(0)
+  nextAttemptAt    DateTime  @default(now())
+  leaseOwner       String?
+  leaseUntil       DateTime?
+  publishedAt      DateTime?
+  lastErrorCode    String?
+  @@index([status, nextAttemptAt, leaseUntil])
+  @@index([producer, aggregateId, aggregateVersion])
+  @@map("outbox_events")
+}
+
+model InboxEvent {
+  consumerId  String
+  eventId     String
+  processedAt DateTime @default(now())
+  @@id([consumerId, eventId])
+  @@map("inbox_events")
+}
+
+model CommandOperation {
+  id            String    @id @default(uuid())
+  actorId       String
+  action        String
+  resourceId    String
+  operationId   String
+  requestHash   String
+  status        String    @default("pending")
+  result        Json?
+  errorCode     String?
+  leaseOwner    String?
+  leaseUntil    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  @@unique([actorId, operationId])
+  @@index([status, leaseUntil])
+  @@map("command_operations")
+}
+
+
+model VideoResource {
+  providerOriginAppointmentId String?
+  associationVersion Int @default(1)
+  preparedWorkflowId String?
+  retiredAt DateTime?
+  workflowHolds VideoWorkflowHold[]
+  associationHolds VideoAssociationHold[]
+  id               String   @id @default(uuid())
+  appointmentId    String   @unique
+  doctorId         String
+  billingLineageId String
+  version          Int      @default(0)
+  provider         String   @default("gmeet")
+  meetingUrl       String?
+  normalizedMeetingUrl String?
+  meetingUrlHash    String?  @unique
+  validationStatus String
+  googleSpaceName  String? @unique
+  generationId     String?  @unique
+  linkGeneratedAt  DateTime?
+  linkSavedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  @@index([doctorId, billingLineageId])
+  @@map("video_resources")
+}
+
+model VideoOperation {
+  id String @id @db.Uuid
+  operationId String @db.Uuid
+  actorAuthId String
+  action String
+  resourceId String
+  requestHash String
+  state String @default("prepared")
+  executionStartedAt DateTime?
+  leaseOwner String?
+  leaseUntil DateTime?
+  resultMetadata Json?
+  failureCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([state, leaseUntil])
+  @@unique([actorAuthId,operationId])
+  @@map("video_operations")
+}
+
+model VideoWorkflowHold {
+  workflowId String @id
+  sourceAppointmentId String
+  targetAppointmentId String
+  doctorId String
+  expectedSourceVersion Int
+  expectedTargetVersion Int
+  billingLineageId String
+  associationVersion Int
+  selectionHash String
+  resourceId String?
+  resource VideoResource? @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  resourceVersion Int?
+  freezeToken String
+  state String @default("prepared")
+  receipt Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([state, expiresAt])
+  @@map("video_workflow_holds")
+}
+
+model VideoAssociationHold {
+  operationId String @id
+  billingLineageId String
+  sourceAppointmentId String
+  replacementAppointmentId String
+  requestHash String
+  expectedSourceVersion Int
+  expectedReplacementVersion Int
+  associationVersion Int
+  videoResourceId String?
+  videoResource VideoResource? @relation(fields: [videoResourceId], references: [id], onDelete: Restrict)
+  videoResourceVersion Int?
+  freezeToken String
+  state String @default("prepared")
+  receipt Json
+  expiresAt DateTime
+  finalizedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([billingLineageId,state])
+  @@map("video_association_holds")
+}
+
+model MeetGenerationQuota {
+  doctorId         String
+  billingLineageId String
+  purpose          String
+  attemptsStarted  Int      @default(0)
+  updatedAt        DateTime @updatedAt
+  @@id([doctorId, billingLineageId, purpose])
+  @@map("meet_generation_quotas")
+}
+
+model PaymentAssociationHold {
+  operationId String @id
+  billingLineageId String
+  sourceAppointmentId String
+  replacementAppointmentId String
+  requestHash String
+  expectedSourceVersion Int
+  expectedReplacementVersion Int
+  associationVersion Int
+  paymentId String?
+  paymentVersion Int?
+  freezeToken String
+  state String @default("prepared")
+  receipt Json
+  expiresAt DateTime
+  finalizedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("payment_association_holds")
+  @@index([billingLineageId, state])
+}
+
+model SagaParticipant {
+  operationId      String
+  participant      String
+  sourceAppointmentId String
+  replacementAppointmentId String
+  expectedVersion  Int
+  requestHash      String
+  status           String   @default("prepared")
+  preparedAt       DateTime @default(now())
+  finalizedAt      DateTime?
+  @@id([operationId, participant])
+  @@index([status, preparedAt])
+  @@map("saga_participants")
+}
+
+model IntegrationDelivery {
+  id            String   @id @default(uuid())
+  eventId       String
+  correlationId String
+  destination   String
+  requestId     String
+  requestHash   String
+  aggregateId   String
+  sourceVersion Int
+  payload       Json
+  status        String   @default("pending")
+  attempts      Int      @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseOwner    String?
+  leaseUntil    DateTime?
+  receiptId     String?
+  lastErrorCode String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@unique([destination, requestId])
+  @@index([status, nextAttemptAt, leaseUntil])
+  @@index([aggregateId, destination, sourceVersion], map: "integration_deliveries_profile_sync_idx")
+  @@map("integration_deliveries")
+}
+
+model ProfileRevisionProjection {
+  profileId String @id
+  authId String @unique
+  sourceVersion Int
+  role String
+  observedAt DateTime @default(now())
+  @@map("profile_revision_projections")
+}

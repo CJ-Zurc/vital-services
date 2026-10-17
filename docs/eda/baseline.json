@@ -1,0 +1,81 @@
+{
+  "recordedAt": "2026-10-12T08:48:40.009Z",
+  "authority": "C:/Users/User/Downloads/EDA_TRANSITION_PLAN_REVISED.md",
+  "authoritySha256": "1b3c505b2c4be14991e0752027c475f75304c7d8914a5b04442e93d585dd2b4f",
+  "sharedDeploymentInspected": false,
+  "originalDirtyEhrWorktreeExcluded": true,
+  "repositories": [
+    {
+      "name": "vital-web",
+      "path": "C:\\Users\\User\\Documents\\CAPSTONE\\vital-web",
+      "branch": "EDA",
+      "head": "df5aa0da65d2ba5888ebbc9102f9ae313c754b22",
+      "developmentRef": "df5aa0da65d2ba5888ebbc9102f9ae313c754b22",
+      "developmentBaselineIncluded": true
+    },
+    {
+      "name": "vital-services",
+      "path": "C:\\Users\\User\\Documents\\CAPSTONE\\vital-services",
+      "branch": "EDA",
+      "head": "1c5320a08673d38ddd88720f37721e940c6aa843",
+      "developmentRef": "1c5320a08673d38ddd88720f37721e940c6aa843",
+      "developmentBaselineIncluded": true
+    },
+    {
+      "name": "BGH_API_GATEWAY",
+      "path": "C:\\Users\\User\\Documents\\CAPSTONE\\BGH_API_GATEWAY",
+      "branch": "eda/vital-transition",
+      "head": "0218ea9b26e8ba9a1584835452d7c94646875062",
+      "developmentRef": "0218ea9b26e8ba9a1584835452d7c94646875062",
+      "developmentBaselineIncluded": true
+    },
+    {
+      "name": "BGH_NOTIFICATION_API",
+      "path": "C:\\Users\\User\\Documents\\CAPSTONE\\BGH_NOTIFICATION_API",
+      "branch": "eda/vital-transition",
+      "head": "3e004506e8909f8f8d0eb54dac4ab2ecdad28ca0",
+      "developmentRef": "3e004506e8909f8f8d0eb54dac4ab2ecdad28ca0",
+      "developmentBaselineIncluded": true
+    },
+    {
+      "name": "BGH_AUDIT_LOGS",
+      "path": "C:\\Users\\User\\Documents\\CAPSTONE\\BGH_AUDIT_LOGS",
+      "branch": "eda/vital-transition",
+      "head": "1e99dc33a6124c3402379b85c413f02c1950c089",
+      "developmentRef": "1e99dc33a6124c3402379b85c413f02c1950c089",
+      "developmentBaselineIncluded": true
+    },
+    {
+      "name": "BGH_ANALYTICS",
+      "path": "C:\\Users\\User\\Documents\\CAPSTONE\\BGH_ANALYTICS",
+      "branch": "eda/vital-transition",
+      "head": "f3bd67358d65a5fc18ec3ca6157ab3ff6ec9c7f1",
+      "developmentRef": "f3bd67358d65a5fc18ec3ca6157ab3ff6ec9c7f1",
+      "developmentBaselineIncluded": true
+    },
+    {
+      "name": "UHSE_AUTH",
+      "path": "C:\\Users\\User\\Documents\\CAPSTONE\\UHSE_AUTH",
+      "branch": "eda/vital-transition",
+      "head": "aadbcd46bb7e9090f714c2850d865ba08313e178",
+      "developmentRef": "aadbcd46bb7e9090f714c2850d865ba08313e178",
+      "developmentBaselineIncluded": true
+    },
+    {
+      "name": "Capstone_BGH",
+      "path": "C:\\Users\\User\\Documents\\CAPSTONE\\Capstone_BGH",
+      "branch": "eda/vital-transition",
+      "head": "1062b05437bf6056faa0cfd3128d1677d461ce6d",
+      "developmentRef": "1062b05437bf6056faa0cfd3128d1677d461ce6d",
+      "developmentBaselineIncluded": true
+    },
+    {
+      "name": "eda-worktrees/UHSE_EHR-current",
+      "path": "C:\\Users\\User\\Documents\\CAPSTONE\\eda-worktrees\\UHSE_EHR-current",
+      "branch": "eda/vital-transition-current",
+      "head": "d6795dc93045795b6f0e8d5ad5519d62f970f72c",
+      "developmentRef": "d6795dc93045795b6f0e8d5ad5519d62f970f72c",
+      "developmentBaselineIncluded": true
+    }
+  ]
+}

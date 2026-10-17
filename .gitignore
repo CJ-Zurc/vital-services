@@ -1,8 +1,14 @@
 node_modules/
+dist/
+src/eda/generated/
+.env.eda
+.eda-secrets/
 .env
 .env.*
+!.env.eda.example
 !.env.docker.example
 coverage/
+.artifacts/
 *.log
 npm-debug.log*
 .DS_Store
@@ -10,3 +16,5 @@ Thumbs.db
 .idea/
 .vscode/
 *.tmp
+/test-results.tap
+/docs/eda/route-current.json
