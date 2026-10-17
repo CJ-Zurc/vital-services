@@ -54,6 +54,8 @@ export async function fixture<T>(context: Context, run: (value: ReturnType<typeo
     await core.query('DELETE FROM slot_reservations WHERE "doctorId"=$1',[value.doctorId]);
     await core.query('DELETE FROM saga_operations WHERE "billingLineageId"=$1',[value.lineage]);
     await core.query('DELETE FROM appointment_logs WHERE "appointmentId"=ANY($1::text[])',[appointments]);
+    await core.query('DELETE FROM notes WHERE "consultId" IN (SELECT id FROM consultations WHERE "appointmentId"=ANY($1::text[]))',[appointments]);
+    await core.query('DELETE FROM consultations WHERE "appointmentId"=ANY($1::text[])',[appointments]);
     await core.query('DELETE FROM appointments WHERE id=ANY($1::text[])', [appointments]);
     await core.query('DELETE FROM schedules WHERE "doctorId"=$1',[value.doctorId]);
     await core.query('DELETE FROM vital_patients WHERE "userId"=$1', [value.patientId]);
