@@ -213,7 +213,7 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./docker/eda/rabbitmq:/etc/eda/rabbitmq:ro
     healthcheck:
-      test: [CMD, rabbitmq-diagnostics, -q, check_port_connectivity]
+      test: [CMD, rabbitmq-diagnostics, -q, check_port_connectivity, --address, 127.0.0.1]
       interval: 10s
       timeout: 10s
       retries: 12
