@@ -1,0 +1,51 @@
+# Use ONLY with -p vital-eda-test, fresh project-scoped volumes and suffix _test.
+name: vital-eda-test
+services:
+  api:
+    image: ${EDA_TOOLS_IMAGE:-vital-eda-tools:local}
+    build: {target: tools}
+    command: [test]
+    environment:
+      EDA_DATABASE_SUFFIX: _test
+      EDA_TEST_ENABLED: ${EDA_TEST_ENABLED:-false}
+      EDA_TEST_ISOLATED: ${EDA_TEST_ISOLATED:-}
+      # Provider transport stays mocked; real Video DB/broker/mTLS scenarios require opt-in.
+      EDA_TEST_VIDEO_ENABLED: ${EDA_TEST_VIDEO_ENABLED:-false}
+      EDA_TEST_MESSAGING_ENABLED: ${EDA_TEST_MESSAGING_ENABLED:-false}
+      EDA_TEST_RECORDS_ENABLED: ${EDA_TEST_RECORDS_ENABLED:-false}
+      EDA_TEST_RECORDS_ARTIFACTS_ENABLED: ${EDA_TEST_RECORDS_ARTIFACTS_ENABLED:-false}
+      # External operator-provisioned test bucket/scoped identity only. No root fallback.
+      EDA_TEST_RECORDS_STORAGE_ENDPOINT: ${EDA_TEST_RECORDS_STORAGE_ENDPOINT:-}
+      EDA_TEST_RECORDS_STORAGE_BUCKET: ${EDA_TEST_RECORDS_STORAGE_BUCKET:-}
+      EDA_TEST_RECORDS_STORAGE_ACCESS_KEY: ${EDA_TEST_RECORDS_STORAGE_ACCESS_KEY:-}
+      EDA_TEST_RECORDS_STORAGE_SECRET_KEY: ${EDA_TEST_RECORDS_STORAGE_SECRET_KEY:-}
+      EDA_TEST_RECORDS_STORAGE_CLEANUP_ACCESS_KEY: ${EDA_TEST_RECORDS_STORAGE_CLEANUP_ACCESS_KEY:-}
+      EDA_TEST_RECORDS_STORAGE_CLEANUP_SECRET_KEY: ${EDA_TEST_RECORDS_STORAGE_CLEANUP_SECRET_KEY:-}
+      # Requires an explicit external read-only mount of the restricted Unix socket/config.
+      # This harness never starts a scanner daemon or exposes a scanner TCP port.
+      EDA_TEST_RECORDS_CLAMAV_SOCKET: ${EDA_TEST_RECORDS_CLAMAV_SOCKET:-}
+      EDA_TEST_RECORDS_CLAMAV_CONFIG: ${EDA_TEST_RECORDS_CLAMAV_CONFIG:-}
+    secrets: !override
+      - core_worker_password
+      - integrations_worker_password
+      - core_migrator_password
+      - integrations_migrator_password
+      - rabbit_runtime_password
+      - rabbit_provision_password
+      - {source: db_ca, target: db-ca.pem}
+      - {source: broker_ca, target: broker-ca.pem}
+      - {source: test_service_ca, target: test-service-ca.pem}
+      - {source: test_api_cert, target: test-api-cert.pem}
+      - {source: test_api_key, target: test-api-key.pem}
+      - {source: test_web_cert, target: test-web-cert.pem}
+      - {source: test_web_key, target: test-web-key.pem}
+      - {source: minio_ca, target: minio-ca.pem}
+  postgres:
+    environment:
+      EDA_DATABASE_SUFFIX: _test
+secrets:
+  test_service_ca: {file: "${EDA_SECRETS_DIR}/test-service-ca.pem"}
+  test_api_cert: {file: "${EDA_SECRETS_DIR}/test-api-cert.pem"}
+  test_api_key: {file: "${EDA_SECRETS_DIR}/test-api-key.pem"}
+  test_web_cert: {file: "${EDA_SECRETS_DIR}/test-web-cert.pem"}
+  test_web_key: {file: "${EDA_SECRETS_DIR}/test-web-key.pem"}

@@ -1,0 +1,12 @@
+# Optional provider access; a bridge is NOT a domain allowlist. Never use in CI.
+services:
+  api:
+    networks:
+      private: {}
+      providers: {gw_priority: 1}
+  worker:
+    networks:
+      private: {}
+      providers: {gw_priority: 1}
+networks:
+  providers: {}

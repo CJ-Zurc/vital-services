@@ -1,0 +1,33 @@
+\getenv core_api_password CORE_API_PASSWORD
+\getenv core_worker_password CORE_WORKER_PASSWORD
+\getenv core_migrator_password CORE_MIGRATOR_PASSWORD
+\getenv integrations_api_password INTEGRATIONS_API_PASSWORD
+\getenv integrations_worker_password INTEGRATIONS_WORKER_PASSWORD
+\getenv integrations_migrator_password INTEGRATIONS_MIGRATOR_PASSWORD
+
+CREATE ROLE vital_core_api LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD :'core_api_password';
+CREATE ROLE vital_core_worker LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD :'core_worker_password';
+CREATE ROLE vital_core_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD :'core_migrator_password';
+CREATE ROLE vital_integrations_api LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD :'integrations_api_password';
+CREATE ROLE vital_integrations_worker LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD :'integrations_worker_password';
+CREATE ROLE vital_integrations_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD :'integrations_migrator_password';
+
+CREATE DATABASE :"core_db" OWNER vital_core_migrator;
+CREATE DATABASE :"integrations_db" OWNER vital_integrations_migrator;
+REVOKE ALL ON DATABASE :"core_db", :"integrations_db", postgres, template1 FROM PUBLIC;
+GRANT CONNECT ON DATABASE :"core_db" TO vital_core_api, vital_core_worker;
+GRANT CONNECT ON DATABASE :"integrations_db" TO vital_integrations_api, vital_integrations_worker;
+
+\connect :core_db
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+ALTER SCHEMA public OWNER TO vital_core_migrator;
+ALTER DEFAULT PRIVILEGES FOR ROLE vital_core_migrator IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE vital_core_migrator IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE vital_core_migrator IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
+\connect :integrations_db
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+ALTER SCHEMA public OWNER TO vital_integrations_migrator;
+ALTER DEFAULT PRIVILEGES FOR ROLE vital_integrations_migrator IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE vital_integrations_migrator IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE vital_integrations_migrator IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;

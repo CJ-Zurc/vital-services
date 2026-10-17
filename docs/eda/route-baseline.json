@@ -1,0 +1,2443 @@
+{
+  "vitalWebSha": "df5aa0da65d2ba5888ebbc9102f9ae313c754b22",
+  "vitalServicesSha": "1c5320a08673d38ddd88720f37721e940c6aa843",
+  "generatedAt": "2026-10-12T07:41:51.308Z",
+  "routes": [
+    {
+      "path": "/api/admin",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/admin/route.ts",
+      "sourceSha256": "c36908dbf3a60b53d14a2fbdf915f135094a8b195783ba546b928e88f3aa58a1",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/analytics/batches/current",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/admin/analytics/batches/current/route.ts",
+      "sourceSha256": "678f29aa47c60c7c949b6fbde806eb4838d75483b9606fba916fe7ddab4bc988",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/analytics/batches/refresh",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/admin/analytics/batches/refresh/route.ts",
+      "sourceSha256": "ff2feaa9df906ef6f4dcbed1e2f480c1a30f7a40b832858870238c70433d7103",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/analytics/dashboard",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/admin/analytics/dashboard/route.ts",
+      "sourceSha256": "8eea6ce914bac3f2372dc3e46c2c1cbbd22bfe242350dd8cc4d8fc17f6db0527",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/concerns",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/admin/concerns/route.ts",
+      "sourceSha256": "0077fce0a5bb367a33bb0720d2944919ddb21b569be248446b6f31e266f3918d",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/concerns/[concernId]",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/admin/concerns/[concernId]/route.ts",
+      "sourceSha256": "08fe96e25651983830d4be6ff2ff7f84bdcfdf9a73c233b696acd6a14176cdde",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/consent",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/admin/consent/route.ts",
+      "sourceSha256": "cd857ada3e3fb3f567fb7a534ad797328f5798e74b162c8b3b4b99cee2b346e8",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/dashboard",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/admin/dashboard/route.ts",
+      "sourceSha256": "f323f753ed4715a5fdad15a86b5908279a9bde3cb861aff5ec279d0ca421863a",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/doctors",
+      "methods": [
+        "GET",
+        "PATCH",
+        "POST"
+      ],
+      "source": "app/api/admin/doctors/route.ts",
+      "sourceSha256": "2d5365396a36a960c3ebd79a4a5464659e154029ca98a608699d93f19be0261e",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/doctors/[authId]/credentials",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/admin/doctors/[authId]/credentials/route.ts",
+      "sourceSha256": "9b8a9fce86c6b30e0f937c5f382f4a726898e896cb4f4c42796001fd2efa7f9e",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/admin/users",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "source": "app/api/admin/users/route.ts",
+      "sourceSha256": "10babc18233a2f0d5db203807cbb7c4855a2faf7bc48600366d5cc6134ec4e5d",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/appointments/[appointmentId]/complete",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/appointments/[appointmentId]/complete/route.ts",
+      "sourceSha256": "37f21f7d4a19ea2e2b2e71fcb0c594a7420487429015083fe1948cab5a5e58ac",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/appointments/[appointmentId]/concerns",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/appointments/[appointmentId]/concerns/route.ts",
+      "sourceSha256": "4e380a71e70bd34c75e52441ffacbf4aa40e9db02fb0c8b4c048e3d8f0274c2f",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/appointments/[appointmentId]/feedback",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/appointments/[appointmentId]/feedback/route.ts",
+      "sourceSha256": "c3b69257e70821f4f285f47df0de80e64d6d991cbbf01ebce683f22d676233b6",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/appointments/[appointmentId]/messages",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/api/appointments/[appointmentId]/messages/route.ts",
+      "sourceSha256": "1637c3e6d34a06876c67e882dcd332b8afe6f051b994b882872311a9e67c1223",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/appointments/[appointmentId]/messages/read",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/appointments/[appointmentId]/messages/read/route.ts",
+      "sourceSha256": "97988e4bbf165f7f85e77ae276fe7391a186cf1ec3d66ef02d87f648400d8405",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/appointments/[appointmentId]/messages/stream",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/appointments/[appointmentId]/messages/stream/route.ts",
+      "sourceSha256": "113e4acc6530a053f99b6ef83058adaf6cff4a0e71d6cb7ee863e1910ccd5f30",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/consent",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/api/auth/consent/route.ts",
+      "sourceSha256": "2c3aff852327b52aa53905d580fd0f17c58def20ada03c404595b4d6a14f4e05",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/google/url",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/auth/google/url/route.ts",
+      "sourceSha256": "3dcf25d38c779464c86cccc0bb56e73d7077bfbac7c940cf7a2d322631f9d120",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/login",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/login/route.ts",
+      "sourceSha256": "c38d2db24ee1307114aec7ab72726dee8342b920a37ba2f6931303f7776fe95f",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/login/resend",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/login/resend/route.ts",
+      "sourceSha256": "21fd73aca4d1176245dbfcd692fa1f16470f4dcdf266e8a05c30878b1055821a",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/logout",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/logout/route.ts",
+      "sourceSha256": "5613628bd6abd77ad7a9065a2d680d5a847887208f0e577500d9862d5c70123c",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/me",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "source": "app/api/auth/me/route.ts",
+      "sourceSha256": "f68a87ee71570943181cdd8fcb756c52c3b7466db809e79aa4c4b1960f66380d",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/me/password",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/me/password/route.ts",
+      "sourceSha256": "0fd06a050821c0d7a6e4f13ef5aed5b59a78f952dec862f5e25c666c1e3cd47c",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/me/profile-picture",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/me/profile-picture/route.ts",
+      "sourceSha256": "ff3729e4486b3df23b6740b15afd7c450971149438c2bdfb2510267ba3a2a432",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/password/change",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/password/change/route.ts",
+      "sourceSha256": "0af8aedeed4ff49c6fbe7ace8f35963fd2616a562f9bd0e8def149cce42a7f09",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/password/forgot",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/password/forgot/route.ts",
+      "sourceSha256": "e57dc557d143b7e0aa139f323635d14eeb157e029ff78a3ff1aebd0442c202b6",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/password/reset",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/password/reset/route.ts",
+      "sourceSha256": "fbe736af9b9643d894a603017d91d29856ed7e1c43123884c86680707ea3cb9b",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/refresh",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/refresh/route.ts",
+      "sourceSha256": "0496e4973320d850cd695a95a6bcfb40708f493181d46f99753e2c8b2378ba14",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/register",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/register/route.ts",
+      "sourceSha256": "c58152bfdf02e43561cf6d268646f5602fca9e42c444fb88fcb5149c20d1eb2e",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/session",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/auth/session/route.ts",
+      "sourceSha256": "7d0b929b18c19a6e74d2edc8f9d07d7cc065f42ec0f01aa0e18f12ff06f45e9c",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/sso/callback",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/sso/callback/route.ts",
+      "sourceSha256": "adcf8e499f89a9c75389d84c00557db614033d72ad04d32ea08bf3e1c7ca2127",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/verify",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/verify/route.ts",
+      "sourceSha256": "5fcf30c2ec7bb640baaa9db6aa25de4998a880e8c3774c529ba33bea0a0e6e33",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/verify-2fa",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/verify-2fa/route.ts",
+      "sourceSha256": "f5a4a7f335a4518c13e54bfdca4e7228765dec8df6254c63642a500cf17ce861",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/auth/verify/resend",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/auth/verify/resend/route.ts",
+      "sourceSha256": "1daa38f76c639b75d3c629547654291b06cf9fce1fffb87e7ce2a615303effe7",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/route.ts",
+      "sourceSha256": "8375b69dd3c04696265192e7aa7103470a68b345dffa5be9462d79c16c476fad",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointment-requests",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/appointment-requests/route.ts",
+      "sourceSha256": "418976318dec9f1ca0ff335379de681176333714c2791fe208fc75593a220154",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointment-requests/[appointmentId]/approve",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/doctor/appointment-requests/[appointmentId]/approve/route.ts",
+      "sourceSha256": "8739a67cf6e5a86eb2b2ee305e0f7cddd639480b34f58aed885a93c74ccc072d",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointment-requests/[appointmentId]/reject",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/doctor/appointment-requests/[appointmentId]/reject/route.ts",
+      "sourceSha256": "b37359c8a535975af9e39bcf020939f211c4095ac0eb8d2bcbbce3a7a76f9269",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointment-requests/stream",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/appointment-requests/stream/route.ts",
+      "sourceSha256": "90cc6225759e4269e4a9e708b0870f9c4b8302078423654fbf80ee536750f92a",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointments",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/appointments/route.ts",
+      "sourceSha256": "0838ab5d3dfac475ea1710bf25bec25f7cf2e37c6aed589bd51fd95ed2b7cdb0",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointments/[appointmentId]/cancel",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/doctor/appointments/[appointmentId]/cancel/route.ts",
+      "sourceSha256": "46fb6c12d24aed7fc6e5a6f0f9b546b491abf75e7c07e2aff37d4dd1a060fa46",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointments/[appointmentId]/follow-up",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/doctor/appointments/[appointmentId]/follow-up/route.ts",
+      "sourceSha256": "04929c94b17e58f42e58467e07e128fcf79dc8c170f5f38d09fcf9f8bfe45991",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointments/[appointmentId]/medical-certificates",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/doctor/appointments/[appointmentId]/medical-certificates/route.ts",
+      "sourceSha256": "64119370be87658789c482e68146b8c633405a7d8694c108438d14095d9be5f4",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointments/[appointmentId]/prescriptions",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/doctor/appointments/[appointmentId]/prescriptions/route.ts",
+      "sourceSha256": "c5d643a4b6390a4853ebe7306c756ed9a196d3d4ce6f75c8115b53b5eef8178d",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointments/[appointmentId]/reschedule",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/doctor/appointments/[appointmentId]/reschedule/route.ts",
+      "sourceSha256": "0a3c9a4da18d1b618b52541fbe0527f89a7aae40af6902800bf77ff288483db9",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/appointments/[appointmentId]/vitals",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/appointments/[appointmentId]/vitals/route.ts",
+      "sourceSha256": "a9abfe0f65c6a2ae390bbfafb9f87cf51d3000af54b18e524798a264f5551b65",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/dashboard",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/dashboard/route.ts",
+      "sourceSha256": "9dddeffdfc5243a6d282ef7261e5ec0580005535744447c7dd5757ac593053f8",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/date-blocks",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/api/doctor/date-blocks/route.ts",
+      "sourceSha256": "aae7d6a3133e7b8d3a27ecc952e3ebda06e42c46e4464d7349cbbbf5e51e7d57",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/date-blocks/[blockId]",
+      "methods": [
+        "DELETE"
+      ],
+      "source": "app/api/doctor/date-blocks/[blockId]/route.ts",
+      "sourceSha256": "be2aff1aa6e9ca952ae1886a5b7a46c60eb21fc10c0674d22d9ace8129053da3",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/google-meet",
+      "methods": [
+        "DELETE",
+        "GET"
+      ],
+      "source": "app/api/doctor/google-meet/route.ts",
+      "sourceSha256": "d2739e80394a70808a9b97df54c81287b2c283e4d2ad3ee6a636fb32496c7003",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/google-meet/callback",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/google-meet/callback/route.ts",
+      "sourceSha256": "edfea8c9c73a6344cd80ece0faca88cb3d0524d259caaba1a482bafa8669cef2",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/google-meet/generate",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/doctor/google-meet/generate/route.ts",
+      "sourceSha256": "d7dd6cee5b98a1bb7698ed04335ee63e3781f56b0726c525f70bbdd8e68fc1ca",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/google-meet/start",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/doctor/google-meet/start/route.ts",
+      "sourceSha256": "69c71932dcf7edffed4a4aae7f03e8254bdf24e73fbeb67a8e607a7c21d6fb40",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/onboarding",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/doctor/onboarding/route.ts",
+      "sourceSha256": "eab704d2c5ddde0be2f47ca41f74cd7d8713cb6b2e413bae96148dd184ece17b",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/patients",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/patients/route.ts",
+      "sourceSha256": "0e60d1900acea071f712f335ef50c6ea1c864648598e6c6cf47df089e43ee800",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/patients/[patientId]/opqrst",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/patients/[patientId]/opqrst/route.ts",
+      "sourceSha256": "42387a641bb94e9ff01081eea11284912ce200f1a2a336fcf3f2ca50d26b0c3c",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/patients/[patientId]/record",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/doctor/patients/[patientId]/record/route.ts",
+      "sourceSha256": "bc07bd1c6d32060277035dc2c86b6d888fee5f2726c354f5500d7dfdfe743132",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/payment-qr",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/api/doctor/payment-qr/route.ts",
+      "sourceSha256": "d02925b6481008d0e53f23867dc59ab49f8928d7bcaccae5d7c03fcdcf64098d",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/payment-qr/[qrId]",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/doctor/payment-qr/[qrId]/route.ts",
+      "sourceSha256": "42c6013debe058bc9a29d84a854cf7de9d7d3a3a039fcafed32caaccb7f766c5",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/profile",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "source": "app/api/doctor/profile/route.ts",
+      "sourceSha256": "981985d861174a1d7ae6160d60af37ff1112e0cc9e101cb9c513184aab36e11a",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/profile/onboarding",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/doctor/profile/onboarding/route.ts",
+      "sourceSha256": "8849f5a5420fadbd4c4d85da379d11737dd509a5591834f2f70c2a93fd6d6aad",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/profile/picture",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/doctor/profile/picture/route.ts",
+      "sourceSha256": "77c6ac1119fa082446eb647ea234cd74dc57bbf52f6808c9963ff785c9264c56",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/schedule",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/api/doctor/schedule/route.ts",
+      "sourceSha256": "90a24bbab7fa5135195def6bc4d75cea2e834aa28f8272532401441c5320f0ff",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/doctor/schedule/[slotId]",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ],
+      "source": "app/api/doctor/schedule/[slotId]/route.ts",
+      "sourceSha256": "d2fa4a43e45ce9b67ec54b3bd5f77c2fa8c4b2ffb6f737d9dbcd1402794268d4",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/internal/analytics/v1/pre-consultations",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/internal/analytics/v1/pre-consultations/route.ts",
+      "sourceSha256": "00a640cdb2fc07b90314961b36592f733fc80403e731a74c556953aa3145b416",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/internal/appointments/auto-complete",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/internal/appointments/auto-complete/route.ts",
+      "sourceSha256": "b6b8491ce2b65c3f2f2d523e953e48894f236d7c7df129cf38e32f448eeabc51",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/messages/conversations",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/messages/conversations/route.ts",
+      "sourceSha256": "33418bc5d31a5711dfa309318d0af594c744a7e1eb425f8654eb2b0d8a21ac11",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/route.ts",
+      "sourceSha256": "25586ce3c79df9a41eee6f6c4a54db05c221e5b82e5b42075b2ddef13a16e5a8",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/appointments",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/api/patient/appointments/route.ts",
+      "sourceSha256": "89b68b7b1e914078f0b11d04d9a7a448b867338f99ee55f248c7f728a21ea3af",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/appointments/[appointmentId]/accept-reschedule",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/patient/appointments/[appointmentId]/accept-reschedule/route.ts",
+      "sourceSha256": "771f74219f7c3eab92e9b5f8c246c599b1eb29e89e870cd59fb879f7f655ce74",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/appointments/[appointmentId]/cancel",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/patient/appointments/[appointmentId]/cancel/route.ts",
+      "sourceSha256": "3048d06389d6daa4f9351a9ca8e3685c971ed21f77c4fbc6cb8af270cf102b4d",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/appointments/[appointmentId]/decline-reschedule",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/patient/appointments/[appointmentId]/decline-reschedule/route.ts",
+      "sourceSha256": "6294e7b951df1d66cda66f2de24283c1392b6213cc30777c0c9cf4ad7c09128f",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/appointments/[appointmentId]/payment",
+      "methods": [
+        "PATCH",
+        "POST"
+      ],
+      "source": "app/api/patient/appointments/[appointmentId]/payment/route.ts",
+      "sourceSha256": "3c2cbeee3efd7795cd4addd0654401b9a72b5eb09177066a28e45e4dace6aef9",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/appointments/[appointmentId]/reschedule",
+      "methods": [
+        "PATCH"
+      ],
+      "source": "app/api/patient/appointments/[appointmentId]/reschedule/route.ts",
+      "sourceSha256": "dc1f63a331289d575f28536bf72cb9369ad2711728ab28bb64e7dfd9b7a2ca0b",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/appointments/[appointmentId]/vitals",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/patient/appointments/[appointmentId]/vitals/route.ts",
+      "sourceSha256": "271fff41ca8c32432b4bbf607f131d46f6c64e9a68d3613c11585b0660dfa378",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/dashboard",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/dashboard/route.ts",
+      "sourceSha256": "6fa50fcb93b79ce3407b14eb18c0a200873710ffe9ccd1e72de6e19535bdb846",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/doctors",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/doctors/route.ts",
+      "sourceSha256": "54d98c43fbe48764f3c66af57050c6fc25feb554ed2cdf1e06d9227301d20d3b",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/doctors/[doctorId]/availability",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/doctors/[doctorId]/availability/route.ts",
+      "sourceSha256": "6da78671b70957fe5112ac282bac148a2ea81bea2b7e26d0695059891ea3aec0",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/documents",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/documents/route.ts",
+      "sourceSha256": "ae9a6579d4a646a1b534c18683fbfe5c59d17e93bfca266a3d70b8a0ab221763",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/documents/[documentType]/[documentId]/file",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/documents/[documentType]/[documentId]/file/route.ts",
+      "sourceSha256": "08cd005167d94932505a60370d2221aaf2d94b8e884420ee0ecc6ac568439ee9",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/ehr-access/end-session",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/patient/ehr-access/end-session/route.ts",
+      "sourceSha256": "3959b35896feb29f241f64946df66fdd5e851014dd7827dd407d23c25973406a",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/ehr-access/face-capture-sessions",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/patient/ehr-access/face-capture-sessions/route.ts",
+      "sourceSha256": "8383cba846bcdce9b49d8284fd707fb0e0dff2f6953bb3918755bceb48f3a32b",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/ehr-access/face-capture-sessions/[sessionId]/complete",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/patient/ehr-access/face-capture-sessions/[sessionId]/complete/route.ts",
+      "sourceSha256": "5f0a452b152d9840775e7534a84706db6ddcdc8414887163c6784ac43ca11aa5",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/ehr-access/session",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/ehr-access/session/route.ts",
+      "sourceSha256": "173bbd2a56614392ce2c7407474326d10bf24e676e7ac20918fb4deb369764e9",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/ehr-record-notice",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/api/patient/ehr-record-notice/route.ts",
+      "sourceSha256": "c829f0272772781605b504e29b62379a840b74c4f2fdbc7ea5186b1576903bf0",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/files",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/api/patient/files/route.ts",
+      "sourceSha256": "e7f5f27130bb5a52382c43511913f4da38b2a71a85695f42af4b7e5eb92e9d39",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/files/[recordId]/file",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/files/[recordId]/file/route.ts",
+      "sourceSha256": "fffea913176f17cccda703ac8902641b6d99d7d5d395e5a5193ed42bcd5b6402",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/health-records",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/health-records/route.ts",
+      "sourceSha256": "790d456419ec74220e1ef6d8d3e98c93851a4b28f50156d820e725e7879fbe76",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/health-records/[section]",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/patient/health-records/[section]/route.ts",
+      "sourceSha256": "7166769a6b3f0f08e29dadf76d82fdee8f6391c493c803380de5f95b84ee42ab",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/health-records/catalogs/[catalog]",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/patient/health-records/catalogs/[catalog]/route.ts",
+      "sourceSha256": "9793192f4090c613f1fc29fb7c0598c1895e24705b46dbee0b359eb2c1833ab5",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/profile",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "source": "app/api/patient/profile/route.ts",
+      "sourceSha256": "1a91ae4e20cc67ca2bd79513f9a219570f0dac49cc81c20036f2b30fb65c6488",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/profile/onboarding",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/patient/profile/onboarding/route.ts",
+      "sourceSha256": "fa6e17df14b8de9b2de3510fe7dafd95a28f95d7e382ab39f517c9d92a002b84",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/patient/records",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/api/patient/records/route.ts",
+      "sourceSha256": "cb4a913d70a9e9b657adc5e5bc9037a1360c6c00d93526b16b7adf82646928d3",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/ph-address",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/ph-address/route.ts",
+      "sourceSha256": "fcfe30a8cf28b0ca661c6f4eb14ca39345e48bcc77adb18f5845a44148873f69",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/test-support/e2e/credentials/consume",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/api/test-support/e2e/credentials/consume/route.ts",
+      "sourceSha256": "16480cda4f39b328623994b2751e6b7e0af8391e054ce3cdf740f17af76c5ec3",
+      "usesDatabase": false,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/api/trace/departments",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/api/trace/departments/route.ts",
+      "sourceSha256": "df3865879a3d3c741336f8c3633ccbadf30b99dc63e7b5c8d1835813a51e3540",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/integrations/v1/appointments",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/integrations/v1/appointments/route.ts",
+      "sourceSha256": "a95f03b93fa5ed1223882757ace583c23dc277154942d6f5ff7d3c620c93b3b0",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/integrations/v1/doctors",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/integrations/v1/doctors/route.ts",
+      "sourceSha256": "7f31f4d768751a14ef2317b9d2c74f97fcb8c6591ebcffbb94f3e44e993b16da",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/integrations/v1/medical-certificates",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/integrations/v1/medical-certificates/route.ts",
+      "sourceSha256": "4efb0d5330eb5e6edb9774bfcbc4faa9b9f36a4155f5bdd24862f34e98f0ce86",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/integrations/v1/patient/appointments",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/integrations/v1/patient/appointments/route.ts",
+      "sourceSha256": "f50c048f93a5044612334f7627a39aee20e5670636fcbe9ad4730b86e72bcc8e",
+      "usesDatabase": true,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/integrations/v1/patient/bootstrap",
+      "methods": [
+        "POST"
+      ],
+      "source": "app/integrations/v1/patient/bootstrap/route.ts",
+      "sourceSha256": "b1ff13f4c036751d785a006fdf21e0d4cc7c9f926343f9948ced4eff6f6be926",
+      "usesDatabase": false,
+      "hasGatewaySession": true,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/integrations/v1/patients",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/integrations/v1/patients/route.ts",
+      "sourceSha256": "9c4228cf2187e001fbfb5364c138514ec4303729b9c0ff2d70a616e4fe03b656",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/integrations/v1/prescriptions",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "app/integrations/v1/prescriptions/route.ts",
+      "sourceSha256": "8902b0dbe3662b905a0c864c20e0d589f88c7bf1d8da81d2fd7343850b89ed66",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    },
+    {
+      "path": "/internal/users/[user_id]/roles",
+      "methods": [
+        "GET"
+      ],
+      "source": "app/internal/users/[user_id]/roles/route.ts",
+      "sourceSha256": "1bf8b0b4cad856c8c621fd62f49ea267c16b96cded8593bd6849fd1d5a7aa2f3",
+      "usesDatabase": true,
+      "hasGatewaySession": false,
+      "migrationStatus": "pending_contract_parity",
+      "contractReview": {
+        "caller": null,
+        "authentication": null,
+        "targetOwner": null,
+        "requiredRole": null,
+        "requestDto": null,
+        "responseDto": null,
+        "cookies": null,
+        "bodyLimit": null,
+        "timeout": null,
+        "reviewed": false
+      }
+    }
+  ]
+}

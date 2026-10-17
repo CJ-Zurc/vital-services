@@ -11,19 +11,17 @@ const trustedGateway = require("./middleware/trustedGateway");
 const vitalRouter = require("./routes/vital");
 const paymongo = require("./paymongo");
 const { runPaymentOperation } = require("./payment-operations");
+const { requestLogger } = require("./logger");
 
 function asyncHandler(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 }
 
-function createApp() {
+function createApp({ provider = paymongo, ledger, jobFetch = fetch } = {}) {
   const app = express();
+  app.use(requestLogger);
   app.use(express.json({ limit: "1mb" }));
   app.use(correlationId);
-  app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    next();
-  });
 
   app.get("/health", (_req, res) => {
     res.json({ success: true, data: { service: "vital-services" } });
@@ -48,12 +46,13 @@ function createApp() {
         });
       }
       const operation = await runPaymentOperation({
+        ledger,
         operationKey,
         operationType: "checkout",
         payload: { appointmentId, amount, description, successUrl, cancelUrl },
         correlationId: req.correlationId,
         execute: () =>
-          paymongo.createCheckout({
+          provider.createCheckout({
             appointmentId,
             amount,
             description: description || "VITAL consultation fee",
@@ -72,7 +71,7 @@ function createApp() {
     "/payments/paymongo/checkouts/:checkoutSessionId",
     requireInternalService,
     asyncHandler(async (req, res) => {
-      const status = await paymongo.retrieveCheckout(req.params.checkoutSessionId);
+      const status = await provider.retrieveCheckout(req.params.checkoutSessionId);
       res.json({ success: true, data: status });
     }),
   );
@@ -81,7 +80,7 @@ function createApp() {
     "/payments/paymongo/checkouts/:checkoutSessionId/expire",
     requireInternalService,
     asyncHandler(async (req, res) => {
-      const result = await paymongo.expireCheckout(req.params.checkoutSessionId);
+      const result = await provider.expireCheckout(req.params.checkoutSessionId);
       res.json({ success: true, data: result });
     }),
   );
@@ -98,11 +97,12 @@ function createApp() {
         });
       }
       const operation = await runPaymentOperation({
+        ledger,
         operationKey,
         operationType: "refund",
         payload: { paymentId, amount, reason, appointmentId },
         correlationId: req.correlationId,
-        execute: () => paymongo.createRefund({ paymentId, amount, reason }),
+        execute: () => provider.createRefund({ paymentId, amount, reason }),
       });
       res.status(operation.operationStatus === "pending" ? 202 : 200).json({
         success: operation.operationStatus === "completed",
@@ -115,7 +115,7 @@ function createApp() {
     "/jobs/appointments/auto-complete",
     requireInternalService,
     asyncHandler(async (req, res) => {
-      const response = await fetch(
+      const response = await jobFetch(
         `${vitalWebUrl}/api/internal/appointments/auto-complete`,
         {
           method: "POST",

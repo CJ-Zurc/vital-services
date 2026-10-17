@@ -6,6 +6,24 @@ on:
   pull_request:
     branches: ["development", "staging", "main", "master"]
   workflow_dispatch:
+    inputs:
+      eda_action:
+        description: 'Separate EDA operation; never deploys or activates flags'
+        type: choice
+        default: none
+        options: [none, publish-candidate, runtime-acceptance]
+      root_sha:
+        description: 'Reviewed Capstone_BGH full commit SHA for disposable checks'
+        type: string
+      api_image:
+        description: 'Published EDA runtime ghcr.io/cj-zurc/vital-services@sha256 digest'
+        type: string
+      web_image:
+        description: 'Published ghcr.io/cj-zurc/vital-web@sha256 digest'
+        type: string
+      web_sha:
+        description: 'Compatible published Web full SHA; required for runtime, overrides VITAL_EDA_COMPATIBLE_WEB_SHA for route review'
+        type: string
 
 permissions:
   contents: read
@@ -16,12 +34,306 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  eda-paired-route-review:
+    name: Paired Services/Web static route review (not runtime parity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      WEB_SHA: ${{ inputs.web_sha || vars.VITAL_EDA_COMPATIBLE_WEB_SHA }}
+    outputs:
+      web_sha: ${{ steps.source.outputs.web_sha }}
+    steps:
+      - name: Require explicit compatible published Web SHA
+        shell: bash
+        run: |
+          if [[ ! "$WEB_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo 'Set web_sha or repository variable VITAL_EDA_COMPATIBLE_WEB_SHA to a reviewed published full Web SHA.' >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          path: vital-services
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: CJ-Zurc/vital-web
+          ref: ${{ env.WEB_SHA }}
+          token: ${{ secrets.VITAL_EDA_SOURCE_READ_TOKEN || github.token }}
+          path: vital-web
+          persist-credentials: false
+      - name: Verify exact paired source
+        id: source
+        shell: bash
+        run: |
+          test "$(git -C vital-web rev-parse HEAD)" = "$WEB_SHA"
+          test "$(git -C vital-services rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "web_sha=$WEB_SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vital-services/package-lock.json
+      - run: npm ci
+        working-directory: vital-services
+      - name: Review all paired source route contracts
+        working-directory: vital-services
+        env:
+          EDA_TEST_ENABLED: 'false'
+        run: |
+          set -o pipefail
+          node --import tsx --test test/contracts/route-contracts.test.ts 2>&1 | tee ../vital-paired-route-review.tap
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vital-paired-route-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: vital-paired-route-review.tap
+          if-no-files-found: warn
+
+  eda-publish-candidate:
+    name: Publish EDA candidate only (no deployment)
+    needs: [lint-and-test, eda-paired-route-review]
+    if: github.event_name == 'workflow_dispatch' && inputs.eda_action == 'publish-candidate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+        env:
+          EDA_TEST_ENABLED: 'false'
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        id: eda
+        with:
+          context: .
+          file: Dockerfile.eda
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/cj-zurc/vital-services:eda-${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          provenance: mode=max
+      - uses: docker/build-push-action@v5
+        id: eda-tools
+        with:
+          context: .
+          file: Dockerfile.eda
+          target: tools
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/cj-zurc/vital-services:eda-tools-${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          provenance: mode=max
+      - name: Record runtime and separate manual tools image (not acceptance)
+        env:
+          DIGEST: ${{ steps.eda.outputs.digest }}
+          TOOLS_DIGEST: ${{ steps.eda-tools.outputs.digest }}
+          REVIEWED_WEB_SHA: ${{ needs.eda-paired-route-review.outputs.web_sha }}
+        run: |
+          node -e 'require("fs").writeFileSync("eda-candidate.json", JSON.stringify({source:process.env.GITHUB_SHA,reviewedWebSource:process.env.REVIEWED_WEB_SHA,api:`ghcr.io/cj-zurc/vital-services@${process.env.DIGEST}`,worker:`ghcr.io/cj-zurc/vital-services@${process.env.DIGEST}`,tools:`ghcr.io/cj-zurc/vital-services@${process.env.TOOLS_DIGEST}`,runtimeAcceptance:"notexecuted",activation:false},null,2))'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vital-services-eda-candidate-${{ github.sha }}
+          path: eda-candidate.json
+
+  eda-runtime-acceptance:
+    name: Enabled API/worker, native TLS storage and Unix scanner (not staging)
+    needs: [lint-and-test, eda-crossservice-contracts]
+    if: github.event_name == 'workflow_dispatch' && inputs.eda_action == 'runtime-acceptance'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    env:
+      ROOT_SHA: ${{ inputs.root_sha }}
+      WEB_SHA: ${{ inputs.web_sha }}
+      API_IMAGE: ${{ inputs.api_image }}
+      WEB_IMAGE: ${{ inputs.web_image }}
+    steps:
+      - name: Require immutable inputs
+        run: |
+          [[ "$ROOT_SHA" =~ ^[a-f0-9]{40}$ && "$WEB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$API_IMAGE" =~ ^ghcr.io/cj-zurc/vital-services@sha256:[a-f0-9]{64}$ ]]
+          [[ "$WEB_IMAGE" =~ ^ghcr.io/cj-zurc/vital-web@sha256:[a-f0-9]{64}$ ]]
+      - uses: actions/checkout@v4
+        with:
+          path: vital-services
+      - uses: actions/checkout@v4
+        with:
+          repository: Capstone-BGH/Capstone_BGH
+          ref: ${{ inputs.root_sha }}
+          token: ${{ secrets.VITAL_EDA_SOURCE_READ_TOKEN || github.token }}
+          path: release-root
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: CJ-Zurc/vital-web
+          ref: ${{ inputs.web_sha }}
+          token: ${{ secrets.VITAL_EDA_SOURCE_READ_TOKEN || github.token }}
+          path: vital-web
+          persist-credentials: false
+      - name: Install existing workflow YAML parser dependencies
+        working-directory: vital-services
+        run: npm ci
+      - name: Nonmutating release, environment and isolation contracts
+        run: node --test release-root/scripts/vital-release.test.mjs release-root/scripts/vital-env-preflight.test.mjs release-root/scripts/vital-runtime-contract.test.mjs
+      - name: Disposable enabled runtime and native storage/scanner contracts
+        run: bash release-root/scripts/ci-vital-runtime.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vital-eda-runtime-pending-${{ github.run_id }}
+          path: vital-runtime-evidence.json
+          if-no-files-found: error
+
+  eda-crossservice-contracts:
+    name: BFF/owner contract regressions (simulated external transports)
+    needs: [lint-and-test]
+    if: github.event_name == 'workflow_dispatch' && inputs.eda_action == 'runtime-acceptance'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Require reviewed immutable source
+        env:
+          WEB_SHA: ${{ inputs.web_sha }}
+          ROOT_SHA: ${{ inputs.root_sha }}
+        run: '[[ "$WEB_SHA" =~ ^[a-f0-9]{40}$ && "$ROOT_SHA" =~ ^[a-f0-9]{40}$ ]]'
+      - uses: actions/checkout@v4
+        with:
+          repository: CJ-Zurc/vital-web
+          ref: ${{ inputs.web_sha }}
+          token: ${{ secrets.VITAL_EDA_SOURCE_READ_TOKEN || github.token }}
+          path: vital-web
+          persist-credentials: false
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install --frozen-lockfile
+        working-directory: vital-web
+      - name: Existing Web/BFF integration contracts, not live central-service evidence
+        working-directory: vital-web
+        run: |
+          set -o pipefail
+          node --import tsx --test --test-concurrency=1 tests/eda-profile.test.ts tests/eda-public-registration.test.ts tests/eda-records.test.ts tests/eda-payment.test.ts tests/eda-video-transport.test.ts tests/eda-sse.test.ts 2>&1 | tee ../vital-contract-results.tap
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vital-simulated-crossservice-contracts-${{ github.run_id }}
+          path: vital-contract-results.tap
+          if-no-files-found: error
+
+  eda-domain-runtime:
+    name: Real isolated PostgreSQL/RabbitMQ domain and crash-recovery scenarios
+    needs: [lint-and-test, eda-crossservice-contracts]
+    if: github.event_name == 'workflow_dispatch' && inputs.eda_action == 'runtime-acceptance'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Existing actual DB/broker/mTLS suites with explicit owner opt-ins
+        env:
+          EDA_TEST_VIDEO_ENABLED: 'true'
+          EDA_TEST_MESSAGING_ENABLED: 'true'
+          EDA_TEST_RECORDS_ENABLED: 'true'
+          # Storage/scanner transport runs in the separate native runtime job.
+          EDA_TEST_RECORDS_ARTIFACTS_ENABLED: 'false'
+        run: |
+          set -o pipefail
+          bash docker/eda/run-integration.sh 2>&1 | tee vital-domain-results.tap
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vital-real-domain-runtime-simulated-providers-${{ github.run_id }}
+          path: vital-domain-results.tap
+          if-no-files-found: error
+
+  eda-browser-smoke:
+    name: Source-built browser layout smoke (not authenticated lifecycle acceptance)
+    needs: [lint-and-test, eda-crossservice-contracts]
+    if: github.event_name == 'workflow_dispatch' && inputs.eda_action == 'runtime-acceptance'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      WEB_SHA: ${{ inputs.web_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Capstone-BGH/Capstone_BGH
+          ref: ${{ inputs.root_sha }}
+          token: ${{ secrets.VITAL_EDA_SOURCE_READ_TOKEN || github.token }}
+          path: release-root
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: CJ-Zurc/vital-web
+          ref: ${{ inputs.web_sha }}
+          token: ${{ secrets.VITAL_EDA_SOURCE_READ_TOKEN || github.token }}
+          path: vital-web
+          persist-credentials: false
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install --frozen-lockfile
+        working-directory: vital-web
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: vital-web
+      - run: pnpm run build
+        working-directory: vital-web
+        env:
+          NEXT_PUBLIC_APP_URL: http://127.0.0.1:3137
+          NEXT_PUBLIC_API_GATEWAY_URL: http://127.0.0.1:1
+          NEXT_PUBLIC_SYSTEM_SLUG: vital
+      - run: node release-root/release/vital/ci-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vital-browser-smoke-${{ github.run_id }}
+          path: |
+            vital-browser-evidence.json
+            vital-login-*.png
+          if-no-files-found: error
+
   lint-and-test:
     name: Unit Tests and Linting
+    outputs:
+      run_ci: ${{ steps.ci-gate.outputs.run }}
     if: >
       github.event_name == 'pull_request' ||
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/development')
+      github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -68,7 +380,7 @@ jobs:
         if: steps.ci-gate.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -81,7 +393,19 @@ jobs:
 
       - name: Run tests
         if: steps.ci-gate.outputs.run == 'true'
-        run: node --test --test-reporter=tap --test-reporter-destination=test-results.tap
+        env:
+          EDA_TEST_ENABLED: 'false'
+        run: |
+          npm run generate
+          node --import tsx --test --test-concurrency=1 --test-reporter=tap --test-reporter-destination=test-results.tap test/*.test.js test/eda-*.test.ts
+
+      - name: Generate both clients and typecheck EDA backend
+        if: steps.ci-gate.outputs.run == 'true'
+        run: npm run typecheck
+
+      - name: Build EDA API and worker
+        if: steps.ci-gate.outputs.run == 'true'
+        run: npm run build
 
       - name: Upload Test Artifact
         uses: actions/upload-artifact@v4
@@ -91,166 +415,26 @@ jobs:
           path: test-results.tap
           retention-days: 7
 
-  build-and-push:
-    name: Build and Push Docker Image
+  eda-integration:
+    name: Isolated EDA PostgreSQL and RabbitMQ
     needs: [lint-and-test]
     if: >
-      always() &&
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
-      (needs.lint-and-test.result == 'success' || needs.lint-and-test.result == 'skipped')
+      needs.lint-and-test.result == 'success' &&
+      needs.lint-and-test.outputs.run_ci == 'true' &&
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/development'))
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image-tag: ${{ steps.image.outputs.tag }}
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Resolve image tag
-        id: image
-        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          node-version: '22'
+      - name: Run only the isolated EDA test project
+        run: bash docker/eda/run-integration.sh
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha,format=short
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
-            type=raw,value=production,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
-
-      - name: Build and push image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
-
-  deploy-staging:
-    name: Deploy to Staging
-    needs: [build-and-push]
-    if: >
-      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/staging' &&
-      needs.build-and-push.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
-    environment:
-      name: staging
-    concurrency:
-      group: deploy-vital-services-staging
-      cancel-in-progress: false
-    steps:
-      - name: SSH deploy
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
-          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN || secrets.GITHUB_TOKEN }}
-        with:
-          host: ${{ secrets.STAGING_SERVER_HOST }}
-          username: ${{ secrets.STAGING_SERVER_USER }}
-          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-          envs: DEPLOY_PATH,IMAGE_TAG,GHCR_USERNAME,GHCR_READ_TOKEN
-          script_stop: true
-          script: |
-            set -euo pipefail
-            : "${DEPLOY_PATH:?Missing STAGING_DEPLOY_PATH}"
-            : "${IMAGE_TAG:?Missing image tag from build-and-push}"
-
-            flock /tmp/bgh-staging-deploy.lock bash -lc '
-              set -euo pipefail
-
-              cd "$DEPLOY_PATH"
-              echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-
-              export VITAL_SERVICES_IMAGE_TAG="$IMAGE_TAG"
-              docker compose -f compose.yaml -f compose.staging.yaml --env-file .env.compose pull vital-services-api
-              docker compose -f compose.yaml -f compose.staging.yaml --env-file .env.compose up -d --no-deps --force-recreate vital-services-api
-
-              for i in $(seq 1 30); do
-                if curl -fsS http://127.0.0.1:8009/health >/dev/null; then
-                  echo "vital-services-api healthy"
-                  exit 0
-                fi
-                sleep 2
-              done
-
-              docker compose -f compose.yaml -f compose.staging.yaml --env-file .env.compose logs --tail=100 vital-services-api
-              exit 1
-            '
-
-  deploy-production:
-    name: Deploy to Production
-    needs: [build-and-push]
-    if: >
-      !cancelled() && github.event_name == 'push' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
-      vars.PRODUCTION_DEPLOY_ENABLED == 'true' && needs.build-and-push.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
-    environment:
-      name: production
-    concurrency:
-      group: deploy-vital-services-production
-      cancel-in-progress: false
-    steps:
-      - name: SSH deploy
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          IMAGE_NAME: ghcr.io/${{ github.repository }}
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
-          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
-          SERVICE_NAME: ${{ vars.PRODUCTION_COMPOSE_SERVICE || 'vital-services-api' }}
-          HEALTHCHECK_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
-          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN || secrets.GITHUB_TOKEN }}
-        with:
-          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
-          username: ${{ secrets.PRODUCTION_SERVER_USER }}
-          key: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
-          envs: IMAGE_NAME,IMAGE_TAG,DEPLOY_PATH,SERVICE_NAME,HEALTHCHECK_URL,GHCR_USERNAME,GHCR_READ_TOKEN
-          script_stop: true
-          script: |
-            set -euo pipefail
-            : "${DEPLOY_PATH:?Missing PRODUCTION_DEPLOY_PATH}"
-            : "${SERVICE_NAME:?Missing PRODUCTION_COMPOSE_SERVICE}"
-            cd "$DEPLOY_PATH"
-            printf "IMAGE_NAME=%s\nIMAGE_TAG=%s\n" "$IMAGE_NAME" "$IMAGE_TAG" > .deploy.env
-            echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-            if [ -f compose.yaml ]; then COMPOSE_FILE=compose.yaml; elif [ -f docker-compose.yml ]; then COMPOSE_FILE=docker-compose.yml; elif [ -f docker-compose.yaml ]; then COMPOSE_FILE=docker-compose.yaml; else echo "No compose file found in $DEPLOY_PATH" >&2; exit 1; fi
-            COMPOSE_ENV_ARGS=(--env-file .deploy.env)
-            if [ -f .env ]; then
-              COMPOSE_ENV_ARGS=(--env-file .env --env-file .deploy.env)
-            fi
-            for service in $SERVICE_NAME; do
-              docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" pull "$service"
-            done
-            docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" up -d --remove-orphans $SERVICE_NAME
-            if [ -n "${HEALTHCHECK_URL:-}" ]; then
-              for i in $(seq 1 30); do curl -fsS "$HEALTHCHECK_URL" >/dev/null && exit 0; sleep 2; done
-              echo "Health check failed: $HEALTHCHECK_URL" >&2
-              exit 1
-            fi
+# Push/PR events verify source only. No independent mutable release publisher
+# or SSH deployment exists. Coordinated acceptance and explicit authorization
+# remain exclusively in root release tooling; candidate/runtime jobs do not deploy.

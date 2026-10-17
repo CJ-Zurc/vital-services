@@ -1,5 +1,18 @@
 # VITAL Services
 
+## EDA Development Candidate
+
+This branch contains the revised modular API and shared worker under `src/eda`.
+It owns Core and Integrations schemas and backend business workflows. Use
+`Dockerfile.eda` and the coordinated root candidate configuration, not the legacy
+entrypoint, for EDA verification. Activation flags remain off; this source
+checkpoint does not authorize deployment. See
+[implementation status](docs/eda/implementation-status.md).
+
+## Separately Pinned Legacy Runtime
+
+The description below documents the old deployed implementation, not EDA ownership.
+
 Node.js/Express service for PayMongo checkout/status/expiration/refund operations
 and the VITAL_WEB appointment auto-completion bridge. Payment mutations use a
 shared PostgreSQL operation ledger to prevent duplicate provider calls.

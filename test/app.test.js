@@ -4,7 +4,7 @@ const { createApp } = require("../src/app");
 const { internalServiceKey } = require("../src/config");
 
 async function withServer(run) {
-  const server = createApp().listen(0);
+  const server = createApp().listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   const address = server.address();
   try {
@@ -14,12 +14,12 @@ async function withServer(run) {
   }
 }
 
-test("health endpoint identifies the PayMongo service", async () => {
+test("health endpoint identifies the actual VITAL API runtime", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/health`);
     const payload = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(payload.data.service, "vital-services-paymongo");
+    assert.equal(payload.data.service, "vital-services");
   });
 });
 
