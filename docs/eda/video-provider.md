@@ -1,33 +1,19 @@
-# Google Meet Provider Boundary
+# Video Provider
 
-The Video adapter pins Google's OAuth token, verified userinfo, revoke and Meet
-v2 space endpoints. It uses separate doctor Meet consent and
-`meetings.space.created`, not UHSE_AUTH login tokens. Creation requests use
-restricted spaces; manual links receive syntax validation only.
+The supported runtime is the default ecosystem EDA API and worker. Business
+ownership lives under `src/eda/modules/video/`; the Core and Integrations
+schemas and migrations declare persistence ownership. Web adapters retain browser
+DTO/session behavior while domain decisions and writes execute in the API.
 
-Transport has a twelve-second whole-response deadline and 64-KiB streaming
-response limit. Redirects and unsafe known-resource paths are denied. Error
-bodies are not returned or logged. No automatic network retries exist. Creation
-and OAuth exchange persist execution-start before transport; lost/ambiguous
-outcomes cannot authorize another creation/code exchange. Only a known resource
-name can be retrieved, under current doctor authority and connection fencing.
+Mutations validate actor/resource authority and operation identity. Transactions
+write the outbox; worker effects use idempotent delivery and owner receipts.
+External outcomes must be verified before retrying a mutation. No cross-owner
+database access or synthetic acknowledgement is permitted.
 
-AES-256-GCM credentials bind key version and doctor identity as authenticated
-data. The bounded keyring supports previous decrypt keys and a single active
-encrypt key. Runtime reads credentials/keys from backend-only mounted secret
-files. OAuth storage encrypts PKCE/state/binding/revision and contains no VITAL
-session token. Rotation/revocation and real consent remain activation gates.
+See [architecture](../architecture.md), [integration](../integration_guide.md),
+[configuration](../configuration.md) and [verification](../testing.md). Source
+tests describe contract behavior; live workflow, replay, scanner, load and reset
+acceptance must be recorded against the deployed image IDs.
 
-Backend quota is two started creation attempts per doctor/appointment-purpose
-lineage. Failed or uncertain starts count. Identical commands, preflight failures
-and throttle rejections do not consume another start. Reservation and quota
-transactions use shared advisory/row locks. Five/doctor and fifty/application
-per minute are enforced across replicas. Reconnect/reschedule do not reset quota.
-
-`test/eda-video-provider.test.ts` exercises the real adapter through injected
-fetch responses, including bounded streams, deadlines, receipt validation,
-encryption/rotation and Web-compatible link rules. These are fixtures, not live
-Google acceptance. No provider action is performed by checkpoint verification.
-
-References: [Meet spaces creation](https://developers.google.com/workspace/meet/api/reference/rest/v2/spaces/create),
-[Meet spaces retrieval](https://developers.google.com/workspace/meet/api/reference/rest/v2/spaces/get).
+Google credentials belong only to backend configuration. Provider creation remains
+disabled until separately enabled; Web never receives provider secrets.

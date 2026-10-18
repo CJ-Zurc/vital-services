@@ -1,19 +1,14 @@
----
-description: Steps to rebuild VITAL_Services through the root compose stack.
----
+# VITAL runtime operations
 
-# docker-rebuild skill
+Root Compose owns API, worker, scanner and scoped infrastructure. From the workspace root:
 
-Run from `D:\repos\Capstone_BGH`.
-
-```powershell
-docker compose --env-file .env.compose up -d --build --force-recreate vital-services-api vital-services-db
-docker compose --env-file .env.compose logs -f vital-services-api
+```sh
+python scripts/ecosystem.py vital-start
+docker compose --env-file .env.compose logs --tail 100 vital-eda-api vital-eda-worker
 ```
 
-For a clean image rebuild:
-
-```powershell
-docker compose --env-file .env.compose build --no-cache vital-services-api
-docker compose --env-file .env.compose up -d --force-recreate vital-services-api
-```
+This lifecycle provisions infrastructure, runs migrations using separate tools
+credentials, grants runtime DML, provisions the broker and starts bounded runtimes.
+For source verification run `npm test` and `npm run build` inside VITAL_Services.
+Do not start a local stack when the user forbids it. Staging uses the root manual
+deployment runbook and the deployment lock; never rebuild implicitly via startup.

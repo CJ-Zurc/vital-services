@@ -1,31 +1,12 @@
 # VITAL Services
 
-## EDA Development Candidate
+VITAL's Node 22 modular EDA backend owns operational business workflows. Core and
+Integrations are separate PostgreSQL databases. API and worker share the runtime
+image; migration/provision/baseline commands use a separate tools image. Web is
+the browser/BFF and has no operational database.
 
-This branch contains the revised modular API and shared worker under `src/eda`.
-It owns Core and Integrations schemas and backend business workflows. Use
-`Dockerfile.eda` and the coordinated root candidate configuration, not the legacy
-entrypoint, for EDA verification. Activation flags remain off; this source
-checkpoint does not authorize deployment. See
-[implementation status](docs/eda/implementation-status.md).
-
-## Separately Pinned Legacy Runtime
-
-The description below documents the old deployed implementation, not EDA ownership.
-
-Node.js/Express service for PayMongo checkout/status/expiration/refund operations
-and the VITAL_WEB appointment auto-completion bridge. Payment mutations use a
-shared PostgreSQL operation ledger to prevent duplicate provider calls.
-
-Root Compose runs `vital-services-api` on `8009` and `vital-services-db` on
-host `5435`. `VITAL_WEB` owns the Prisma schema and the appointment/telemedicine
-operational workflows. This service's Gateway `/appointments` and `/telemedicine`
-handlers are currently empty scaffolds, not the operational appointment API.
-
-For local Node development, copy `.env.example` to `.env`, configure the shared
-database/provider/directional credentials, then run `npm ci` and `npm run dev`.
-For standalone or root containers, follow [deployment](docs/deployment.md).
-
-Start with [docs/README.md](docs/README.md). The current routes are in
-[API reference](docs/api_reference.md); verification uses `npm test`
-(`node --test`) and `npm run lint`. No Python test runner applies here.
+The root default Compose topology is the supported ecosystem runtime. Follow
+[deployment](docs/deployment.md), [architecture](docs/architecture.md),
+[configuration](docs/configuration.md), [integration](docs/integration_guide.md)
+and [testing](docs/testing.md). Use the root lifecycle for migrations and baseline
+seeding; do not query another service's database. Keep secrets outside source.

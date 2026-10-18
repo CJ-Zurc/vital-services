@@ -5,7 +5,7 @@ x-node: &node
   image: ${EDA_NODE_IMAGE:-vital-eda-node:local}
   build:
     context: .
-    dockerfile: Dockerfile.eda
+    dockerfile: Dockerfile
     target: ${EDA_IMAGE_TARGET:-runtime}
   profiles: [eda]
   user: "1000:1000"
