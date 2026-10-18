@@ -118,8 +118,10 @@ async function runPaymentOperation({
       await ledger.finish(operationKey, "completed", result, null),
     );
   } catch (error) {
-    const status = error.response ? "failed" : "unknown";
-    await ledger.finish(operationKey, status, null, error.message);
+    const providerStatus = error.response?.status;
+    const definiteRejection = [400, 401, 403, 404, 422].includes(providerStatus);
+    const status = definiteRejection ? "failed" : "unknown";
+    await ledger.finish(operationKey, status, null, definiteRejection ? "PROVIDER_REQUEST_REJECTED" : "PROVIDER_OUTCOME_UNKNOWN");
     error.operationStatus = status;
     throw error;
   }

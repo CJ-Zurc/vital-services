@@ -1,0 +1,13 @@
+# Only for short-lived compose run invocations, never compose up.
+services:
+  api:
+    image: ${EDA_TOOLS_IMAGE:-vital-eda-tools:local}
+    build: {target: tools}
+    environment:
+      VITAL_EDA_PROVISION_BROKER: ${VITAL_EDA_PROVISION_BROKER:-false}
+    secrets: !override
+      - core_migrator_password
+      - integrations_migrator_password
+      - rabbit_provision_password
+      - {source: db_ca, target: db-ca.pem}
+      - {source: broker_ca, target: broker-ca.pem}

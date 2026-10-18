@@ -3,9 +3,10 @@ import globals from "globals";
 
 export default [
   {
-    ignores: ["node_modules/**", "coverage/**"],
+    ignores: ["node_modules/**", "coverage/**", "dist/**", "src/eda/generated/**"],
   },
   js.configs.recommended,
+  { files: ["**/*.mjs"], languageOptions: { globals: globals.node } },
   {
     files: ["**/*.js"],
     languageOptions: {

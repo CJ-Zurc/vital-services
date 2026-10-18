@@ -1,0 +1,11 @@
+{
+  "users": [
+    {"name": "vital_runtime", "password_hash": "REPLACE_WITH_SALTED_SHA256_HASH", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": []},
+    {"name": "vital_provision", "password_hash": "REPLACE_WITH_DIFFERENT_SALTED_SHA256_HASH", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": []}
+  ],
+  "vhosts": [{"name": "vital_test"}],
+  "permissions": [
+    {"user": "vital_runtime", "vhost": "vital_test", "configure": "^$", "write": "^vital\\.test\\.", "read": "^vital\\.test\\."},
+    {"user": "vital_provision", "vhost": "vital_test", "configure": "^vital\\.test\\.", "write": "^vital\\.test\\.", "read": "^vital\\.test\\."}
+  ]
+}

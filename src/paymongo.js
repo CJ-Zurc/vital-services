@@ -1,6 +1,7 @@
 const axios = require("axios");
 const { paymongoSecret } = require("./config");
 const { errorFields, log, safeTarget } = require("./logger");
+const { requireSandboxSecret } = require("./payment-sandbox");
 
 const api = axios.create({
   baseURL: "https://api.paymongo.com/v1",
@@ -40,11 +41,7 @@ api.interceptors.response.use(
 );
 
 function requirePaymongoSecret() {
-  if (!paymongoSecret) {
-    const error = new Error("PayMongo sandbox secret key is not configured.");
-    error.status = 500;
-    throw error;
-  }
+  requireSandboxSecret(paymongoSecret);
 }
 
 function amountToCentavos(amount) {

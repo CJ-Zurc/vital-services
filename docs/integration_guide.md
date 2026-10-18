@@ -1,6 +1,16 @@
 # Integration guide
 
+Default-off [registration provenance](eda/registration-provenance.md) preserves
+Gateway identity creation and independently verifies Auth-owned pre-OTP purpose
+before Core marker/consent creation. New scoped keys do not grant login access.
+
 ## Current ownership
+
+The following section describes the separately pinned legacy deployment.
+The revised candidate instead owns all backend modules in this repository,
+with Web limited to BFF/session and user-scoped Auth/EHR transport. Flags off
+do not restore legacy writers in the cleaned Web candidate. See
+[EDA contracts](eda/contracts.md) for the target trust and ownership boundaries.
 
 VITAL_WEB owns appointments, schedules, patient/doctor data, clinical documents,
 and the Prisma schema. VITAL_Services owns PayMongo operations and the internal

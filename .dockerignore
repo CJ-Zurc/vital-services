@@ -13,4 +13,8 @@ CLAUDE.md
 AGENTS.md
 *.log
 coverage
+dist
+src/eda/generated
+.eda-secrets
+docker/eda/local-secrets
 .pytest_cache
