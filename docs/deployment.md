@@ -1,81 +1,22 @@
-# Deployment
+# VITAL deployment
 
-VITAL_Services is wired into the BGH workspace via the **root** compose at `D:\repos\Capstone_BGH\compose.yaml`. It also provides a standalone `docker-compose.yml` for isolated local development.
+Use root `compose.yaml` for the default EDA ecosystem. `compose.staging.yaml` is
+an image-only overlay with exact pins and no build contexts. See the root
+[VM runbook](../../docs/deployment/single-azure-vm.md) for monthly provisioning.
 
-## Image build
+Services: `vital-db`, `vital-storage`, `vital-eda-scanner`, `vital-eda-api`,
+`vital-eda-worker`, `vital-web`. Explicit tools: `vital-eda-migrate` and
+`vital-eda-provision`. The backend `Dockerfile` has separate runtime/tools
+targets; API and worker use the same runtime content. Web starts `server.js` and
+never migrates a database.
 
-The repo Dockerfile is multi-stage Node 20-alpine:
+`ecosystem.py vital-start` starts infrastructure, provisions roles/storage/broker,
+migrates, grants runtime DML and starts API/worker. Start Gateway before Web.
+`ecosystem.py seed` resolves configured Auth identities through owner commands,
+TRACE departments and EHR IDs before VITAL baseline reconciliation. It never runs
+large population/training. Repeat runs must preserve IDs and not duplicate rows.
 
-1. `deps` — installs production node_modules from `package-lock.json`.
-2. `runner` — copies `node_modules` and `src/`, exposes `8009`, runs `node src/index.js`.
-
-A container healthcheck hits `GET /health` on `8009`.
-
-## Local Compose
-
-VITAL_Services has its own `docker-compose.yml` file. You can run it standalone for local development.
-
-```powershell
-# From D:\repos\Capstone_BGH\VITAL_Services
-docker compose up -d --build
-docker compose logs -f vital-services-api
-```
-
-## Root compose entries
-
-The root compose defines:
-
-- `vital-services-db` — Postgres 16, port `${VITAL_SERVICES_DB_PORT:-5435}:5432`, volume `vital_services_postgres_data`.
-- `vital-services-api` — built from `./VITAL_Services`, port `${VITAL_SERVICES_API_PORT:-8009}:8009`, depends_on `vital-services-db: service_healthy` + `bgh-rabbitmq: service_started`.
-
-## Running
-
-From `D:\repos\Capstone_BGH`:
-
-```powershell
-# bootstrap envs (one-time)
-powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-root-env.ps1
-
-# phased full stack (recommended)
-powershell -ExecutionPolicy Bypass -File .\scripts\start-bgh-ecosystem.ps1
-
-# or targeted
-docker compose --env-file .env.compose up -d --build --force-recreate vital-services-api vital-services-db
-```
-
-## Logs
-
-```powershell
-docker compose --env-file .env.compose logs -f vital-services-api
-docker compose --env-file .env.compose logs -f vital-services-db
-```
-
-## Smoke test
-
-After startup:
-
-```powershell
-# from the host
-curl http://localhost:8009/health
-# expected: {"success":true,"data":{"service":"vital-services"}}
-
-# Browser/Gateway trust surfaces are documented in api_reference.md.
-# Auth role aggregation is owned by VITAL_WEB, not this service.
-```
-
-## CI/CD and staging
-
-The service uses the shared branch-flow GitHub Actions pattern. It runs ESLint
-and Node tests, publishes immutable GHCR images, and deploys the exact staging
-SHA through root `compose.yaml` plus `compose.staging.yaml`. Production deploy
-is protected by `PRODUCTION_DEPLOY_ENABLED`; neither environment builds source
-on the server.
-
-## Staging Environment Configuration
-
-Automated staging deployment targets the Azure VM (`172.197.219.24`):
-- Target deployment path: `/opt/bgh/Capstone_BGH`
-- Compose service: `vital-services-api`
-- Health check verification: `http://127.0.0.1:8009/health`
-- Automated authentication: `bgh_github_actions_staging` key pair
-
+Manual builds run sequentially on staging under the deploy lock, with resource
+checks and source/archive/image records. Keep approved images until live health,
+seed consistency and workflow checks pass. Resets and cleanup are separate,
+explicitly confirmed operations. No local stack is required for source tests.

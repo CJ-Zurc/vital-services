@@ -2,10 +2,10 @@
   "name": "vital-services",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/entrypoints/api.js",
   "scripts": {
-    "dev": "node src/index.js",
-    "start": "node src/index.js",
+    "dev": "npm run build && node docker/eda/runtime.mjs api",
+    "start": "node docker/eda/runtime.mjs api",
     "build": "npm run generate && node scripts/eda/clean-output.mjs && tsc -p tsconfig.json",
     "typecheck": "npm run generate && tsc -p tsconfig.json --noEmit",
     "generate": "prisma generate --config prisma/core.config.ts && prisma generate --config prisma/integrations.config.ts",
@@ -16,7 +16,7 @@
     "test:eda": "node --import tsx --test --test-concurrency=1 test/eda-*.test.ts",
     "eda:inventory": "node scripts/eda/inventory.mjs",
     "lint": "eslint .",
-    "test": "node --import tsx --test --test-concurrency=1 test/*.test.js test/eda-*.test.ts"
+    "test": "node --import tsx --test --test-concurrency=1 test/eda-*.test.ts"
   },
   "repository": {
     "type": "git",

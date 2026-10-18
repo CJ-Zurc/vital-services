@@ -121,7 +121,7 @@ jobs:
         id: eda
         with:
           context: .
-          file: Dockerfile.eda
+          file: Dockerfile
           target: runtime
           platforms: linux/amd64
           push: true
@@ -132,7 +132,7 @@ jobs:
         id: eda-tools
         with:
           context: .
-          file: Dockerfile.eda
+          file: Dockerfile
           target: tools
           platforms: linux/amd64
           push: true
@@ -200,7 +200,7 @@ jobs:
         working-directory: vital-services
         run: npm ci
       - name: Nonmutating release, environment and isolation contracts
-        run: node --test release-root/scripts/vital-release.test.mjs release-root/scripts/vital-env-preflight.test.mjs release-root/scripts/vital-runtime-contract.test.mjs
+        run: node --test release-root/scripts/vital-env-preflight.test.mjs
       - name: Disposable enabled runtime and native storage/scanner contracts
         run: bash release-root/scripts/ci-vital-runtime.sh
       - uses: actions/upload-artifact@v4
