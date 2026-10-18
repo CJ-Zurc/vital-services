@@ -1,25 +1,39 @@
-FROM node:20-alpine AS deps
-
+FROM node:22-bookworm-slim AS build
+# API and worker share this runtime target/digest; schemas and migrations stay
+# in the separate tools target. Generation uses only maintained Prisma schemas.
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci
+COPY prisma ./prisma
+COPY src/eda ./src/eda
+COPY scripts/eda/clean-output.mjs ./scripts/eda/clean-output.mjs
+RUN npm run build
+COPY docker/eda/runtime.mjs ./docker/eda/runtime.mjs
+COPY docker/eda/health.mjs ./docker/eda/health.mjs
+COPY test/eda-integration.test.ts ./test/eda-integration.test.ts
+COPY test/helpers ./test/helpers
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-
-
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
+# Administrative/test tooling is a separate, explicitly selected build target.
+FROM build AS tools
 ENV NODE_ENV=production
-ENV PORT=8009
+USER node
+ENTRYPOINT ["node", "docker/eda/runtime.mjs"]
+CMD ["api"]
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json package-lock.json ./
-COPY src ./src
+FROM build AS production-dependencies
+RUN npm prune --omit=dev
 
-EXPOSE 8009
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:8009/health', r => process.exit(r.statusCode===200?0:1)).on('error', () => process.exit(1))"
-
-CMD ["node", "src/index.js"]
+FROM node:22-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /etc/ssl/certs /etc/ssl/certs
+COPY --from=production-dependencies /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/docker/eda/runtime.mjs ./docker/eda/runtime.mjs
+COPY --from=build /app/docker/eda/health.mjs ./docker/eda/health.mjs
+USER node
+ENTRYPOINT ["node", "docker/eda/runtime.mjs"]
+CMD ["api"]

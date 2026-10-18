@@ -1,123 +1,22 @@
-# Architecture
+# VITAL architecture
 
-## Revised EDA Candidate
+Browser routes terminate in Web/BFF. Gateway owns login, refresh/session claims,
+system access and browser-facing integration routing. Web calls the modular API
+over private mTLS with short-lived signed actor/request assertions. Browser code
+never calls Docker service origins directly.
 
-The inactive Node 22/TypeScript candidate is organized by business ownership:
+Core owns profiles, appointments, clinical document workflows, encrypted messages
+and operational relationships. Integrations owns provider operations, durable
+delivery/receipts and integration projections. Each uses separate runtime roles.
+Transactions append outbox events; RabbitMQ and the shared worker deliver them
+with inbox/idempotency protection. Privileged migration/provision/seed tools are
+separate from runtime processes.
 
-```text
-src/eda/
-  modules/
-    appointment/          Scheduling, lifecycle, billing authorization and sagas
-    payment/              Sandbox provider operations and financial ledger
-    profile/              Patient/doctor markers, onboarding, consent, QR and sync
-    records/              VITAL clinical documents, snapshots and file ownership
-    video/                Meet credentials, generation and resource associations
-    messaging/            Encrypted chat, eligibility, receipts and retention
-    portal-integrations/  Scoped foreign readers and doctor-marker workflows
-    platform-delivery/    Shared durable audit/notification/sync delivery ledger
-    composition/          Typed cross-feature dashboards, without operational SQL
-  contracts/              Actor, event and owning-module interface contracts
-  infrastructure/         Database clients, trust, broker, outbox and bounded HTTP
-  http/                   Thin private routers and common middleware
-  workers/                Dispatch through the single shared worker
-  entrypoints/            Separate API and worker process modes
-  generated/              Generated Core and Integrations Prisma clients
-```
+Auth owns identities/credentials. EHR owns hospital patients, MRNs and clinical
+case persistence. TRACE owns department UUIDs. VITAL links owner-issued IDs and
+never opens another owner's database. Audit and Notification accept their scoped
+delivery contracts. Analytics reads only the documented operational exports.
 
-Folders are not additional services or databases. Appointment/Profile/Records/
-Messaging use Core; Payment/Video/delivery use Integrations as already defined.
-The two schemas and migration histories stay under `prisma/core` and
-`prisma/integrations`. Cross-feature calls retain typed owner contracts; database
-placement does not define a catch-all feature folder. The old `modules/core` and
-`modules/integrations` folders and forwarding paths have been removed.
-
-The Web candidate is frontend/BFF-only. The unchanged deployed legacy release is
-pinned separately. API/worker entrypoints intentionally refuse activation while
-the global target flag is off. Source checks do not establish runtime acceptance.
-The sections below describe legacy runtime reference behavior unless identified
-as candidate contracts; do not use them to enable independent EDA deployment.
-
-Messaging is an additional default-off Core module in the target runtime, not a
-new HTTP service/container/database. Appointment owns lifecycle eligibility;
-message writes share calendar/appointment locks, encrypt bodies, and journal
-only replay references. The existing worker handles inbox-deduplicated lifecycle
-and Messaging invalidations plus approval-gated retention. SSE is not activated.
-
-## Stack
-
-- Node.js 20 (Alpine in Docker)
-- Express 5 (CommonJS)
-- PostgreSQL 16 sidecar (`vital-services-db`)
-- The legacy runtime has no broker publisher; the disabled EDA runtime has its own outbox relay
-- PayMongo for checkout and refund provider operations
-
-## Layout
-
-```text
-src/
-|-- index.js                 Express bootstrap, payment routes, and health
-|-- config.js                Runtime configuration and production validation
-|-- db.js                    Shared VITAL PostgreSQL connection pool
-|-- payment-operations.js    Durable payment operation claiming and replay
-|-- middleware/
-|   |-- correlationId.js     Reads or generates X-Correlation-ID
-|   |-- internal-auth.js     Validates directional service credentials
-|   `-- trustedGateway.js    Validates X-Gateway-Secret and X-User-* headers
-`-- routes/
-    `-- vital.js             Gateway-forwarded appointment/telemedicine scaffolds
-```
-
-## Middleware Order
-
-1. `express.json()` parses request bodies.
-2. `correlationId` reads or creates one correlation ID and echoes it.
-3. Gateway routes validate `X-Gateway-Secret` before trusting `X-User-*`.
-4. Payment routes validate the `vital-web` directional credential.
-5. The error handler returns the upstream/error message. It does not currently emit structured correlated error logs; do not infer sanitized logging from this description.
-
-The `/health` endpoint is available to Docker health checks without credentials.
-The Gateway strips the `/vital` prefix before proxying public VITAL routes.
-
-## Persistence
-
-- `vital_services_db` is shared by VITAL_WEB and VITAL_Services.
-- VITAL_WEB owns the Prisma schema, local role markers, appointments, and the
-  `payment_operations` ledger.
-- VITAL_Services atomically claims and reconciles payment operations in that
-  ledger before calling PayMongo.
-- Completed, pending, and unknown operations return stored state without a new
-  provider call. A matching failed operation is claimed again as pending and
-  retried. Reusing the key with a different payload or operation type returns
-  `409`. Only explicit 400/401/403/404/422 provider rejections become failed.
-  Timeouts, conflicts, rate limits, server errors and transport failures remain
-  unknown and are not automatically repeated. Stored failure diagnostics use
-  redacted codes. Provider calls reject all credentials except sandbox secrets.
-
-## Disabled EDA Runtime
-
-`src/eda/entrypoints/api.ts` and `worker.ts` target Node.js 22/TypeScript,
-separate Core/Integrations clients, module-owned event exchanges, transactional
-outbox/inbox, and a dedicated verified AMQPS broker. They require explicit
-`VITAL_EDA_ENABLED=true`; this flag is not permission for a shared cutover.
-The target API includes guarded Profile, Payment, Appointment and Records
-contracts, with one shared worker and module interfaces. Records owns encrypted
-episode snapshots/documents and durable file/artifact operations in Core; EHR
-remains the clinical owner. Each module/processor stays disabled by default.
-Unsupported or missing-owner domain
-routes fail closed rather than falling back to legacy business writers.
-
-Outbox publication requires mandatory routing and publisher confirmation;
-receiving handlers commit inbox/effects before ACK. Bounded retries/DLQs do
-not establish exactly-once processing. See [implementation status](eda/implementation-status.md)
-for remaining domain and release gates.
-
-## Outbound Dependencies
-
-| Dependency | Purpose | Path |
-|---|---|---|
-| `UHSE_AUTH /internal/*` | Future identity enrichment; no current client | Direct when implemented |
-| `VITAL_WEB /api/internal/*` | Appointment background jobs | Direct |
-| RabbitMQ `audit.events` | Future business audit publisher | Direct when implemented |
-| `vital-services-db` | Shared VITAL persistence and payment ledger | Direct |
-
-VITAL_Services does not route backend enrichment back through the Gateway.
+Object storage has separate Records/profile principals. Files are scanned and
+encrypted as required; browser links use the public Gateway media route. API,
+worker and Web have process-specific configuration and bounded resource limits.

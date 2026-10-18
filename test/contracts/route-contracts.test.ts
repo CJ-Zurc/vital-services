@@ -47,7 +47,7 @@ function get(path: string) {
 function method(path: string, verb = 'GET') { return get(path).methods.find((row: any) => row.method === verb); }
 
 test('route contract review maps every current Web route and exported method without claiming runtime parity', () => {
-  assert.equal(current.length, 115, 'A changed route inventory requires explicit source review.');
+  assert.equal(current.length, 116, 'A changed route inventory requires explicit source review.');
   for (const route of current) {
     const result = get(route.path);
     assert.equal(result.reviewed, true, route.path + ': ' + JSON.stringify(result.gates));
@@ -91,6 +91,14 @@ test('route contract review verifies real BFF dispatch policies and method-speci
   const records = get('/api/doctor/patients');
   assert.ok(records.evidence.some((item: any) => item.file === 'lib/eda/records-pages.ts'));
   assert.match(records.methods[0].dependencies.note, /not a browser contract change/);
+  const readiness = method('/api/internal/vital/readiness');
+  assert.equal(readiness.family, 'readiness');
+  assert.equal(readiness.caller, 'Gateway server readiness probe; not browser');
+  assert.match(readiness.authentication, /X-Gateway-Secret.*verified mTLS.*no user or actor assertion/);
+  assert.match(readiness.requiredRole, /no patient\/doctor role or user session/);
+  assert.equal(readiness.dispatch.frontDoor.targetModeAccepted, null);
+  assert.deepEqual(readiness.dispatch.frontDoor.probes, []);
+  assert.match(readiness.gates.frontDoor, /not_applicable/);
 });
 
 test('route contract review distinguishes public Auth callback internal and retired exceptions', () => {

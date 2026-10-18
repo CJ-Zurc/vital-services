@@ -51,7 +51,16 @@ const app = createEdaApp(databases.core, {
   appointment ? createAppointmentExtras(databases.corePool, payment ? { financial: { verifyPaid: payment.verifyAppointmentPaid } } : {}) : undefined,
   portalIntegrationsRuntime(databases), appointment ? createAppointmentCommandPreparation(databases.corePool) : undefined);
 const server = createServer({ key: readFileSync(required("VITAL_API_TLS_KEY_FILE")), cert: readFileSync(required("VITAL_API_TLS_CERT_FILE")),
-  ca: readFileSync(required("VITAL_SERVICE_CA_FILE")), requestCert: true, rejectUnauthorized: true, maxHeaderSize: 16384 }, app);
+  ca: readFileSync(required("VITAL_SERVICE_CA_FILE")), requestCert: true, rejectUnauthorized: true, maxHeaderSize: 16384 }, (req, res) => {
+  if (req.method !== 'GET' || req.url !== '/internal/readiness') { app(req, res); return; }
+  const peer = req.socket as import('node:tls').TLSSocket;
+  if (!peer.authorized || peer.getPeerCertificate().subject?.CN !== 'vital-web') {
+    res.writeHead(403).end(); return;
+  }
+  void Promise.all([databases.corePool.query('SELECT 1'), databases.integrationsPool.query('SELECT 1')])
+    .then(() => { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ status: 'ready' })); })
+    .catch(() => { res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ status: 'not_ready' })); });
+});
 server.requestTimeout = 30_000;
 server.headersTimeout = 15_000;
 let probing = false;

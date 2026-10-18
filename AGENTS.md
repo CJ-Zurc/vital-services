@@ -17,13 +17,13 @@ Before making code changes in this service, you MUST review the local rules and 
 
 Stable rules:
 
-- Validate `X-Gateway-Secret` before trusting canonical `X-User-*` headers.
+- API accepts only the mTLS Web peer and verifies signed actor assertions. Never trust browser-supplied identity headers. API and worker have separate least-privilege database roles.
 - Preserve `X-Correlation-ID` across downstream and internal calls.
 - Do not connect to or query the Auth database; use protected Auth
   `/internal/*` calls for trusted enrichment.
 - Keep actual env files schema-aligned with their examples without replacing
   environment-specific secrets.
-- Keep memory limits in `docker-compose.yml`; dev overrides inherit them.
+- Root Compose owns bounded API, worker, scanner and infrastructure resources. Use `Dockerfile` runtime/tools targets; migrations and baseline seeding run only in tools.
 
 Local skills:
 

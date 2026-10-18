@@ -1,47 +1,22 @@
-# Integration guide
+# VITAL integration contracts
 
-Default-off [registration provenance](eda/registration-provenance.md) preserves
-Gateway identity creation and independently verifies Auth-owned pre-OTP purpose
-before Core marker/consent creation. New scoped keys do not grant login access.
-
-## Current ownership
-
-The following section describes the separately pinned legacy deployment.
-The revised candidate instead owns all backend modules in this repository,
-with Web limited to BFF/session and user-scoped Auth/EHR transport. Flags off
-do not restore legacy writers in the cleaned Web candidate. See
-[EDA contracts](eda/contracts.md) for the target trust and ownership boundaries.
-
-VITAL_WEB owns appointments, schedules, patient/doctor data, clinical documents,
-and the Prisma schema. VITAL_Services owns PayMongo operations and the internal
-appointment-job bridge. Both use the shared VITAL PostgreSQL database in root
-Compose. Gateway-facing `/appointments` and `/telemedicine` are scaffolds.
-
-## Request boundaries
-
-- Browsers call VITAL_WEB BFF routes or Gateway; they do not call port `8009`.
-- Gateway strips `/vital` and forwards ordinary service paths here. Its
-  `/vital/integrations/v1/*` branch forwards to VITAL_WEB instead.
-- `src/middleware/trustedGateway.js` checks `X-Gateway-Secret` before reading
-  `X-User-Id`, `X-User-Email`, `X-User-System`, `X-User-Systems`,
-  `X-User-System-Roles`, and the admin/SuperAdmin flags.
-- Payment/job callers use `X-Internal-Service: vital-web` and the
-  `VITAL_WEB_TO_SERVICES_INTERNAL_SERVICE_KEY`; legacy compatibility is
-  documented in [security](security.md).
-- Job callbacks use `X-Internal-Service: vital-services` with
-  `VITAL_SERVICES_TO_WEB_INTERNAL_SERVICE_KEY` and preserve `X-Correlation-ID`.
-- Auth calls VITAL_WEB directly for `/internal/users/{user_id}/roles`.
-  This service must not duplicate that role source.
-
-## Implemented and planned
-
-Current payment mutation claims/replay are in `src/payment-operations.js`;
-routes and payloads are in [api_reference.md](api_reference.md).
-There is no implemented RabbitMQ audit publisher or Auth enrichment client in
-`src/`. Those are future integrations, not current side effects. When added,
-Auth control-plane calls must use direct `/internal/*` and audit publishing must
-follow the active [audit contract](../../Documents/Audit_Logs_Integration_Guide_v3.md).
-
-The PayMongo webhook returns a reservation response only. It does not verify
-provider signatures or process payments. Payment status currently comes from
-checkout retrieval. Do not represent that placeholder as a completed webhook.
+- Browser business/auth calls enter Web BFF or Gateway. User session/RBAC checks
+  use Gateway; active UHSE integration routes remain `/vital/integrations/v1/*`
+  and reviewed `/vital/bff/*` routes. Unknown generic paths are rejected.
+- Web/API transport uses mTLS and signed assertions bound to actor, method, path,
+  request hash, resource and correlation ID. Plain `X-User-*` headers do not grant
+  API access.
+- Auth owns identities, login/refresh/OTP and system access. Backend profile and
+  stale-control requests call protected Auth internal contracts directly with
+  distinct directional keys. No VITAL process connects to Auth's database.
+- EHR owns hospital patient IDs/MRNs, clinical persistence, signed Records
+  evidence and doctor mirrors. TRACE owns department UUIDs and names.
+- Baseline seed commands exchange a credential-free manifest containing resolved
+  owner IDs. EHR patient IDs, Auth IDs and VITAL user IDs are not interchangeable.
+- API mutations write Core outbox events. Worker delivery uses durable RabbitMQ,
+  inbox protection and receipt-aware Audit/Notification clients. Notification
+  email/SMS providers remain disabled in staging.
+- Auth-facing VITAL roles are served by Web delegating to Core ownership.
+  Analytics reads only the authenticated submitted-preconsultation export.
+- Gateway diagnostics calls Web's protected `/api/internal/vital/readiness`;
+  Web checks API `/internal/readiness` over mTLS without impersonating a user.

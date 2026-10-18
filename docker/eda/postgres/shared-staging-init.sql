@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 -- Run through psql against the existing VITAL PostgreSQL instance. The caller
 -- supplies the six password variables over stdin; no secret appears in argv.
--- Only new EDA databases are changed. The legacy vital_services_db is untouched.
+-- Only the two owned VITAL databases and their scoped roles are provisioned.
 
 SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD %L', name, password)
 FROM (VALUES

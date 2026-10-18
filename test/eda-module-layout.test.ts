@@ -17,7 +17,7 @@ test('EDA feature layout has explicit business owners without old Core or Integr
   for(const old of ['core','integrations'])assert.equal(existsSync(resolve(root,'../../dist/modules',old)),false,'Build must remove retired compiled module paths.');
   const manifest=JSON.parse(readFileSync(resolve(root,'../../package.json'),'utf8'));
   assert.match(manifest.scripts.build,/node scripts\/eda\/clean-output\.mjs/);
-  assert.match(readFileSync(resolve(root,'../../Dockerfile.eda'),'utf8'),/COPY scripts\/eda\/clean-output\.mjs \.\/scripts\/eda\/clean-output\.mjs/);
+  assert.match(readFileSync(resolve(root,'../../Dockerfile'),'utf8'),/COPY scripts\/eda\/clean-output\.mjs \.\/scripts\/eda\/clean-output\.mjs/);
   for(const path of sources(resolve(root,'modules/composition'))){
     assert.doesNotMatch(readFileSync(path,'utf8'),/\.query\s*\(|\$queryRaw|\$executeRaw/,'Composition must delegate SQL to its owning features.');
   }

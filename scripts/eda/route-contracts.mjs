@@ -198,7 +198,9 @@ const reviewedHashes = Object.freeze({
   'lib/eda/request-body.ts': '7a78782d69c435e689b110eee50541ed73795c6bfcdb2aaa43ca6da10c71b0d5',
   'lib/eda/stream-bff.ts': '2fa4d988f94763e0876d4b4995c843c155846c1a61dd96ad537fed6ed01e32c7',
   'lib/eda/stream-transport.ts': 'ada0197f643603eb27a9659728a2629b0301ea96e81477afa5b737730037fd5d',
-  'lib/eda/transport.ts': '79b4e8fd61878cedfa4103b9b93efc11d1e50f73d651edfd2bb9b570bff2b284',
+  'lib/eda/transport.ts': 'e0cf41b5b042bb28e594628459dc66dec31d8ee32825a1e9c7db8ec0abba3a1e',
+  'app/api/internal/vital/readiness/route.ts': 'b7ffb181f5babb03300373584259088eb10b1d57494b09f579d93aa5183a0877',
+  'tests/eda-readiness.test.ts': 'a37c0db033d0143465be8faf2472406e4a4ed75cb86000c6947ee1591cb2c16a',
   'lib/eda/video-bff.ts': '81021e8f76361365a7ebb5432b1242fffc5012b14196020f701fe732ee1811bd',
   'lib/eda/video-cookie.ts': '9c6a2a2f6510515aa225707a74448290a1cb1cb453e76e43b15ac5d6ffdd0842',
   'lib/eda/video-dto.ts': '1ac02c25a9a08dcfe9fa83ec8e85dc04eb69b52b03fe8efb268545643c0171fe',
@@ -374,6 +376,10 @@ const families = {
     request: 'any resolved BFF session; no explicit admin requirement', response: 'success/data:{departments}', statuses: [200, 500], deps: ['TRACE protected department read'], flags: [] },
   e2e: { owner: 'Auth test-support credential consumer', entry: 'lib/e2e-test-support.ts', dispatch: 'authorizeE2ETestSupport', files: ['lib/internal-auth.ts'], tests: ['auth-policy.test.ts'],
     request: 'authorizeE2ETestSupport environment/internal-key gate and e2eIdentitySchema email', response: 'temporary credential consumed once; no-store', statuses: [200, 400, 502], deps: ['Auth internal E2E credential capture'], flags: ['E2E_TEST_SUPPORT_ENABLED', 'APP_ENV not production'] },
+  readiness: { owner: 'VITAL Services EDA API via Gateway-protected Web readiness wrapper', entry: 'lib/eda/transport.ts', dispatch: 'edaReadiness',
+    files: ['lib/eda/transport.ts'], tests: ['eda-readiness.test.ts'], request: 'GET with the Gateway shared secret; no user session or actor assertion',
+    response: 'ready or not_ready status; 200/503; invalid Gateway secret403', statuses: [200, 403, 503],
+    deps: ['Gateway shared secret', 'VITAL Services /internal/readiness over verified mTLS'], flags: ['VITAL_EDA_ENABLED'] },
   retired: { owner: 'Retired; no replacement dispatch', files: [], tests: ['retired-concerns.test.ts'], request: 'no input consumed; no auth authority inferred', response: 'success:false/message retired', statuses: [410], deps: [], flags: [] },
   worker: { owner: 'Services Appointment maintenance worker', files: [], tests: ['eda-ingress-policy.test.ts'], request: 'legacy HTTP maintenance entry deliberately unavailable', response: 'success:false/code:EDA_MAINTENANCE_WORKER_OWNED', statuses: [503], deps: ['backend worker instead of public HTTP job bridge'], flags: ['VITAL_EDA_ENABLED'] },
 };
@@ -514,6 +520,7 @@ add('analytics', `
 GET /api/admin/analytics/dashboard
 GET /api/admin/analytics/batches/current
 POST /api/admin/analytics/batches/refresh`);
+add('readiness', 'GET /api/internal/vital/readiness edaReadiness');
 add('export', 'GET /api/internal/analytics/v1/pre-consultations');
 add('welcome', `
 GET /api/patient
@@ -659,6 +666,7 @@ function walk(directory, root, output = []) {
 }
 function roleFor(path, method, family) {
   if (family === 'retired' || family === 'worker') return 'none; endpoint unavailable';
+  if (family === 'readiness') return 'Gateway service probe; no patient/doctor role or user session';
   if (family === 'welcome') return 'any resolved session; URL role label is not a role check';
   if (family === 'portal') return path.endsWith('/bootstrap') ? 'UHSE guest/EHR patient/VITAL guest or patient; VITAL membership'
     : path.endsWith('/patient/appointments') ? 'UHSE guest/EHR patient/VITAL patient; VITAL membership'
@@ -781,7 +789,7 @@ export function reviewRouteContract(route, options = {}) {
       if (rule.family === 'worker' && !entry.node.getText().includes('EDA_MAINTENANCE_WORKER_OWNED')) issue('WORKER_CONTRACT_CHANGED', entry.file, 'Maintenance must remain explicitly unavailable.');
     } catch (error) { issue('HANDLER_UNREVIEWED', source, String(error.message)); }
     const files = [...new Set(['proxy.ts', 'lib/env.ts', 'lib/route-access.ts', 'lib/eda/mode-policy.ts', ...(family.entry ? [family.entry] : []), ...(binding?.file ? [binding.file] : []), ...(family.files ?? []),
-      ...(rule.family !== 'retired' && rule.family !== 'worker' && !['address', 'e2e'].includes(rule.family) ? ['lib/auth.ts', 'lib/cookies.ts'] : []),
+      ...(rule.family !== 'retired' && rule.family !== 'worker' && !['address', 'e2e', 'readiness'].includes(rule.family) ? ['lib/auth.ts', 'lib/cookies.ts'] : []),
       ...(['appointment', 'extras', 'completion', 'payment', 'records', 'recordsIntegration', 'video', 'messaging', 'stream', 'qr', 'portal', 'profile', 'registration', 'export'].includes(rule.family)
         ? ['lib/eda/transport.ts', 'lib/eda/mode-policy.ts', 'lib/eda/candidate.ts', 'lib/eda/request-body.ts'] : []),
       ...(family.policy ? [family.policy[0]] : [])])];
@@ -813,20 +821,25 @@ export function reviewRouteContract(route, options = {}) {
     try {
       const environment = Object.fromEntries(['VITAL_EDA_ENABLED', 'VITAL_EDA_APPOINTMENT_ENABLED', 'VITAL_EDA_COMPLETION_ENABLED', 'VITAL_EDA_PAYMENT_ENABLED',
         'VITAL_EDA_RECORDS_ENABLED', 'VITAL_EDA_VIDEO_ENABLED', 'VITAL_EDA_MESSAGING_ENABLED', 'VITAL_EDA_MESSAGE_HOLDS_ENABLED', 'VITAL_EDA_SSE_ENABLED', 'VITAL_EDA_PROFILE_QR_ENABLED'].map(name => [name, 'true']));
-      const ingress = ingressProbe(examples(path), method, read, environment);
-      frontDoor = { file: 'proxy.ts', review: 'static all-owner-flags-enabled probe; not a request or deployed configuration',
-        condition: ingress.condition, probes: ingress.probes, contractRoute: ingress.probes.every(probe => probe.contractRoute),
-        targetModeAccepted: ingress.probes.every(probe => !probe.ingressGuardBlocked),
-        ownerFlagChecks: !['portal', 'recordsIntegration'].includes(rule.family) || method !== 'POST' ? []
-          : family.flags.filter(flag => flag !== 'VITAL_EDA_ENABLED').map(disabledFlag => ({ disabledFlag,
-            probes: ingressProbe(examples(path), method, read, { ...environment, [disabledFlag]: 'false' }).probes })),
-        deniedStatus: 503, deniedCode: 'EDA_LEGACY_OWNER_DISABLED' };
+      const ingress = rule.family === 'readiness' ? null : ingressProbe(examples(path), method, read, environment);
+      frontDoor = rule.family === 'readiness'
+        ? { file: source, review: 'static direct-probe classification; not a browser route or deployment claim',
+            condition: 'Gateway shared secret at Web; verified mTLS from Web to Services', probes: [], contractRoute: false,
+            targetModeAccepted: null, ownerFlagChecks: [], deniedStatus: 503, deniedCode: 'not_ready' }
+        : { file: 'proxy.ts', review: 'static all-owner-flags-enabled probe; not a request or deployed configuration',
+            condition: ingress.condition, probes: ingress.probes, contractRoute: ingress.probes.every(probe => probe.contractRoute),
+            targetModeAccepted: ingress.probes.every(probe => !probe.ingressGuardBlocked),
+            ownerFlagChecks: !['portal', 'recordsIntegration'].includes(rule.family) || method !== 'POST' ? []
+              : family.flags.filter(flag => flag !== 'VITAL_EDA_ENABLED').map(disabledFlag => ({ disabledFlag,
+                probes: ingressProbe(examples(path), method, read, { ...environment, [disabledFlag]: 'false' }).probes })),
+            deniedStatus: 503, deniedCode: 'EDA_LEGACY_OWNER_DISABLED' };
     } catch (error) { issue('FRONT_DOOR_POLICY_UNREVIEWED', 'proxy.ts', String(error.message)); }
-    const internal = rule.family === 'export' || path.startsWith('/internal/users/');
+    const internal = rule.family === 'export' || rule.family === 'readiness' || path.startsWith('/internal/users/');
     const foreign = ['portal', 'recordsIntegration'].includes(rule.family);
     const publicRoute = rule.family === 'address' || rule.family === 'registration' || rule.family === 'auth' && !/\/me\/|\/password\/change$|\/picture$|\/credentials$/.test(path);
     const bearerOnly = ['/api/auth/me/password', '/api/auth/password/change'].includes(path);
-    const authentication = foreign ? 'Gateway-secret validated X-User-* source and source expiry; signed scoped Services delegation; no local-role impersonation'
+    const authentication = rule.family === 'readiness' ? 'Constant-time X-Gateway-Secret check at Web; verified mTLS to Services; no user or actor assertion'
+      : foreign ? 'Gateway-secret validated X-User-* source and source expiry; signed scoped Services delegation; no local-role impersonation'
       : internal ? 'directional internal service/key before scoped signed backend request'
         : ['retired', 'worker'].includes(rule.family) ? 'no session authority claimed; explicit unavailable response'
           : rule.family === 'e2e' ? 'test-only enablement and internal caller key'
@@ -839,13 +852,13 @@ export function reviewRouteContract(route, options = {}) {
     if (path === '/api/patient/profile' && method === 'PATCH') owner = 'EHR contact operation via Gateway; no Profile contact writer';
     if (rule.family === 'stream') owner = path.includes('/messages/') ? 'Services Messaging SSE' : 'Services Appointment SSE';
     const row = { method, publicPath: path, family: rule.family, targetOwner: owner,
-      caller: foreign ? 'Gateway-forwarded foreign portal/staff' : internal ? 'internal service, not browser' : rule.family === 'video' && path.endsWith('/callback') ? 'browser OAuth callback navigation' : 'Web browser/BFF consumer',
+      caller: rule.family === 'readiness' ? 'Gateway server readiness probe; not browser' : foreign ? 'Gateway-forwarded foreign portal/staff' : internal ? 'internal service, not browser' : rule.family === 'video' && path.endsWith('/callback') ? 'browser OAuth callback navigation' : 'Web browser/BFF consumer',
       authentication, requiredRole: roleFor(path, method, rule.family),
       dispatch: { wrapper: source, handlerSource: entry?.file ?? null, implementation: binding?.file ?? null, symbol: dispatch ?? 'local explicit response', policy: dispatchPolicy, frontDoor },
       requestDto: { summary: requestDetails[path] ?? family.request, staticValidatorReferences: facts.validators, note: 'References include shared family branches, not proof every branch runs for this method.' },
       responseDto: { summary: family.response, schemaFiles: files.filter(file => /dto|composition|compatibility/.test(file)) },
       status: { documentedFamilyBranches: family.statuses, sourceExpressions: facts.statuses, exhaustive: false },
-      cookies: { policy: foreign || internal || ['retired', 'worker', 'address', 'e2e'].includes(rule.family) ? 'No session-cookie behavior inferred; inspect explicit source references.'
+      cookies: { policy: foreign || internal || ['retired', 'worker', 'address', 'e2e', 'readiness'].includes(rule.family) ? 'No session-cookie behavior inferred; inspect explicit source references.'
         : rule.family === 'video' ? 'Gateway session rotation plus HttpOnly SameSite=Lax vital_google_meet_oauth binding cookie; callback/disconnect clear it'
           : path === '/api/auth/logout' ? 'Clear refresh/access/activity, Meet binding and EHR verified-session cookies even if upstream logout fails'
             : 'attachBffSessionHeaders/upstream-cookie behavior is branch-specific; no access-token cookie persistence inferred', sourceReferences: facts.cookies },
@@ -854,13 +867,15 @@ export function reviewRouteContract(route, options = {}) {
       gates: { featureFlags: [...family.flags, ...(rule.family === 'messaging' && path.startsWith('/api/admin/') ? ['VITAL_EDA_MESSAGE_HOLDS_ENABLED'] : []),
         ...(rule.family === 'stream' ? [path.includes('/messages/') ? 'VITAL_EDA_MESSAGING_ENABLED' : 'VITAL_EDA_APPOINTMENT_ENABLED'] : []),
         ...(rule.family === 'completion' && path === '/api/patient/dashboard' ? ['VITAL_EDA_APPOINTMENT_ENABLED'] : [])],
-        frontDoor: frontDoor?.targetModeAccepted === false ? 'blocked_in_target_mode_even_with_owner_flags_enabled; review proxy before claiming route availability' : 'static routing admission only; live authorization not established',
+        frontDoor: rule.family === 'readiness' ? 'not_applicable; internal Gateway readiness endpoint, not browser proxy admission'
+          : frontDoor?.targetModeAccepted === false ? 'blocked_in_target_mode_even_with_owner_flags_enabled; review proxy before claiming route availability' : 'static routing admission only; live authorization not established',
         runtimeParity: 'unverified; coordinated Gateway/Auth/backend/provider/UI acceptance required' },
-      bodyLimit: ['retired', 'worker', 'address'].includes(rule.family) ? 'not applicable' : rule.family === 'qr' && method === 'POST' ? '5MiB image; +64KiB envelope; readProfileQrUpload'
+      bodyLimit: ['retired', 'worker', 'address', 'readiness'].includes(rule.family) ? 'not applicable' : rule.family === 'qr' && method === 'POST' ? '5MiB image; +64KiB envelope; readProfileQrUpload'
         : rule.family === 'records' && path === '/api/patient/files' && method === 'POST' ? '10MiB file; 11MiB multipart envelope; readRecordsUpload'
           : facts.validators.some(item => item.source.startsWith('readProfileBody')) ? 'readProfileBody default65536 bytes; explicit call overrides are evidenced; not a global route limit'
             : 'not established for every wrapper branch; inspect request reader and upstream limits',
-      timeout: { policy: 'Services transport default15000ms configurable100..30000; body reader default15000ms, upload10000ms; not an end-to-end route SLA', establishedEndToEnd: false },
+      timeout: rule.family === 'readiness' ? { policy: '3.5s readiness exchange timeout; response limited to 128 bytes; not an end-to-end SLA', establishedEndToEnd: false }
+        : { policy: 'Services transport default15000ms configurable100..30000; body reader default15000ms, upload10000ms; not an end-to-end route SLA', establishedEndToEnd: false },
       reviewed: gates.length === before, parityStatus: 'not_verified', runtimeEvidence: [] };
     result.methods.push(row);
   }
