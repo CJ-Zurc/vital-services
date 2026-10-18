@@ -26,14 +26,16 @@ export const subscriptions = [
 ] as const;
 const producers: Producer[] = ["profile", "appointment", "payment", "records", "messaging", "video"];
 
-export function validateBrokerUrl(value: string) {
+export function validateBrokerUrl(value: string, environment: NodeJS.ProcessEnv = process.env) {
   const url = new URL(value);
-  if (url.protocol !== "amqps:" || decodeURIComponent(url.pathname) !== "/vital" || !url.username ||
+  const privateBroker = environment.VITAL_EDA_PRIVATE_HTTP === 'true' && url.protocol === 'amqp:' && url.host === 'rabbitmq:5672';
+  if ((!privateBroker && url.protocol !== "amqps:") || decodeURIComponent(url.pathname) !== "/vital" || !url.username ||
       !url.password || decodeURIComponent(url.username) === "guest") throw new Error("Dedicated VITAL AMQPS vhost and non-guest credentials are required.");
 }
 
 export async function connectBroker(url: string, caFile: string) {
   validateBrokerUrl(url);
+  if (url.startsWith('amqp:')) return amqp.connect(url, { timeout: 5000 });
   if (!caFile) throw new Error("Broker CA trust must be configured.");
   return amqp.connect(url, { ca: [readFileSync(caFile)], rejectUnauthorized: true, timeout: 5000 });
 }

@@ -7,6 +7,7 @@ import { requestHash as canonicalHash } from "../../infrastructure/security.js";
 import { latestProfileSyncIntents, readProfileSyncIntent, syncRequest, type ProfileSyncIntent } from "./profile-sync.js";
 import { saveDelivery, type DeliveryTarget } from "../platform-delivery/delivery.js";
 import { boundedJsonReceipt } from "../../infrastructure/http-receipt.js";
+import { trustedInternalOrigin } from "../../infrastructure/private-transport.js";
 
 export type SyncStatus = "pending" | "failed" | "synced";
 export async function consumeProfileSync(core: Pool, integrations: Pool, raw: EventEnvelope) {
@@ -76,7 +77,7 @@ export async function deliverProfileSync(core: Pool, integrations: Pool,
       if (!target.baseUrl || !target.key) throw new Error("PROFILE_SYNC_UNCONFIGURED");
       const base = new URL(target.baseUrl);
       if (base.username || base.password || base.search || base.hash || base.pathname !== "/"
-        || !["http:", "https:"].includes(base.protocol) || process.env.NODE_ENV === "production" && base.protocol !== "https:") {
+        || !trustedInternalOrigin(base)) {
         terminal = true; throw new Error("PROFILE_SYNC_TARGET_INVALID");
       }
       const response = await fetcher(new URL(request.path, base), { method: request.method, redirect: "error",

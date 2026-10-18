@@ -36,7 +36,9 @@ export function createDatabases(mode: "api" | "worker", environment: NodeJS.Proc
   validateDatabaseBoundary(coreUrl, integrationsUrl);
   configureUtcDateParameters();
   const caFile = environment.VITAL_DATABASE_CA_FILE;
-  if (environment.NODE_ENV === "production" && !caFile) throw new Error("Verified PostgreSQL TLS is required in production.");
+  const privateDatabase = environment.VITAL_EDA_PRIVATE_HTTP === 'true'
+    && new URL(coreUrl).host === 'postgres:5432' && new URL(integrationsUrl).host === 'postgres:5432';
+  if (environment.NODE_ENV === "production" && !caFile && !privateDatabase) throw new Error("Verified PostgreSQL TLS is required in production.");
   const ssl = caFile ? { ca: readFileSync(caFile, "utf8"), rejectUnauthorized: true } : undefined;
   const max = mode === "api" ? 4 : 2;
   const limits = { max, ssl, types:utcPgTypes,options:"-c timezone=UTC",connectionTimeoutMillis: 5000, idleTimeoutMillis: 30_000,

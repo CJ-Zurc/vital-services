@@ -2,10 +2,11 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { recordsDenied } from "./authorization.js";
 import { boundedJsonReceipt } from "../../infrastructure/http-receipt.js";
+import { trustedInternalOrigin } from "../../infrastructure/private-transport.js";
 
 export function createRecordsPartyResolver(pool:Pool,config:{baseUrl:string;key:string},fetcher:typeof fetch=fetch) {
   const target=new URL(config.baseUrl);
-  if(!config.key||target.username||target.password||!["http:","https:"].includes(target.protocol)||process.env.NODE_ENV==='production'&&target.protocol!=='https:')throw new Error("RECORDS_AUTH_CONFIGURATION_INVALID");
+  if(!config.key||target.username||target.password||!trustedInternalOrigin(target))throw new Error("RECORDS_AUTH_CONFIGURATION_INVALID");
   const identity=z.object({id:z.uuid(),first_name:z.string().max(255),middle_name:z.string().max(255).nullable(),last_name:z.string().max(255),extension_name:z.string().max(64).nullable()}).passthrough();
   async function name(authId:string){
     const response=await fetcher(new URL('/internal/users/'+z.uuid().parse(authId)+'/profile',target),{method:'GET',redirect:'error',headers:{'X-Internal-Service':'vital-services','X-Internal-Service-Key':config.key},signal:AbortSignal.timeout(10000)});
