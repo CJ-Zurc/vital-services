@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DomainError } from '../../contracts/actor.js';
 import { boundedJsonReceipt } from '../../infrastructure/http-receipt.js';
+import { trustedInternalOrigin } from '../../infrastructure/private-transport.js';
 
 export type RegistrationAuthority = (authId: string, registrationId: string, correlationId: string) => Promise<void>;
 export function registrationAuthority(environment: NodeJS.ProcessEnv = process.env, fetcher: typeof fetch = fetch): RegistrationAuthority {
@@ -10,7 +11,7 @@ export function registrationAuthority(environment: NodeJS.ProcessEnv = process.e
     try {
       base = new URL(environment.VITAL_AUTH_INTERNAL_URL ?? '');
       if (!key || key.length < 32 || base.username || base.password || base.search || base.hash || base.pathname !== '/'
-        || !['http:', 'https:'].includes(base.protocol) || environment.NODE_ENV === 'production' && base.protocol !== 'https:') throw new Error();
+        || !trustedInternalOrigin(base, environment)) throw new Error();
     } catch { throw new DomainError(503, 'REGISTRATION_AUTH_UNAVAILABLE', 'Registration authority unavailable.'); }
     try {
       const response = await fetcher(new URL('/internal/vital/registrations/resolve', base), {

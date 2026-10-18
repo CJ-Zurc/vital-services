@@ -4,6 +4,7 @@ import { processWithInbox } from "../../infrastructure/outbox.js";
 import { parseEvent, type EventEnvelope } from "../../contracts/events.js";
 import { requestHash as canonicalHash } from "../../infrastructure/security.js";
 import { boundedJsonReceipt } from "../../infrastructure/http-receipt.js";
+import { trustedInternalOrigin } from "../../infrastructure/private-transport.js";
 
 export type Destination = "audit" | "notification" | "auth-stale" | "ehr-mirror";
 function hash(value: unknown) { return canonicalHash("POST", "delivery", value); }
@@ -60,8 +61,7 @@ export async function deliverPending(pool: Pool, config: DeliveryConfig, fetcher
       if (!target?.baseUrl || !target.key) throw new Error("DELIVERY_NOT_CONFIGURED");
       const path = row.destination === "audit" ? "/ingest/business" : "/internal/v1/vital/notifications";
       const url = new URL(path, target.baseUrl);
-      if (url.username || url.password || !["http:", "https:"].includes(url.protocol) ||
-          process.env.NODE_ENV === "production" && url.protocol !== "https:") throw new Error("INVALID_DELIVERY_TARGET");
+      if (url.username || url.password || !trustedInternalOrigin(url)) throw new Error("INVALID_DELIVERY_TARGET");
       const headers: Record<string, string> = { "Content-Type": "application/json", "X-Correlation-ID": row.correlationId };
       if (row.destination === "audit") headers["X-Audit-Ingest-Key"] = target.key;
       else { headers["X-Internal-Service"] = "vital-services"; headers["X-Internal-Service-Key"] = target.key; }

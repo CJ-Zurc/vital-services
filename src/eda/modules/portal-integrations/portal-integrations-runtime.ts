@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Pool } from 'pg';
 import type { CorePrismaClient } from '../../infrastructure/databases.js';
 import { boundedJsonReceipt } from '../../infrastructure/http-receipt.js';
+import { trustedInternalOrigin } from '../../infrastructure/private-transport.js';
 import { getProfileSyncStatuses } from '../profile/profile-delivery.js';
 import { createPortalIntegrations } from './portal-integrations.js';
 import { createPortalProfileReaders, createPortalPatientCounts, type PortalIdentityLookup } from './portal-integrations-profile.js';
@@ -18,8 +19,7 @@ export function createPortalDoctorIdentityVerifier(environment: NodeJS.ProcessEn
     try {
       base = new URL(environment.VITAL_AUTH_INTERNAL_URL ?? '');
       if (!environment.VITAL_SERVICES_AUTH_PROFILE_KEY || base.username || base.password || base.pathname !== '/'
-        || base.search || base.hash || !['https:', 'http:'].includes(base.protocol)
-        || environment.NODE_ENV === 'production' && base.protocol !== 'https:') throw new Error();
+        || base.search || base.hash || !trustedInternalOrigin(base, environment)) throw new Error();
     } catch { return portalUnavailable('PORTAL_AUTH_CONFIGURATION_REQUIRED'); }
     try {
       const response = await fetcher(new URL('/internal/users/' + authId + '/profile', base), {
@@ -47,7 +47,7 @@ export function createPortalIdentityLookup(environment: NodeJS.ProcessEnv, fetch
     try {
       target = new URL(environment.VITAL_AUTH_INTERNAL_URL ?? '');
       if (!environment.VITAL_SERVICES_AUTH_PROFILE_KEY || target.username || target.password || target.pathname !== '/' || target.search || target.hash
-        || !['http:', 'https:'].includes(target.protocol) || environment.NODE_ENV === 'production' && target.protocol !== 'https:') throw new Error();
+        || !trustedInternalOrigin(target, environment)) throw new Error();
     } catch { return portalUnavailable('PORTAL_AUTH_CONFIGURATION_REQUIRED'); }
     const result: Awaited<ReturnType<PortalIdentityLookup>> = new Map();
     const ids = [...new Set(authIds.map(id => z.uuid().parse(id)))], deadline = Date.now() + 7500;
