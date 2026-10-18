@@ -243,7 +243,7 @@ const reviewedHashes = Object.freeze({
   'tests/doctor-date-blocks.test.ts': '4991273d672bb454e2ff719137231b358fbd5a271d1d58d76f2444627abc61fd',
   'tests/doctor-record-snapshot.test.ts': '25eb2b06571fbd9469fdb75ce877b4f52cd592277f05f725fbb3b0c6f40f7f01',
   'tests/eda-appointment-compatibility.test.ts': '7f7090c216e2b5457585ae6a8630586c5cf50386bca40287e01268a205632949',
-  'tests/eda-appointment-reads.test.ts': '4047b9c88253e0945de950c458c1dd1f5344682306f80f41a7524b3c4a59c9f5',
+  'tests/eda-appointment-reads.test.ts': '12d934738d7ecf08dc05ed49daa7ed9b7576679dd39c9a112ea1d05490f23970',
   'tests/eda-appointment.test.ts': 'd9645cfa0f47c71b1880682fe84808d70c8d7f1ab7f3861c8735f8c7559b2420',
   'tests/eda-completion-aggregates.test.ts': '4cf46abe207cb2083e1e596557eb22f9c192450bc1b515335597673a00711ea8',
   'tests/eda-completion-qr.test.ts': '4c1007221ad06faafd0a0bee22913629d7c6bb73c5563a857fd7789509bd0257',
