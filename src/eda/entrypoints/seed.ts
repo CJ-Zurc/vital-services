@@ -68,4 +68,21 @@ try {
 }
 
 }
-void main().catch(() => { console.error("BASELINE_SEED_FAILED"); process.exitCode = 1; });
+function safeFailureCode(error: unknown): string {
+  if (error instanceof Error && /^BASELINE_[A-Z0-9_]+$/.test(error.message)) {
+    return error.message;
+  }
+
+  if (error && typeof error === 'object' && 'code' in error
+    && typeof error.code === 'string' && /^[A-Z0-9_]{2,16}$/.test(error.code)) {
+    return error.code;
+  }
+
+  if (error instanceof Error) return error.constructor.name;
+  return 'UnknownError';
+}
+
+void main().catch((error: unknown) => {
+  console.error(`BASELINE_SEED_FAILED ${safeFailureCode(error)}`);
+  process.exitCode = 1;
+});
