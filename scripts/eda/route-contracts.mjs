@@ -187,7 +187,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/profile-qr-upload.ts': '5af7ab231a9d1561643825e7a243935a83c406e395b298fb77bcbbc79721d2b4',
   'lib/eda/profile-registration.ts': '07ca27c21521d8a57ea3937d1081688e5719d82be92ab678d2d5b0afccde69f3',
   'lib/eda/profile.ts': '5a24f90e2395480b726b2108c6ba8cb47c49b62673538f761fdc9d5f52ec139a',
-  'lib/eda/public-registration.ts': 'a0397db3faf612402bb91dbeed5abf484875498b48cc25ebe69be22917eed4c5',
+  'lib/eda/public-registration.ts': '3a6311d6658488e9ee51a2db0bd839a75c28d05e51bcc008a75c830283ea86d0',
   'lib/eda/records-bff.ts': '253eba1d0b3000d23025cb715d4017f7b53aebf0468bff666ebfdfbb634991a7',
   'lib/eda/records-composition.ts': 'd6d1fbd8c967eabea562ed1288a3023478043c426be99bfacdddec9259005aee',
   'lib/eda/records-dto.ts': 'a3bb99ac73bd619682d4bb127bef7af8cea1f1c5fb3480761cfad9c36394d060',

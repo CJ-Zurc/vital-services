@@ -14,7 +14,8 @@ function database(domain, identity) {
   return `postgresql://vital_${domain}_${identity}:${encodeURIComponent(secret(`${domain}_${identity}_password`))}@postgres:5432/vital_${domain}${suffix}`;
 }
 function broker(identity, vhost) {
-  return `amqps://vital_${identity}:${encodeURIComponent(secret(`rabbit_${identity}_password`))}@rabbitmq:5671/${vhost}`;
+  const privateBroker = environment.VITAL_EDA_PRIVATE_HTTP === 'true';
+  return `${privateBroker ? 'amqp' : 'amqps'}://vital_${identity}:${encodeURIComponent(secret(`rabbit_${identity}_password`))}@rabbitmq:${privateBroker ? 5672 : 5671}/${vhost}`;
 }
 let commands;
 if (mode === 'api' || mode === 'worker') {
@@ -28,8 +29,10 @@ if (mode === 'api' || mode === 'worker') {
 } else if (mode === 'migrate') {
   for (const domain of ['core', 'integrations']) {
     const url = new URL(database(domain, 'migrator'));
-    url.searchParams.set('sslmode', 'verify-full');
-    url.searchParams.set('sslrootcert', environment.VITAL_DATABASE_CA_FILE);
+    if (environment.VITAL_EDA_PRIVATE_HTTP !== 'true') {
+      url.searchParams.set('sslmode', 'verify-full');
+      url.searchParams.set('sslrootcert', environment.VITAL_DATABASE_CA_FILE);
+    }
     environment[`VITAL_${domain.toUpperCase()}_MIGRATION_URL`] = url.href;
   }
   commands = ['core', 'integrations'].map(domain => ['node_modules/prisma/build/index.js', 'migrate', 'deploy', '--config', `prisma/${domain}.config.ts`]);
@@ -45,10 +48,10 @@ if (mode === 'api' || mode === 'worker') {
   for (const domain of ['core', 'integrations']) {
     environment[`EDA_TEST_${domain.toUpperCase()}_DATABASE_URL`] = database(domain, 'worker');
   }
-  environment.EDA_TEST_DATABASE_CA_FILE = '/run/secrets/db-ca.pem';
+  environment.EDA_TEST_DATABASE_CA_FILE = environment.VITAL_EDA_PRIVATE_HTTP === 'true' ? '' : '/run/secrets/db-ca.pem';
   environment.EDA_TEST_RABBITMQ_URL = broker('runtime', 'vital_test');
   environment.EDA_TEST_RABBITMQ_PROVISION_URL = broker('provision', 'vital_test');
-  environment.EDA_TEST_RABBITMQ_CA_FILE = '/run/secrets/broker-ca.pem';
+  environment.EDA_TEST_RABBITMQ_CA_FILE = environment.VITAL_EDA_PRIVATE_HTTP === 'true' ? '' : '/run/secrets/broker-ca.pem';
   environment.EDA_TEST_SERVICE_CA_FILE = '/run/secrets/test-service-ca.pem';
   environment.EDA_TEST_API_CERT_FILE = '/run/secrets/test-api-cert.pem';
   environment.EDA_TEST_API_KEY_FILE = '/run/secrets/test-api-key.pem';

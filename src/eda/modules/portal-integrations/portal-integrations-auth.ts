@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { boundedJsonReceipt } from '../../infrastructure/http-receipt.js';
+import { trustedInternalOrigin } from '../../infrastructure/private-transport.js';
 import type { PortalIdentityLookup } from './portal-integrations-profile.js';
 
 export function createPortalIdentityLookup(config: { baseUrl: string; key: string }, fetcher: typeof fetch = fetch): PortalIdentityLookup {
   const base = new URL(config.baseUrl);
-  if (!config.key || base.username || base.password || !['http:', 'https:'].includes(base.protocol)
-    || process.env.NODE_ENV === 'production' && base.protocol !== 'https:') throw new Error('PORTAL_AUTH_CONFIGURATION_INVALID');
+  if (!config.key || base.username || base.password || !trustedInternalOrigin(base)) throw new Error('PORTAL_AUTH_CONFIGURATION_INVALID');
   const identity = z.object({ id: z.uuid(), first_name: z.string(), middle_name: z.string().nullable(),
     last_name: z.string(), extension_name: z.string().nullable(), email: z.string().nullable() }).passthrough();
   return async ids => {

@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { DomainError } from "../../../contracts/actor.js";
 import { boundedJsonReceipt } from "../../../infrastructure/http-receipt.js";
+import { trustedInternalOrigin } from "../../../infrastructure/private-transport.js";
 const receipt=z.object({appointment_id:z.uuid(),case_id:z.uuid(),patient_id:z.uuid(),doctor_auth_id:z.uuid().nullable(),external_system_ref:z.string().max(96)}).strict();
 export function createEhrCaseRecovery(config:{baseUrl:string;key:string},fetcher:typeof fetch=fetch){
   const base=new URL(config.baseUrl);
-  if(base.username||base.password||!["http:","https:"].includes(base.protocol)||process.env.NODE_ENV==="production"&&base.protocol!=="https:"||config.key.length<16)throw new Error("EHR_RECOVERY_CONFIGURATION_INVALID");
+  if(base.username||base.password||!trustedInternalOrigin(base)||config.key.length<16)throw new Error("EHR_RECOVERY_CONFIGURATION_INVALID");
   return async(appointmentId:string)=>{
     z.uuid().parse(appointmentId);
     const response=await fetcher(new URL("/internal/vital/v1/appointment-cases/"+appointmentId,base),{method:"GET",redirect:"error",
