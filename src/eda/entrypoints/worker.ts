@@ -51,7 +51,7 @@ async function run() {
     let connection: Awaited<ReturnType<typeof connectBroker>> | undefined;
     const consumers: Awaited<ReturnType<typeof consumeEvents>>[] = [];
     try {
-      connection = await connectBroker(required("VITAL_RABBITMQ_URL"), required("VITAL_RABBITMQ_CA_FILE"));
+      connection = await connectBroker(required("VITAL_RABBITMQ_URL"), process.env.VITAL_RABBITMQ_CA_FILE ?? "");
       let brokerClosed = false;
       connection.on("error", () => { brokerClosed = true; health.unavailable(); });
       connection.on("close", () => { brokerClosed = true; health.unavailable(); });
