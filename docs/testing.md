@@ -10,3 +10,8 @@ Compose rendering and env preflight. Staging verification separately covers exac
 image IDs, migrations, scoped infrastructure, seed relationships, outbox replay,
 scanner/media, session/SSO and affected patient/doctor workflows. Do not label
 manual checks GitHub CI or claim unexecuted bulk/load/fresh-OS checks passed.
+
+`eda-profile-schedule.test.ts` covers Profile version updates used by booking
+contacts, schedule availability and SQL effects, including durable events and
+unchanged-contact no-ops. `VitalUser` has no `updatedAt` column; these updates
+must change only `version` to avoid PostgreSQL `42703` and transaction rollback.

@@ -7,6 +7,8 @@ import { upgradeScheduleAvailability, type ProfileAvailability } from "../src/ed
 import { createAppointmentModule } from '../src/eda/modules/appointment/appointment.js';
 import type { Pool } from 'pg';
 import { randomUUID } from 'node:crypto';
+import { saveBookingContact } from '../src/eda/modules/profile/profile-booking.js';
+import { appendProfileSqlEffects } from '../src/eda/modules/profile/profile-sql-effects.js';
 
 const authId = "11111111-1111-4111-8111-111111111111";
 const doctorId = "22222222-2222-4222-8222-222222222222";
@@ -23,7 +25,11 @@ function fixture(availabilityType: ProfileAvailability | null, present = true) {
     statements.push({ sql, values });
     if (sql.startsWith("SELECT d.")) return { rows: present ? [{ userId: doctorId, availabilityType: type }] : [] };
     if (sql.startsWith("UPDATE vital_doctors")) type = "both";
-    if (sql.startsWith("UPDATE vital_users")) return { rows: [{ version: ++version }] };
+    if (sql.startsWith("UPDATE vital_users")) {
+      assert.equal(sql, 'UPDATE vital_users SET version=version+1 WHERE id=$1 RETURNING version');
+      assert.deepEqual(values, [doctorId]);
+      return { rows: [{ version: ++version }] };
+    }
     if (sql.startsWith("INSERT INTO outbox_events") && failOutbox) throw new Error("unavailable");
     return { rows: [] };
   } } as unknown as PoolClient;
@@ -61,6 +67,55 @@ test("profile schedule: compatible availability produces no writes or effects", 
     assert.equal(f.statements.length, 1);
     assert.equal(f.version(), 4);
   }
+});
+
+test('profile booking: changed contacts version the actual VitalUser columns and persist durable effects', async () => {
+  const statements: { sql: string; values: unknown[] }[] = [];
+  const patientId = randomUUID();
+  const contact = { fullName: 'Synthetic contact', relationship: 'Parent', phoneNumber: '+639123456789' };
+  let unchanged = false;
+  const tx = { async query(sql: string, values: unknown[] = []) {
+    statements.push({ sql, values });
+    if (sql.startsWith('SELECT p.')) return { rows: [{ role: 'patient', ...(unchanged ? {
+      emergency_contact_name: contact.fullName, emergency_contact_relationship: contact.relationship,
+      emergency_contact_phone: contact.phoneNumber,
+    } : {}) }] };
+    if (sql.startsWith('UPDATE vital_users')) {
+      assert.equal(sql, 'UPDATE vital_users SET version=version+1 WHERE id=$1 RETURNING version');
+      assert.deepEqual(values, [patientId]);
+      return { rows: [{ version: 5 }] };
+    }
+    return { rows: [] };
+  } } as unknown as PoolClient;
+  const patient: Actor = { ...actor(), role: 'patient', scopes: ['appointments.book'] };
+  await saveBookingContact(tx, patient, patientId, contact);
+  const events = statements.filter(item => item.sql.startsWith('INSERT INTO outbox_events'));
+  assert.deepEqual(events.map(item => item.values[1]), ['vital.profile.changed', 'vital.audit.requested', 'vital.profile.sync.requested']);
+  assert.ok(events.every(item => item.values[4] === 5));
+  assert.ok(events.every(item => !String(item.values[8]).includes(contact.fullName)));
+  assert.equal(statements.filter(item => item.sql.startsWith('INSERT INTO profile_sync_intents')).length, 1);
+  unchanged = true;
+  statements.length = 0;
+  await saveBookingContact(tx, patient, patientId, contact);
+  assert.equal(statements.length, 1);
+});
+
+test('profile SQL effects: version increments do not reference nonexistent VitalUser timestamps', async () => {
+  const statements: { sql: string; values: unknown[] }[] = [];
+  const tx = { async query(sql: string, values: unknown[] = []) {
+    statements.push({ sql, values });
+    if (sql.startsWith('UPDATE vital_users')) {
+      assert.equal(sql, 'UPDATE vital_users SET version=version+1 WHERE id=$1 AND "authId"=$2 AND role=$3 RETURNING version');
+      assert.deepEqual(values, [doctorId, authId, 'doctor']);
+      return { rows: [{ version: 5 }] };
+    }
+    return { rows: [] };
+  } } as unknown as PoolClient;
+  await appendProfileSqlEffects(tx, { userId: doctorId, authId, role: 'doctor', correlationId: slotId });
+  const events = statements.filter(item => item.sql.startsWith('INSERT INTO outbox_events'));
+  assert.equal(events.length, 3);
+  assert.ok(events.every(item => item.values[4] === 5));
+  assert.equal(statements.filter(item => item.sql.startsWith('INSERT INTO profile_sync_intents')).length, 1);
 });
 
 test("profile schedule: role scope resource and current membership fail closed", async () => {

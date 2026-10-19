@@ -13,7 +13,7 @@ export async function saveBookingContact(tx:PoolClient,actor:Actor,patientId:str
   if(!patient||actor.role!=="patient")throw new DomainError(403,"PROFILE_BOOKING_CONTACT_DENIED","Patient contact is unavailable.");
   if(patient.emergency_contact_name===contact.fullName&&patient.emergency_contact_relationship===contact.relationship&&patient.emergency_contact_phone===contact.phoneNumber)return;
   await tx.query('UPDATE vital_patients SET emergency_contact_name=$2,emergency_contact_relationship=$3,emergency_contact_phone=$4 WHERE "userId"=$1',[patientId,contact.fullName,contact.relationship,contact.phoneNumber]);
-  const changed=await tx.query('UPDATE vital_users SET version=version+1,"updatedAt"=NOW() WHERE id=$1 RETURNING version',[patientId]);const version=changed.rows[0].version;
+  const changed=await tx.query('UPDATE vital_users SET version=version+1 WHERE id=$1 RETURNING version',[patientId]);const version=changed.rows[0].version;
   const source=await appendSqlOutbox(tx,{producer:"profile",eventType:"vital.profile.changed",aggregateId:patientId,aggregateVersion:version,correlationId:actor.correlationId,
     data:{authId:actor.authId,role:patient.role,operation:"profile_updated",actorAuthId:actor.authId}});
   await appendSqlOutbox(tx,{producer:"profile",eventType:"vital.audit.requested",aggregateId:patientId,aggregateVersion:version,correlationId:actor.correlationId,causationId:source.eventId,

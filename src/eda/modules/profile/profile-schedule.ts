@@ -40,7 +40,7 @@ export const upgradeScheduleAvailability: ScheduleAvailabilityUpgrade = async (t
   }
   await tx.query('UPDATE vital_doctors SET "availabilityType"=\'both\',"changedAt"=NOW() WHERE "userId"=$1', [fields.doctorId]);
   const user = (await tx.query<{ version: number }>(
-    'UPDATE vital_users SET version=version+1,"updatedAt"=NOW() WHERE id=$1 RETURNING version', [fields.doctorId])).rows[0];
+    'UPDATE vital_users SET version=version+1 WHERE id=$1 RETURNING version', [fields.doctorId])).rows[0];
   if (!user) throw new DomainError(409, "PROFILE_SCHEDULE_DENIED", "Doctor membership changed.");
   const source = await appendSqlOutbox(tx, { producer: "profile", eventType: "vital.profile.changed",
     aggregateId: fields.doctorId, aggregateVersion: user.version, correlationId: actor.correlationId,
