@@ -6,9 +6,13 @@ in `VITAL_EDA_SERVICES_IMAGE` and `VITAL_EDA_TOOLS_IMAGE` in the root
 `.env.compose` file. API and worker share the runtime image; migration and
 provision commands use the separate tools image.
 
-On a push to this repository's `staging` branch, the workflow runs unit and
-isolated PostgreSQL/RabbitMQ checks, reviews route contracts against the current
-VITAL Web `staging` revision, publishes both images to GHCR, then deploys those
+For development/staging pushes and pull requests targeting those branches, the
+workflow resolves the exact VITAL Web revision from the matching branch (the
+pull request base branch, or the pushed branch) before reviewing route contracts.
+Manual runs and main/master branch checks use the supplied `web_sha` or the
+reviewed `VITAL_EDA_COMPATIBLE_WEB_SHA` repository variable. On a push to this
+repository's `staging` branch, the workflow also runs unit and isolated
+PostgreSQL/RabbitMQ checks, publishes both images to GHCR, then deploys those
 immutable digests over SSH. The deploy holds
 `/tmp/bgh-staging-deploy.lock`, updates only the Services image pins, and runs
 `python3 scripts/ecosystem.py vital-start --staging --skip-build`. That lifecycle
