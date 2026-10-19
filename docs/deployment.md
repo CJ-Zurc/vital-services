@@ -1,22 +1,30 @@
-# VITAL deployment
+# VITAL Services deployment
 
-Use root `compose.yaml` for the default EDA ecosystem. `compose.staging.yaml` is
-an image-only overlay with exact pins and no build contexts. See the root
-[VM runbook](../../docs/deployment/single-azure-vm.md) for monthly provisioning.
+Root `compose.yaml` owns the API, worker, scanner and infrastructure lifecycle.
+The staging-only `compose.staging.yaml` overlay uses exact image digests stored
+in `VITAL_EDA_SERVICES_IMAGE` and `VITAL_EDA_TOOLS_IMAGE` in the root
+`.env.compose` file. API and worker share the runtime image; migration and
+provision commands use the separate tools image.
 
-Services: `vital-db`, `vital-storage`, `vital-eda-scanner`, `vital-eda-api`,
-`vital-eda-worker`, `vital-web`. Explicit tools: `vital-eda-migrate` and
-`vital-eda-provision`. The backend `Dockerfile` has separate runtime/tools
-targets; API and worker use the same runtime content. Web starts `server.js` and
-never migrates a database.
+For development/staging pushes and pull requests targeting those branches, the
+workflow resolves the exact VITAL Web revision from the matching branch (the
+pull request base branch, or the pushed branch) before reviewing route contracts.
+Manual runs and main/master branch checks use the supplied `web_sha` or the
+reviewed `VITAL_EDA_COMPATIBLE_WEB_SHA` repository variable. On a push to this
+repository's `staging` branch, the workflow also runs unit and isolated
+PostgreSQL/RabbitMQ checks, publishes both images to GHCR, then deploys those
+immutable digests over SSH. The deploy holds
+`/tmp/bgh-staging-deploy.lock`, updates only the Services image pins, and runs
+`python3 scripts/ecosystem.py vital-start --staging --skip-build`. That lifecycle
+starts infrastructure and scanner, provisions scoped resources, applies Core
+and Integrations migrations, grants runtime access, and starts the API and
+worker. It does not deploy Web.
 
-`ecosystem.py vital-start` starts infrastructure, provisions roles/storage/broker,
-migrates, grants runtime DML and starts API/worker. Start Gateway before Web.
-`ecosystem.py seed` resolves configured Auth identities through owner commands,
-TRACE departments and EHR IDs before VITAL baseline reconciliation. It never runs
-large population/training. Repeat runs must preserve IDs and not duplicate rows.
+The workflow records both source revisions, image digests, local image IDs and
+previous pins under `.artifacts/releases/vital-ghcr/` for recovery. Candidate
+publication and disposable runtime-acceptance workflows remain separate manual
+operations and do not deploy staging. Production branches do not trigger this
+staging deployment.
 
-Manual builds run sequentially on staging under the deploy lock, with resource
-checks and source/archive/image records. Keep approved images until live health,
-seed consistency and workflow checks pass. Resets and cleanup are separate,
-explicitly confirmed operations. No local stack is required for source tests.
+See the root [monthly VM runbook](../../docs/deployment/single-azure-vm.md) for
+provisioning, environment setup and recovery.
