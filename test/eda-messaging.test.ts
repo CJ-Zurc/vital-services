@@ -17,7 +17,7 @@ function fixture() {
   let now = Date.parse('2026-10-17T00:00:00Z');
   type Appointment = MessagingAppointment & { patientAuthId: string; doctorAuthId: string; version: number; billingLineageId: string; scheduledAt: Date; specialty: string | null };
   const row: Appointment = { id, patientId, doctorId, patientAuthId: authId, doctorAuthId, status: 'approved', version: 1, completedAt: null,
-    appointmentKind: 'standard', followUpOfAppointmentId: null, sourceAppointmentId: null, billingLineageId: randomUUID(), statusLogs: [], scheduledAt: new Date(now), specialty: 'General' };
+    appointmentKind: 'standard', followUpOfAppointmentId: null, sourceAppointmentId: null, billingLineageId: randomUUID(), statusLogs: [], proposedEndAt: new Date(now + 3_600_000), slotEndsAt: null, scheduledAt: new Date(now), specialty: 'General' };
   type Stored = Record<string, unknown>;
   let state = { row, rows: [row], messages: [] as Stored[], conversation: null as Stored | null, conversations: new Map<string, Stored>(), commands: new Map<string, Stored>(), events: [] as Stored[], signals: [] as unknown[] };
   const members = new Map([[authId, { userId: patientId, role: 'patient' }], [doctorAuthId, { userId: doctorId, role: 'doctor' }]]);
@@ -40,7 +40,7 @@ function fixture() {
       return result(!revoked && member?.role === args[1] ? [member] : []);
     }
     if (sql.includes('SELECT a.*')) return result(state.rows.filter(item => item.id === args[0]));
-    if (sql.includes('FROM appointments a WHERE a."patientId"'))
+    if (sql.includes('ORDER BY a.id LIMIT 2001'))
       return result(state.rows.filter(item => item.patientId === args[0] && item.doctorId === args[1]).sort((a, b) => a.id.localeCompare(b.id)).slice(0, 2001));
     if (sql.includes('AS "counterpartAuthId"')) {
       const doctor = sql.includes('WHERE a."doctorId"=$1');
@@ -121,16 +121,18 @@ test('EDA Messaging encryption preserves legacy AAD rotation and rejects substit
   assert.throws(() => createMessageCrypto({}).assertConfigured());
 });
 test('EDA Messaging preserves completed follow-up replacement and cancellation windows', () => {
-  const closure = new Date('2026-10-01T00:00:00Z');
-  const seed: MessagingAppointment = { id: randomUUID(), patientId: randomUUID(), doctorId: randomUUID(), status: 'completed', completedAt: closure,
-    appointmentKind: 'standard', followUpOfAppointmentId: null, sourceAppointmentId: null, statusLogs: [] };
-  assert.equal(calculateMessageAccess(seed, [seed], new Date('2026-10-08T00:00:00Z')).canSend, false);
-  const followup = { ...seed, id: randomUUID(), status: 'approved', completedAt: null, appointmentKind: 'follow_up', followUpOfAppointmentId: seed.id };
-  assert.equal(calculateMessageAccess(seed, [seed, followup], new Date('2026-11-01')).hasActiveFollowUp, true);
-  const cancelled = { ...followup, status: 'cancelled', statusLogs: [{ fromStatus: 'approved', toStatus: 'cancelled', changedAt: new Date('2026-10-10') }] };
-  assert.equal(calculateMessageAccess(seed, [seed, cancelled], new Date('2026-10-16')).canSend, true);
-  assert.equal(calculateMessageAccess(cancelled, [seed, cancelled]).canSend, false);
-  assert.equal(calculateMessageAccess(seed, [seed, { ...followup, doctorId: randomUUID() }], new Date('2026-11-01')).canSend, false);
+  const first = completedVisit();
+  const followup = { ...first, id: randomUUID(), status: 'approved', appointmentKind: 'follow_up', followUpOfAppointmentId: first.id,
+    scheduledAt: new Date('2026-10-10T10:00Z'), proposedEndAt: new Date('2026-10-10T11:00Z') };
+  const chain = [first, followup];
+  assert.equal(calculateMessageAccess(first, chain, new Date('2026-10-09T09:59:59.999Z')).canSend, false);
+  assert.equal(calculateMessageAccess(first, chain, new Date('2026-10-09T10:00Z')).canSend, true);
+  assert.equal(calculateMessageAccess(first, chain, new Date('2026-10-11T11:00Z')).canSend, false);
+  const cancelled = { ...followup, status: 'cancelled' };
+  assert.equal(calculateMessageAccess(first, [first, cancelled], new Date('2026-10-10')).canSend, false);
+  assert.equal(calculateMessageAccess(cancelled, [first, cancelled], new Date('2026-10-10')).availabilityReason, 'cancelled');
+  for (const field of ['patientId', 'doctorId'] as const)
+    assert.equal(calculateMessageAccess(first, [first, { ...followup, [field]: randomUUID() }], new Date('2026-10-10')).canSend, false);
 });
 test('EDA Messaging schemas reject authority fields invalid cursors and oversized bodies', () => {
   assert.throws(() => messageInput.parse({ content: 'hello', clientMessageId: randomUUID(), senderUserId: randomUUID() }));
@@ -226,64 +228,60 @@ test('EDA Messaging owner enforces the complete lifecycle status matrix for hist
 });
 
 function completedVisit(): MessagingAppointment {
-  return { id: randomUUID(), patientId: randomUUID(), doctorId: randomUUID(), status: 'completed', completedAt: new Date('2026-10-01T00:00:00Z'),
+  return { id: randomUUID(), patientId: randomUUID(), doctorId: randomUUID(), status: 'completed', completedAt: new Date('2026-10-01T11:00Z'),
+    scheduledAt: new Date('2026-10-01T10:00Z'), proposedEndAt: new Date('2026-10-01T11:00Z'), slotEndsAt: null,
     appointmentKind: 'standard', followUpOfAppointmentId: null, sourceAppointmentId: null, statusLogs: [] };
 }
 
-test('EDA Messaging policy shares the final completed deadline across multivisit chains', () => {
+test('EDA Messaging policy merges overlapping windows without bridging future gaps', () => {
   const first = completedVisit();
-  const second = { ...first, id: randomUUID(), appointmentKind: 'follow_up', followUpOfAppointmentId: first.id, completedAt: new Date('2026-10-10T00:00:00Z') };
-  const third = { ...second, id: randomUUID(), followUpOfAppointmentId: second.id, completedAt: new Date('2026-11-01T00:00:00Z') };
-  const unrelated = { ...third, id: randomUUID(), followUpOfAppointmentId: null, completedAt: new Date('2027-01-01T00:00:00Z') };
-  const chain = [third, unrelated, first, second], deadline = '2026-11-08T00:00:00.000Z';
-  for (const seed of [first, second, third]) {
-    assert.deepEqual(new Set(linkedMessageAppointments(seed, chain).map(row => row.id)), new Set([first.id, second.id, third.id]));
-    assert.deepEqual(calculateMessageAccess(seed, chain, new Date('2026-11-07T23:59:59.999Z')), { canSend: true, sendUntil: deadline, hasActiveFollowUp: false });
-    assert.deepEqual(calculateMessageAccess(seed, chain, new Date(deadline)), { canSend: false, sendUntil: deadline, hasActiveFollowUp: false });
+  const follow = { ...first, id: randomUUID(), appointmentKind: 'follow_up', followUpOfAppointmentId: first.id,
+    scheduledAt: new Date('2026-10-10T10:00Z'), proposedEndAt: new Date('2026-10-10T11:00Z') };
+  const overlap = { ...follow, id: randomUUID(), followUpOfAppointmentId: follow.id,
+    scheduledAt: new Date('2026-10-12T10:00Z'), proposedEndAt: new Date('2026-10-12T11:00Z') };
+  const distant = { ...overlap, id: randomUUID(), followUpOfAppointmentId: overlap.id,
+    scheduledAt: new Date('2026-11-01T10:00Z'), proposedEndAt: new Date('2026-11-01T11:00Z') };
+  const rows = [first, follow, overlap, distant];
+  assert.equal(linkedMessageAppointments(first, rows).length, 4);
+  const before = calculateMessageAccess(first, rows, new Date('2026-10-09T09:59:59.999Z'));
+  assert.equal(before.canSend, false); assert.equal(before.nextOpenAt, '2026-10-09T10:00:00.000Z');
+  for (const time of ['2026-10-09T10:00Z', '2026-10-11T10:30Z', '2026-10-13T10:59:59.999Z']) {
+    const access = calculateMessageAccess(first, rows, new Date(time));
+    assert.equal(access.canSend, true); assert.equal(access.sendUntil, '2026-10-13T11:00:00.000Z');
+    assert.equal(access.hasActiveFollowUp, true);
   }
+  const gap = calculateMessageAccess(first, rows, new Date('2026-10-13T11:00Z'));
+  assert.equal(gap.canSend, false); assert.equal(gap.nextOpenAt, '2026-10-31T10:00:00.000Z');
 });
 
 test('EDA Messaging policy follows accepted replacements but ignores pending rejected and declined proposals', () => {
   const first = completedVisit();
-  const followup = { ...first, id: randomUUID(), status: 'rescheduled', completedAt: null, appointmentKind: 'follow_up', followUpOfAppointmentId: first.id };
-  const replacement = { ...first, id: randomUUID(), status: 'confirmed', completedAt: null, sourceAppointmentId: followup.id };
-  const chain = [first, followup, replacement];
-  assert.deepEqual(calculateMessageAccess(first, chain, new Date('2026-12-01')), { canSend: true, sendUntil: null, hasActiveFollowUp: true });
-  assert.deepEqual(new Set(linkedMessageAppointments(first, chain).map(row => row.id)), new Set(chain.map(row => row.id)));
-  const cancelled = { ...replacement, status: 'cancelled', statusLogs: [{ fromStatus: 'confirmed', toStatus: 'cancelled', changedAt: new Date('2026-10-20T00:00:00Z') }] };
-  assert.deepEqual(calculateMessageAccess(first, [first, followup, cancelled], new Date('2026-10-26T23:59:59.999Z')),
-    { canSend: true, sendUntil: '2026-10-27T00:00:00.000Z', hasActiveFollowUp: false });
-  assert.equal(calculateMessageAccess(first, [first, followup, cancelled], new Date('2026-10-27T00:00:00Z')).canSend, false);
-  assert.deepEqual(calculateMessageAccess(cancelled, [first, followup, cancelled], new Date('2026-10-21')),
-    { canSend: false, sendUntil: null, hasActiveFollowUp: false });
+  const old = { ...first, id: randomUUID(), status: 'rescheduled', appointmentKind: 'follow_up', followUpOfAppointmentId: first.id };
+  const replacement = { ...first, id: randomUUID(), status: 'confirmed', sourceAppointmentId: old.id,
+    scheduledAt: new Date('2026-12-01T10:00Z'), proposedEndAt: new Date('2026-12-01T11:00Z') };
+  const rows = [first, old, replacement];
+  assert.equal(calculateMessageAccess(first, rows, new Date('2026-11-30T09:59:59.999Z')).canSend, false);
+  assert.equal(calculateMessageAccess(first, rows, new Date('2026-11-30T10:00Z')).canSend, true);
+  assert.equal(calculateMessageAccess(old, rows, new Date('2026-12-01')).availabilityReason, 'rescheduled');
   for (const status of ['pending', 'pending_patient_confirmation', 'pending_payment_verification', 'rejected', 'cancelled']) {
-    const proposal = { ...replacement, status, statusLogs: [{ fromStatus: 'pending_patient_confirmation', toStatus: status, changedAt: new Date('2026-12-01') }] };
-    const orphanActive = { ...replacement, id: randomUUID(), sourceAppointmentId: proposal.id };
-    const rows = [first, followup, proposal, orphanActive];
-    assert.deepEqual(new Set(linkedMessageAppointments(first, rows).map(row => row.id)), new Set([first.id, followup.id]), status);
-    assert.deepEqual(calculateMessageAccess(first, rows, new Date('2026-10-07')), { canSend: true, sendUntil: '2026-10-08T00:00:00.000Z', hasActiveFollowUp: false }, status);
-    assert.equal(calculateMessageAccess(first, rows, new Date('2026-12-02')).canSend, false, status);
-  }
-  for (const participant of ['patientId', 'doctorId'] as const) {
-    const foreign = { ...replacement, [participant]: randomUUID() };
-    assert.equal(calculateMessageAccess(first, [first, followup, foreign], new Date('2026-12-01')).canSend, false, participant);
+    assert.equal(calculateMessageAccess(first, [first, old, { ...replacement, status }], new Date('2026-12-01')).canSend, false, status);
   }
 });
 
-test('EDA Messaging policy denies uncertain historical completion and cancellation evidence', () => {
-  const first = completedVisit(), now = new Date('2026-10-02');
-  const unknownCompletion = { ...first, completedAt: null };
-  assert.deepEqual(calculateMessageAccess(unknownCompletion, [unknownCompletion], now), { canSend: false, sendUntil: null, hasActiveFollowUp: false });
-  const followup = { ...first, id: randomUUID(), followUpOfAppointmentId: first.id, appointmentKind: 'follow_up', completedAt: null };
-  for (const incomplete of [followup, { ...followup, status: 'cancelled' },
-    { ...followup, status: 'cancelled', statusLogs: [{ fromStatus: 'pending', toStatus: 'cancelled', changedAt: now }] }]) {
-    assert.deepEqual(calculateMessageAccess(first, [first, incomplete], now), { canSend: false, sendUntil: null, hasActiveFollowUp: false });
+test('EDA Messaging policy uses scheduled ends rather than completion and fails closed for missing schedules', () => {
+  const first = completedVisit();
+  for (const completedAt of [null, new Date('2026-09-01'), new Date('2026-12-01')]) {
+    assert.equal(calculateMessageAccess({ ...first, completedAt }, [], new Date('2026-10-02T10:59:59.999Z')).canSend, true);
+    assert.equal(calculateMessageAccess({ ...first, completedAt }, [], new Date('2026-10-02T11:00Z')).canSend, false);
   }
-  const cancelled = { ...followup, status: 'cancelled', statusLogs: [
-    { fromStatus: 'confirmed', toStatus: 'cancelled', changedAt: new Date('2026-10-10') },
-    { fromStatus: 'approved', toStatus: 'cancelled', changedAt: new Date('2026-10-11') },
-  ] };
-  assert.equal(calculateMessageAccess(first, [first, cancelled], new Date('2026-10-17')).sendUntil, '2026-10-18T00:00:00.000Z');
+  for (const proposedEndAt of [null, first.scheduledAt, new Date('invalid')]) {
+    assert.equal(calculateMessageAccess({ ...first, proposedEndAt }, [], new Date('2026-10-01')).availabilityReason, 'schedule_unavailable');
+  }
+  const slotted = { ...first, slotEndsAt: new Date('2026-10-01T12:00Z') };
+  assert.equal(calculateMessageAccess(slotted, [], new Date('2026-10-02T11:30Z')).sendUntil, '2026-10-02T12:00:00.000Z');
+  const approved = { ...first, status: 'approved', scheduledAt: new Date('2026-12-01T10:00Z'), proposedEndAt: new Date('2026-12-01T11:00Z') };
+  assert.equal(calculateMessageAccess(approved, [], new Date('2026-10-01')).canSend, true);
+  assert.equal(calculateMessageAccess(approved, [], new Date('2026-12-02T11:00Z')).canSend, false);
 });
 
 test('EDA Messaging owner hides unknown and foreign history identically without writes', async () => {
@@ -307,7 +305,7 @@ test('EDA Messaging owner hides unknown and foreign history identically without 
 test('EDA Messaging owner returns empty eligible history without creating conversations', async () => {
   const f = fixture();
   for (const role of ['patient', 'doctor'] as const) assert.deepEqual(await f.module.history(f.actor('history', role), f.id),
-    { messages: [], nextCursor: null, canSend: true, sendUntil: null, hasActiveFollowUp: false });
+    { messages: [], nextCursor: null, canSend: true, sendUntil: new Date(f.now + 90_000_000).toISOString(), hasActiveFollowUp: false, nextOpenAt: null, availabilityReason: 'open' });
   assert.equal(f.state().conversation, null); assert.equal(f.state().conversations.size, 0);
   assert.equal(f.state().messages.length, 0); assert.equal(f.state().commands.size, 0); assert.equal(f.state().events.length, 0); assert.equal(f.state().signals.length, 0);
   assert.equal(f.calls.some(sql => /^(INSERT|UPDATE|DELETE)/.test(sql)), false);
@@ -342,6 +340,7 @@ test('EDA Messaging owner aligns reopened inbox history and encrypted send withi
   for (const status of ['approved', 'confirmed']) {
     const f = fixture(); f.state().row.status = 'completed'; f.state().row.completedAt = new Date(f.now - 30 * 86_400_000);
     const followup = { ...f.state().row, id: randomUUID(), status, completedAt: null, appointmentKind: 'follow_up', followUpOfAppointmentId: f.id };
+    f.state().row.scheduledAt = new Date(f.now - 30 * 86_400_000); f.state().row.proposedEndAt = new Date(f.now - 30 * 86_400_000 + 3_600_000);
     const unrelated = { ...followup, id: randomUUID(), followUpOfAppointmentId: null };
     const foreignPatient = { ...followup, id: randomUUID(), patientId: randomUUID(), patientAuthId: randomUUID() };
     const foreignDoctor = { ...followup, id: randomUUID(), doctorId: randomUUID(), doctorAuthId: randomUUID() };
@@ -364,13 +363,13 @@ test('EDA Messaging owner aligns reopened inbox history and encrypted send withi
       const item = inbox.conversations.find(row => row.appointmentId === f.id)!;
       assert.deepEqual({ canSend: item.canSend, sendUntil: item.sendUntil, hasActiveFollowUp: item.hasActiveFollowUp },
         { canSend: history.canSend, sendUntil: history.sendUntil, hasActiveFollowUp: history.hasActiveFollowUp });
-      for (const query of f.queries.filter(query => query.sql.includes('FROM appointments a WHERE a."patientId"'))) {
+      for (const query of f.queries.filter(query => query.sql.includes('ORDER BY a.id LIMIT 2001'))) {
         assert.ok(query.sql.includes('AND a."doctorId"=$2'));
         // The inbox may inspect other pairs, but every chain query binds both dimensions.
         assert.equal(query.args.length, 2); assert.ok(query.args.every(value => typeof value === 'string'));
       }
     }
-    const ownQueries = f.queries.filter(query => query.sql.includes('FROM appointments a WHERE a."patientId"'));
+    const ownQueries = f.queries.filter(query => query.sql.includes('ORDER BY a.id LIMIT 2001'));
     assert.ok(ownQueries.some(query => query.args[0] === f.state().row.patientId && query.args[1] === f.state().row.doctorId));
     f.state().rows.find(row => row.id === followup.id)!.status = 'rejected';
     const closed = await f.module.history(f.actor('history'), f.id);
@@ -417,8 +416,8 @@ test('EDA Messaging owner preserves committed same-ID retries after the send win
   assert.deepEqual(f.state(), retried);
 });
 
-test('EDA Messaging owner rechecks the completion deadline after waiting for lifecycle locks', async () => {
-  const f = fixture(); f.state().row.status = 'completed'; f.state().row.completedAt = new Date(f.now - 7 * 86_400_000 + 1);
+test('EDA Messaging owner rechecks the scheduled deadline after waiting for lifecycle locks', async () => {
+  const f = fixture(); f.state().row.status = 'completed'; f.state().row.completedAt = new Date(f.now); f.state().row.scheduledAt = new Date(f.now - 2 * 86_400_000); f.state().row.proposedEndAt = new Date(f.now - 86_400_000 + 1);
   assert.equal((await f.module.history(f.actor('history'), f.id)).canSend, true);
   f.onCalendar(() => { f.advance(1); });
   await assert.rejects(f.module.send(f.actor('send'), f.id, f.meta(), { content: 'stale page', clientMessageId: randomUUID() }), { status: 409, code: 'MESSAGE_READ_ONLY' });

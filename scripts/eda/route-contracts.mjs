@@ -13,6 +13,8 @@ const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIO
 const hash = text => createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex');
 // A review snapshot, not a parity certificate. Changes require a fresh source review.
 const reviewedHashes = Object.freeze({
+  'lib/eda/admin-directory.ts': '5906d7ac8b97f199f301ecaf4725145934522ae4c1d09461865985a7e84cb1ba',
+  'app/api/admin/patients/route.ts': 'e36a083c52d0c5d8e7709b01886c82a805e1945a873fe74c48e48fa829b94847',
   'app/api/admin/appointments/[appointmentId]/acknowledgment/file/route.ts': 'e46cd775590bcbb236ae0bb13f0e74bab030ba1ebdb28d9749811715d9a261ef',
   'app/api/admin/appointments/[appointmentId]/acknowledgment/route.ts': 'e46cd775590bcbb236ae0bb13f0e74bab030ba1ebdb28d9749811715d9a261ef',
   'app/api/doctor/signing-profile/route.ts': '2a91db2d0769fc09ce61cefe727cf2f443fd38ab7f0df1e1d6f1a4c78d96025f',
@@ -36,7 +38,7 @@ const reviewedHashes = Object.freeze({
   'app/api/admin/messaging/conversations/[conversationId]/hold/route.ts': 'd7733f9989bff43c1188db02c8c83592be328520a051378c2dc8798c0b40a976',
   'app/api/admin/messaging/conversations/route.ts': '5596709f083a60e1279856ba2d9695775e5fd31ab3cf63736b5862b306dcdb66',
   'app/api/admin/route.ts': '03e4da65a26bf172ca2578d291100e9b0efdc63090d8aadf349310c0053f91c0',
-  'app/api/admin/users/route.ts': 'dfc26bc546684683db82b8ef6c07933ff83e3ac805904ffeceb4908a1079b4d2',
+  'app/api/admin/users/route.ts': '3315e6869e250721a6a911fd1880b0b9e29cee9d7630538a1c806c4f12acf930',
   'app/api/appointments/[appointmentId]/complete/route.ts': '77e224e1b5f3493115b46d76b98bef327b42ca92e60fd8af73d07cbd6c76ea09',
   'app/api/appointments/[appointmentId]/concerns/route.ts': 'c9a3f2e09aed9310dabc01f3edc94b97be29e10c054c2f0a9e8140608301e19d',
   'app/api/appointments/[appointmentId]/feedback/route.ts': '8ec60f817fd7b204124ce1a7d6f2e989fe914f84a29a5c1e0603a768e2b6368a',
@@ -138,7 +140,7 @@ const reviewedHashes = Object.freeze({
   'app/integrations/v1/patients/route.ts': 'd58b8aa4a31c090024f92bfda5eb74360e50877df97d84319eb0a46b816628bb',
   'app/integrations/v1/prescriptions/route.ts': '2c1bcd6627113ac217b81a002248ffe69e0ce82629a91c85840b1c4b057d9219',
   'app/internal/users/[user_id]/roles/route.ts': '1ec836806535d438ba3068da48ed42327adff1ff3ea13302a54afa30418fa935',
-  'lib/admin-management.ts': 'be8b25f64d57dbdce885cf1731af13c2bc485b70631d4c18eea43c2cbdedfd80',
+  'lib/admin-management.ts': 'c00eae44dc4bfbbf6f8d1ddc1c91f139ce06634169b8801300b263cf966b7da8',
   'lib/allergies.ts': '90c0767d3818cc6dea00d19dd374b35b40f08aae2421f38c88553c0d49e13ff1',
   'lib/appointment-action-state.ts': 'bb725cb2a1956750493e931e8c137adc222a4bb6e3684d25f9ce4cd3ba6249aa',
   'lib/appointment-lifecycle.ts': 'b4c5cec819a9e80d835bbcd6abe146730cf267115ee46dceeaa34ff7197fe49e',
@@ -171,11 +173,11 @@ const reviewedHashes = Object.freeze({
   'lib/eda/completion-paths.ts': 'c4707d7717bb7bc82ff65e68b24ac80efa58079d32673bcd1222f685869a101e',
   'lib/eda/completion-route-policy.ts': '8cfc1d8bbe3bbc94efea2aa3914ea6647ef2b8909f05ccbfb6756e5fef344e52',
   'lib/eda/messaging-bff.ts': '9a2e15ee25df1dddaabcc43c189f7bfe91a62f366004a8d742abbef78eba02e8',
-  'lib/eda/messaging-dto.ts': 'a19a285c5b33f21c991c0762177bf8c750974a83ee670e668d845667bb2932ef',
+  'lib/eda/messaging-dto.ts': '11eed1dd253393407c30c338bbbe5b0dafb65bf14656e8a86f7527c52a9f427c',
   'lib/eda/messaging-paths.ts': '320185fde0904df6ac25828bebe20dd3a2a126138eac68b0980d5c7988dcced5',
   'lib/eda/messaging-route-policy.ts': 'f8fe5c61d6c5f7105e0fe9241816258bc5a63fb27ef37708831e7cef332b5e94',
   'lib/eda/messaging.ts': '1ce8421f0dbd074d669eaf85d5ee119f2a98cddcfd62efb74e9b9c8b5ceb9cd9',
-  'lib/eda/mode-policy.ts': '964d87ef6ed9de635cd425900f57b1ca91bf20b65b70c9552a101972809110e2',
+  'lib/eda/mode-policy.ts': '459d5d5c78c2445c59af60d10ac90da0aeedaaeb9104906ab0ab4ec62f22cab4',
   'lib/eda/patient-onboarding.ts': 'bf14670643dc52a6693e4bb8ea452b247b43834246196f28554d9686673e092d',
   'lib/eda/patient-record-notice.ts': '966b336c56669936b94c6470a6598802335f0509f562e2373142f841a97db35c',
   'lib/eda/patient-workflow.ts': '81de5bf45249c1d71da5f7df9fda58866fcbd3a998cc5ca50e4b01b277533f4b',
@@ -194,7 +196,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/profile-qr-transport.ts': '7ebc4662fc1795cc8dbfa51e742daf2bcebc7f0fc33f0d5fd71e7c100c4f9ba5',
   'lib/eda/profile-qr-upload.ts': '5af7ab231a9d1561643825e7a243935a83c406e395b298fb77bcbbc79721d2b4',
   'lib/eda/profile-registration.ts': '07ca27c21521d8a57ea3937d1081688e5719d82be92ab678d2d5b0afccde69f3',
-  'lib/eda/profile.ts': '5a24f90e2395480b726b2108c6ba8cb47c49b62673538f761fdc9d5f52ec139a',
+  'lib/eda/profile.ts': 'dabc57bd5279caa0ce2b5d6593908515cb4325e93d6259f2e0104ccc549ba115',
   'lib/eda/public-registration.ts': '3a6311d6658488e9ee51a2db0bd839a75c28d05e51bcc008a75c830283ea86d0',
   'lib/eda/records-bff.ts': '9ffaa90b31d54f2f8dfb9c624e4e298f74a128447c3d4d7e3d92976bff416f66',
   'lib/eda/records-composition.ts': 'd6d1fbd8c967eabea562ed1288a3023478043c426be99bfacdddec9259005aee',
@@ -206,7 +208,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/request-body.ts': '7a78782d69c435e689b110eee50541ed73795c6bfcdb2aaa43ca6da10c71b0d5',
   'lib/eda/stream-bff.ts': '2fa4d988f94763e0876d4b4995c843c155846c1a61dd96ad537fed6ed01e32c7',
   'lib/eda/stream-transport.ts': 'ada0197f643603eb27a9659728a2629b0301ea96e81477afa5b737730037fd5d',
-  'lib/eda/transport.ts': 'f336313e5589b055ebda5009f3b3b466ac92d44a47d78942e30b1134821e522a',
+  'lib/eda/transport.ts': '1d7c16240904a69eb16dbe2236f9b515a5fd4593a91d9457a4ec10c138f3bf84',
   'app/api/internal/vital/readiness/route.ts': 'b7ffb181f5babb03300373584259088eb10b1d57494b09f579d93aa5183a0877',
   'tests/eda-readiness.test.ts': 'a37c0db033d0143465be8faf2472406e4a4ed75cb86000c6947ee1591cb2c16a',
   'lib/eda/video-bff.ts': '81021e8f76361365a7ebb5432b1242fffc5012b14196020f701fe732ee1811bd',
@@ -243,7 +245,7 @@ const reviewedHashes = Object.freeze({
   'lib/sso-session.ts': '3d59568747c6a36d8f0fa244a53090be47cea4f0b1c6b9bc1437cb1d623c17c6',
   'lib/trace-departments.ts': '4583f5f375c5ac62eca01700f15c63f893eb38851f78951d7b96e3e8dba235a8',
   'lib/useAuthStore.ts': 'df13c11221360a3eaf70baa3f40150c50813fde91ecd660723ed7e1a5d16b946',
-  'tests/admin-management.test.ts': 'ccb365d7a630cf90341a7e754d12745db1280a6b7a479c99a0214f0ca5a32ec9',
+  'tests/admin-management.test.ts': '35618c7f1c28586b85b6d58c90c4bf2ff0675b5dc269de7101129f9f4cbf7074',
   'tests/allergies.test.ts': '7f57fecb3c9f0a3a8d9389ababb33e9ef3b33d3e884b02bbcaf30cfc176038ac',
   'tests/appointment-error-safety.test.ts': 'ffb7c25110823cc4916bd1001bfdca2ef5b11c71d30facfd1aea5b2614525676',
   'tests/appointment-lifecycle.test.ts': '3a009196eca70ed89f3a179bdb0ce8bb93e1e1f2aae869b4e8aceb15a87e1780',
@@ -257,19 +259,19 @@ const reviewedHashes = Object.freeze({
   'tests/eda-appointment.test.ts': 'd9645cfa0f47c71b1880682fe84808d70c8d7f1ab7f3861c8735f8c7559b2420',
   'tests/eda-completion-aggregates.test.ts': '2cce58b7ad848d80f3c626a5c89c50ef6e8b8504a9f6a79c5c3e80ba06a321d5',
   'tests/eda-completion-qr.test.ts': '4c1007221ad06faafd0a0bee22913629d7c6bb73c5563a857fd7789509bd0257',
-  'tests/eda-messaging-bff.test.ts': '98edb7117634d8fb8199f6e66a22470c58a8aaaf74a8568ad23ebe536543defd',
+  'tests/eda-messaging-bff.test.ts': 'ec82df7de2b887035e6b273379e5574dd68be65112c2f8618a82848fc37f5b95',
   'tests/eda-payment.test.ts': 'e9e3df2b5b1b88903650779452ce6c01c49a6aedf48d955885641530551c465d',
   'tests/eda-portal-integrations.test.ts': 'e08c5851a8a2a76d64fc95b8d2cdeebabbef2455bef5b44aab8e0e4a75d50485',
   'tests/eda-portal-provision.test.ts': 'c8cb9b33af32d2dfecbfc4cb740513d57a224ffcf64639b3635f63593d9852c7',
   'tests/eda-profile-boundaries.test.ts': '5389dec91bc24146cdb465fd23b2409fe60ef7d334e74c1901a7c677ae4e2813',
   'tests/eda-profile-registration.test.ts': '363586ec8db429bcbcb0a86bc42f074c3ecb259d61e1eae1f92dbed9998dc5d5',
-  'tests/eda-profile.test.ts': '01063419dff1447921ce44b65e39907c6a3d81be461199fe8c31f860760b5274',
+  'tests/eda-profile.test.ts': '30591454d873e6bc16c81d8dfa88be48e7e9ec3c2c02875f8a16aa75a61e01a6',
   'tests/eda-public-registration.test.ts': '66c48ccd6e7d5a7e76aa3f2893777deab6f3ed58cc59663c3feffd5008d3b4a0',
   'tests/eda-records-pagination.test.ts': '18a990da29ef3ef05cb9c1cc7ae2f846bcd5bc20a827a3c51d8262411d4cd2db',
   'tests/eda-records.test.ts': 'e90d42277c970bf0f24456117ff90d4f160f9c30e7c32a88bc0656841213b35c',
   'tests/eda-remaining-owners.test.ts': '75d1630e63af3ea1066a08ad2f3eb07e1f2cf425a8aadff0565a88b3666a8582',
   'tests/eda-sse.test.ts': '1fb489e045e2b0a4b57bd48071ee92b22a32a421107dd7042036aeedae69c2d2',
-  'tests/eda-transport.test.ts': 'cc38739af20215896b5b8700871a6d5e87c71b3f43a56ad2b649b1cf3b93f44f',
+  'tests/eda-transport.test.ts': 'cb1655b61712663535af377df977fe72cadd5ca415b17d606313550bd82a12a9',
   'tests/eda-video-appointment.test.ts': 'f0fb5b22446153a5a0416b5c14c1ee46a4df2863716392aeee259d3eb5ab49da',
   'tests/eda-video-transport.test.ts': '2259404aca880daadfc6d48244276c95fb4a526c0653f977a0a463bf56748517',
   'tests/eda-video.test.ts': '1f8958f5b8bc183e5ca61018df3f3ea2cd0784d61011e36e845bdf85a660b729',
@@ -360,7 +362,7 @@ const families = {
     response: 'doctor/patient/staff appointment or patient history/bootstrap DTO; provisioning201; subject and page/association fences', statuses: [200, 201],
     deps: ['Core Profile/Appointment', 'Payment/Video staff projections', 'Auth identities', 'TRACE department on provisioning'], flags: ['VITAL_EDA_ENABLED', 'VITAL_EDA_COMPLETION_ENABLED'] },
   profile: { owner: 'Services Profile', entry: 'lib/eda/profile.ts', dispatch: 'createProfileClient',
-    files: ['lib/eda/profile-dto.ts', 'lib/eda/profile-mutations.ts', 'lib/eda/patient-onboarding.ts', 'lib/eda/patient-workflow.ts'],
+    files: ['lib/eda/admin-directory.ts', 'lib/admin-management.ts', 'lib/eda/profile-dto.ts', 'lib/eda/profile-mutations.ts', 'lib/eda/patient-onboarding.ts', 'lib/eda/patient-workflow.ts'],
     tests: ['eda-profile.test.ts', 'eda-profile-boundaries.test.ts', 'eda-profile-registration.test.ts', 'admin-management.test.ts'],
     request: 'route-specific Profile read/mutation; signed scope and resource; stable operation ID on target mutations; see handler for allowed fields',
     response: 'Profile V1 decoder with legacy browser projection; Auth identity and EHR fields remain independently owned', statuses: [200, 201],
@@ -507,7 +509,8 @@ POST /api/patient/ehr-record-notice targetPatientRecordNotice
 GET /api/admin/doctors
 POST /api/admin/doctors targetAdminProvision
 PATCH /api/admin/doctors targetAdminSpecialty
-GET /api/admin/users getRoleMembership
+GET /api/admin/users adminDirectory
+GET /api/admin/patients adminDirectory
 PATCH /api/admin/users gatewayJson
 GET /api/admin/membership
 GET /internal/users/[user_id]/roles createEdaTransport
