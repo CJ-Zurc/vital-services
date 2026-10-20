@@ -53,12 +53,23 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
           WEB_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          WEB_SHA_OVERRIDE: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' && vars[format('VITAL_EDA_PR_{0}_WEB_SHA', github.event.pull_request.number)] || '' }}
         shell: bash
         run: |
           set -euo pipefail
           : "${GH_PAT:?GH_PAT is required to read the private VITAL Web repository}"
           : "${WEB_BRANCH:?Could not resolve the paired VITAL Web branch}"
           [[ "$WEB_BRANCH" =~ ^(development|staging)$ ]]
+          # An explicit PR-specific companion does not affect other PRs or releases.
+          if [[ -n "$WEB_SHA_OVERRIDE" ]]; then
+            if [[ ! "$WEB_SHA_OVERRIDE" =~ ^[a-f0-9]{40}$ ]]; then
+              echo 'The PR-specific Web revision must be a full commit SHA.' >&2
+              exit 1
+            fi
+            echo "web_sha=$WEB_SHA_OVERRIDE" >> "$GITHUB_OUTPUT"
+            echo "Using the explicit companion Web commit: $WEB_SHA_OVERRIDE"
+            exit 0
+          fi
           response="$(curl --fail --silent --show-error \
             --config <(printf 'header = "Authorization: Bearer %s"\n' "$GH_PAT") \
             -H 'Accept: application/vnd.github+json' \
