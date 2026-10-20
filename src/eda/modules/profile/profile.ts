@@ -70,7 +70,9 @@ const fee = z.union([
 ]).nullable().optional();
 
 export const doctorPatchSchema = z.object({
-  title: nullableText(80),
+  s2License: nullableText(80),
+  s2ValidFrom: z.iso.date().optional(),
+  s2ValidUntil: z.iso.date().optional(),
   specialty: nullableText(160),
   prcLicense: nullableText(80),
   availabilityType: z.enum(["virtual", "in_person", "both"]).optional(),
@@ -114,7 +116,7 @@ export const patientSelect = {
   emergencyContactName: true, emergencyContactRelationship: true, emergencyContactPhone: true,
 } satisfies Prisma.VitalPatientSelect;
 export const doctorSelect = {
-  userId: true, authId: true, role: true, title: true, specialty: true, departmentExternalId: true,
+  userId: true, authId: true, role: true, s2License: true, s2ValidFrom: true, s2ValidUntil: true, signatureAssetId: true, specialty: true, departmentExternalId: true,
   departmentName: true, prcLicense: true, availabilityType: true, virtualFee: true, inPersonFee: true,
   starRating: true, changedAt: true, bio: true, education: true, isDoctorOnboardingComplete: true,
   termsAgreedAt: true,
@@ -215,11 +217,15 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
     return result;
   }
 
-  function doctorData(input: DoctorPatch, doctor?: { title: string | null; specialty: string | null;
+  function doctorData(input: DoctorPatch, doctor?: { s2License?: string | null; s2ValidFrom?: Date | null; s2ValidUntil?: Date | null; signatureAssetId?: string | null; specialty: string | null;
     prcLicense: string | null; bio: string | null; availabilityType: string | null; isDoctorOnboardingComplete: boolean },
     verified?: ProfileVerification, admin = false): Prisma.VitalDoctorUpdateInput {
     const { terms_accepted: _terms, ...fields } = input;
-    const data: Prisma.VitalDoctorUpdateInput = { ...fields, changedAt: new Date() };
+    const data: Prisma.VitalDoctorUpdateInput = { ...fields,
+      ...(input.s2ValidFrom ? {s2ValidFrom:new Date(input.s2ValidFrom+'T00:00:00Z')} : {}),
+      ...(input.s2ValidUntil ? {s2ValidUntil:new Date(input.s2ValidUntil+'T00:00:00Z')} : {}),changedAt: new Date() };
+    const from=input.s2ValidFrom??doctor?.s2ValidFrom?.toISOString().slice(0,10),until=input.s2ValidUntil??doctor?.s2ValidUntil?.toISOString().slice(0,10);
+    if(from&&until&&from>until)throw new ProfileError(400,'S2 validity end must follow its start.');
     if (input.specialty !== undefined) {
       if (!admin && doctor?.isDoctorOnboardingComplete && input.specialty !== doctor.specialty) {
         throw new ProfileError(403, "Specialty is locked after verification. Please contact an admin to update it.");
@@ -229,9 +235,11 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
       data.departmentExternalId = verified.department.id;
       data.departmentName = verified.department.name;
     }
+    if(doctor?.isDoctorOnboardingComplete&&(input.prcLicense===null||input.s2License===null))throw new ProfileError(400,'Required credentials cannot be cleared.');
     if (input.isDoctorOnboardingComplete) {
       if (doctor?.isDoctorOnboardingComplete) throw new ProfileError(409, "Onboarding already completed.");
-      requiredText(80).parse(input.title ?? doctor?.title);
+      requiredText(80).parse(input.s2License ?? doctor?.s2License);
+      if(!from||!until||!doctor?.signatureAssetId)throw new ProfileError(400,'S2 validity dates and saved signature are required.');
       requiredText(160).parse(input.specialty ?? doctor?.specialty);
       requiredText(80).parse(input.prcLicense ?? doctor?.prcLicense);
       requiredText(5000).parse(input.bio ?? doctor?.bio);

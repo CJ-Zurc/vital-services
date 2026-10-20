@@ -76,7 +76,7 @@ export async function readPaymentProjectionAppointment(tx: PoolClient, id: strin
 const commandSchema = z.object({ operationId: z.uuid(), requestHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 const accepted = new Set(["approved", "pending_payment_verification", "confirmed"]);
 const revoked = new Set(["cancelled", "rejected", "rescheduled", "expired"]);
-const scopes = ["payments.read", "payments.checkout", "payments.reconcile"];
+const scopes = ["payments.acknowledgment.read", "payments.read", "payments.checkout", "payments.reconcile"];
 const maximumCentavos = 2_147_483_647n;
 function denied(status: number, code: string): never { throw new DomainError(status, code, "Billing authorization is unavailable."); }
 

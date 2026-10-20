@@ -238,3 +238,10 @@ test("EDA Billing reassociation requires committed saga and same lineage next as
   replacement.associationVersion = 1;
   await assert.rejects(f.authority.committedIntent(intent.id), code("BILLING_OWNER_RECEIPT_INVALID"));
 });
+
+
+test('S6 billing ownership permits narrowly scoped acknowledgment retrieval after completion',async()=>{
+ const f=fixture();
+ await f.authority.authorize({...f.actor,scopes:['payments.acknowledgment.read']},f.id);
+ await assert.rejects(f.authority.authorize({...f.actor,authId:randomUUID(),scopes:['payments.acknowledgment.read']},f.id));
+});

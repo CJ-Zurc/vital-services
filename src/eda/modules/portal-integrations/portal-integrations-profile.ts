@@ -52,7 +52,7 @@ export function createPortalProfileReaders(db: CorePrismaClient, dependencies: {
         const statuses = await dependencies.syncStatuses(visible.map(row => row.authId));
         for (const row of visible) data.push({ id: row.userId, authId: row.authId, role: row.user.role,
           name: identities.get(row.authId)?.name ?? null, email: identities.get(row.authId)?.email ?? null,
-          title: row.title, specialty: row.specialty, departmentExternalId: row.departmentExternalId,
+           specialty: row.specialty, departmentExternalId: row.departmentExternalId,
           departmentName: row.departmentName, prcLicense: row.prcLicense, availabilityType: row.availabilityType,
           virtualFee: row.virtualFee ? Number(row.virtualFee) : null, inPersonFee: row.inPersonFee ? Number(row.inPersonFee) : null,
           starRating: row.starRating, onboardingComplete: row.isDoctorOnboardingComplete,

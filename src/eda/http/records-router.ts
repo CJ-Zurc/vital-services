@@ -12,8 +12,10 @@ export function createRecordsRouter(runtime?:RecordsRuntime){
     const data=await run(req,res);const pending=typeof data==='object'&&data!==null&&'operationStatus'in data&&['pending','processing','unknown'].includes(String(data.operationStatus));
     res.status(pending?202:200).json({success:true,contractVersion:1,data});
   };
+  router.get('/signing-profile',handle((_req,res)=>runtime!.signing.read(res.locals.actor)));
+  router.post('/signing-profile',handle((req,res)=>runtime!.signing.upload(res.locals.actor,meta(res.locals.command).operationId,req.body)));
   router.get('/documents',handle((req,res)=>runtime!.module.listDocuments(res.locals.actor,req.query,res.locals.recordsReader===true)));
-  router.get('/documents/:id',handle((req,res)=>runtime!.module.document(res.locals.actor,z.uuid().parse(req.params.id),res.locals.recordsReader===true)));
+  router.get('/documents/:id',handle((req,res)=>runtime!.module.document(res.locals.actor,z.uuid().parse(req.params.id),res.locals.recordsReader===true,req.query.retrieval==='qr')));
   router.get('/files',handle((req,res)=>runtime!.files.list(res.locals.actor,req.query)));
   router.get('/files/:id',handle((req,res)=>runtime!.files.read(res.locals.actor,z.uuid().parse(req.params.id))));
   router.get('/patients',handle((req,res)=>runtime!.module.listPatients(res.locals.actor,req.query)));
