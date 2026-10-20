@@ -17,8 +17,8 @@ interface SlotBooking {id:string;status:string;consultationType:string;patientId
 interface SlotRow {id:string;version:number;slotDate:string;startTime:string;endTime:string;consultationType:string;isPublished:boolean;appointments:SlotBooking[];pendingCount?:number;bookedCount?:number}
 interface CalendarFields {slotDate:string|null;startTime:string|null;endTime:string|null}
 interface RelatedRow extends CalendarFields {id:string;status:string;sourceAppointmentId:string|null;followUpOfAppointmentId:string|null;scheduledAt:Date;proposedEndAt:Date|null;updatedAt:Date;cancellationReason:string|null;statusLogs:{note:string|null;changedAt:string}[]}
-interface ReadRow extends AppointmentRow,CalendarFields {title:string|null;specialty:string|null;followUpOfAppointmentId:string|null;cancellationReason:string|null;rejectionReason:string|null;createdAt:Date;updatedAt:Date;autoCompletedAt:Date|null;chiefComplaint:string|null;opqrst:unknown;sessionStartedAt:Date|null;sessionEndedAt:Date|null}
-interface DoctorRow {id:string;authId:string;title:string|null;specialty:string|null;bio:string|null;education:string|null;availabilityType:string|null;virtualFee:string|null;inPersonFee:string|null;starRating:number;hospitals:string[]}
+interface ReadRow extends AppointmentRow,CalendarFields {specialty:string|null;followUpOfAppointmentId:string|null;cancellationReason:string|null;rejectionReason:string|null;createdAt:Date;updatedAt:Date;autoCompletedAt:Date|null;chiefComplaint:string|null;opqrst:unknown;sessionStartedAt:Date|null;sessionEndedAt:Date|null}
+interface DoctorRow {id:string;authId:string;specialty:string|null;bio:string|null;education:string|null;availabilityType:string|null;virtualFee:string|null;inPersonFee:string|null;starRating:number;hospitals:string[]}
 interface DateBlockRow {id:string;version:number;startDate:string;endDate:string;weekday:number|null}
 interface ReviewRow {id:string;rating:number;comment:string|null;patientAuthId:string;patientId:string;submittedAt:Date}
 interface LogRow {id:string;fromStatus:string|null;toStatus:string;changedByRole:string|null;note:string|null;changedAt:Date}
@@ -102,7 +102,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
     const expiring=filter.status==='expired'?` AND a.status IN ('pending','approved','confirmed','pending_patient_confirmation')
       AND COALESCE((s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila',
         a."proposedEndAt" AT TIME ZONE 'UTC',a."scheduledAt" AT TIME ZONE 'UTC')<=$6::timestamptz`:'';
-    const pageResult=await readCollectionPage<ReadRow>(pool,page,{sql:`SELECT a.*,p."authId" AS "patientAuthId",d."authId" AS "doctorAuthId",d.title,d.specialty,
+    const pageResult=await readCollectionPage<ReadRow>(pool,page,{sql:`SELECT a.*,p."authId" AS "patientAuthId",d."authId" AS "doctorAuthId",d.specialty,
       s."slotDate"::text AS "slotDate",s."startTime"::text AS "startTime",s."endTime"::text AS "endTime",s."isPublished",s."consultationType" AS "slotType",
       pc."chiefComplaint",pc.opqrst,c."sessionStartedAt",c."sessionEndedAt",
       (SELECT md5(COALESCE(string_agg(row_to_json(l)::text,',' ORDER BY l.id),'')) FROM appointment_logs l WHERE l."appointmentId"=a.id) AS "historyRevision",
@@ -144,7 +144,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
       const schedule=(r:CalendarFields)=>r.slotDate?{slotDate:r.slotDate,startTime:r.startTime!.slice(0,5),endTime:r.endTime!.slice(0,5)}:null;
       const relation=(r:RelatedRow)=>({id:r.id,status:r.status,scheduledAt:r.scheduledAt,proposedEndAt:r.proposedEndAt,updatedAt:r.updatedAt,cancellationReason:r.cancellationReason,scheduleSlot:schedule(r),statusLogs:r.statusLogs});
       result.push({id:row.id,version:row.version,patientId:row.patientId,doctorId:row.doctorId,patientAuthId:row.patientAuthId,doctorAuthId:row.doctorAuthId,
-        title:row.title,specialty:row.specialty,status:row.status,consultationType:row.consultationType,scheduleSlotId:row.scheduleSlotId,
+        specialty:row.specialty,status:row.status,consultationType:row.consultationType,scheduleSlotId:row.scheduleSlotId,
         scheduleSlot:schedule(row),sourceAppointmentId:row.sourceAppointmentId,appointmentKind:row.appointmentKind,followUpOfAppointmentId:row.followUpOfAppointmentId,
         patientRescheduleCount:row.patientRescheduleCount,doctorRescheduleCount:row.doctorRescheduleCount,cancellationReason:row.cancellationReason,rejectionReason:row.rejectionReason,
         ehrCaseId:row.ehrCaseId,scheduledAt:row.scheduledAt,proposedEndAt:row.proposedEndAt,createdAt:row.createdAt,updatedAt:row.updatedAt,
@@ -235,7 +235,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
       )::text) AS revision`)).rows[0]!.revision;
   }
   async function doctorDetails(id:string){
-    const doctor=(await pool.query<DoctorRow>(`SELECT d."userId" AS id,d."authId",d.title,d.specialty,d.bio,d.education,d."availabilityType",d."virtualFee"::text,d."inPersonFee"::text,d."starRating",
+    const doctor=(await pool.query<DoctorRow>(`SELECT d."userId" AS id,d."authId",d.specialty,d.bio,d.education,d."availabilityType",d."virtualFee"::text,d."inPersonFee"::text,d."starRating",
       COALESCE((SELECT jsonb_agg(h."hospitalName" ORDER BY h.id) FROM hospital_affiliations h WHERE h."doctorId"=d."userId"),'[]'::jsonb) AS hospitals
       FROM vital_doctors d JOIN vital_users u ON u.id=d."userId" AND u."authId"=d."authId" WHERE d."userId"=$1 AND d."isDoctorOnboardingComplete"=true AND u.role='doctor'`,[id])).rows[0];
     if(!doctor)throw new DomainError(404,'APPOINTMENT_DOCTOR_NOT_FOUND','Doctor not found.');

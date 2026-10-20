@@ -7,7 +7,7 @@ import { dateOnly } from '../appointment/appointment-contracts.js';
 
 const select = { id: true, patientId: true, appointmentKind: true, consultationType: true, status: true,
   scheduledAt: true, proposedEndAt: true, updatedAt: true,
-  doctor: { select: { userId: true, authId: true, title: true, specialty: true } },
+  doctor: { select: { userId: true, authId: true, specialty: true } },
   scheduleSlot: { select: { slotDate: true, startTime: true, endTime: true } } } as const;
 
 export function createPortalAppointmentHistory(db: CorePrismaClient, now = () => new Date()) {

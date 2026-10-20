@@ -1,3 +1,4 @@
+import { signingSnapshot,signatureDate } from "./signing.js";
 import { randomUUID } from "node:crypto";
 import type { Pool,PoolClient } from "pg";
 import { z } from "zod";
@@ -12,6 +13,7 @@ import { certificateData,documentPrepare,prescriptionData,snapshotPrepare,type R
 import { clinicalHash,protectPayload,unprotectPayload } from "./protection.js";
 import { verifyEhrEvidence } from "./ehr-evidence.js";
 import { createRecordsCollections } from './collection-reads.js';
+import { publicDocument } from './document-view.js';
 
 type Patient={userId:string;authId:string;ehrPatientId:string|null;version:number};
 const payloadBinding=(patientId:string,resourceId:string,schema:string)=>({patientId,resourceId,schema});
@@ -54,7 +56,7 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
   async function owningRead(actor:Actor,scope:string,resource:string){requireScope(actor,"records."+scope,resource);return membership(pool,actor);}
   async function workflowLock(tx:PoolClient,id:string){await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['records-workflow:'+id]);}
   return {
-    async document(actor:Actor,id:string,integration=false){
+    async document(actor:Actor,id:string,integration=false,qrRetrieval=false){
       if(integration)requireScope(actor,'records.integration.read','records:integration');else requireScope(actor,'records.document.read',id);
       const member=integration?null:await membership(pool,actor);
       const doc=(await pool.query<{id:string;patientId:string;doctorId:string;appointmentId:string|null;kind:string;assetId:string;accessCode:string;protectedPayload:unknown;issuedAt:Date;state:string;assetVersion:number}>(`SELECT d.*,a.state,a.version AS "assetVersion" FROM records_documents d JOIN records_file_assets a ON a.id=d."assetId" WHERE d.id=$1::uuid`,[z.uuid().parse(id)])).rows[0];
@@ -62,7 +64,10 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
       if(!integration&&(actor.role==='patient'?member!.userId!==doc.patientId:actor.role!=='doctor'||member!.userId!==doc.doctorId))recordsDenied(403,'RECORDS_DOCUMENT_DENIED');
       if(!integration&&actor.role==='doctor')await medicalConsent(pool,doc.patientId,doc.appointmentId);
       const data=unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(doc.patientId,doc.id,'document.v1'),doc.protectedPayload);
-      return{id:doc.id,patientId:doc.patientId,doctorId:doc.doctorId,appointmentId:doc.appointmentId,kind:doc.kind,assetId:doc.assetId,accessCode:doc.accessCode,version:doc.assetVersion,...data,
+      const replacement=(await pool.query('SELECT id FROM records_documents WHERE "supersedesId"=$1::uuid',[doc.id])).rows[0];
+      const auditTx=await pool.connect();try{await auditTx.query('BEGIN');await appendSqlOutbox(auditTx,{producer:'records',eventType:'vital.audit.requested',aggregateId:doc.id,aggregateVersion:doc.assetVersion,correlationId:actor.correlationId,data:{auditType:qrRetrieval?'vital.records.prescription_qr_retrieved':'vital.records.document_accessed',actorAuthId:actor.authId,resourceId:doc.id,resourceType:'document'}});await auditTx.query('COMMIT');}catch(error){await auditTx.query('ROLLBACK');throw error;}finally{auditTx.release();}
+      data.supersededBy=replacement?.id??null;
+      return{id:doc.id,patientId:doc.patientId,doctorId:doc.doctorId,appointmentId:doc.appointmentId,kind:doc.kind,assetId:doc.assetId,accessCode:doc.accessCode,version:doc.assetVersion,...publicDocument(data),
         issuedAt:doc.issuedAt.toISOString(),generatedAt:doc.issuedAt.toISOString(),processingState:doc.state,operationStatus:doc.state==='ready'?'completed':doc.state};
     },
     episodes:collections.episodes,
@@ -112,7 +117,7 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
         const docs=(await tx.query<{id:string;assetId:string;kind:string;protectedPayload:unknown;issuedAt:Date}>(`SELECT id,"assetId",kind,"protectedPayload","issuedAt" FROM records_documents WHERE "patientId"=$1 AND "issuedAt"<=$2 ORDER BY "issuedAt",id LIMIT 257`,[row.patientId,cutoff])).rows;
         const files=(await tx.query<{id:string;kind:string;protectedPayload:unknown;createdAt:Date}>(`SELECT id,kind,"protectedPayload","createdAt" FROM records_file_assets WHERE "patientId"=$1 AND kind='upload' AND state='ready' AND "createdAt"<=$2 ORDER BY "createdAt",id LIMIT 257`,[row.patientId,cutoff])).rows;
         if(docs.length>256||files.length>256)recordsDenied(413,'RECORDS_EVIDENCE_COLLECTION_LIMIT');
-        const snapshotId=randomUUID();const localDocuments=docs.map(doc=>({id:doc.id,assetId:doc.assetId,kind:doc.kind,issuedAt:doc.issuedAt.toISOString(),...unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(row.patientId,doc.id,"document.v1"),doc.protectedPayload)}));
+        const snapshotId=randomUUID();const localDocuments=docs.map(doc=>({id:doc.id,assetId:doc.assetId,kind:doc.kind,issuedAt:doc.issuedAt.toISOString(),...publicDocument(unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(row.patientId,doc.id,"document.v1"),doc.protectedPayload))}));
         const localFiles=files.map(file=>({id:file.id,assetId:file.id,createdAt:file.createdAt.toISOString(),...unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(row.patientId,file.id,"file.v1"),file.protectedPayload)}));
         const payload=protectPayload(config.keyring,payloadBinding(row.patientId,snapshotId,"snapshot.v1"),{ehr:normalizeEhrSnapshot(input.payload),documents:localDocuments,files:localFiles,documentCutoffAt:cutoff.toISOString()});
         await tx.query(`INSERT INTO records_snapshots (id,"workflowId","appointmentId","patientId","doctorId","appointmentVersion","associationVersion","ehrPatientId","ehrCaseId","sourceHash","normalizationVersion","protectedPayload","receiptMetadata","capturedAt")
@@ -153,7 +158,7 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
       const input=z.object({workflowId:z.uuid(),inputHash:z.string().regex(/^[a-f0-9]{64}$/),data:z.unknown(),receipt:z.string().min(1).max(8192)}).strict().parse(body);
       requireScope(actor,"records.document.issue",input.workflowId);await membership(pool,actor,"doctor");const prior=await workflow(pool,actor,input.workflowId);
       const data=prior.kind==="prescription"?prescriptionData.parse(input.data):prior.kind==="medical-certificate"?certificateData.parse(input.data):recordsDenied(409,"RECORDS_WORKFLOW_KIND_INVALID");
-      const p=await patient(pool,prior.patientId);const parties=prior.state==='committed'?null:await config.parties(p.authId,actor.authId,prior.doctorId);
+      const p=await patient(pool,prior.patientId);const signing=prior.state==='committed'?null:await signingSnapshot(pool,config.keyring,actor.authId);const parties=prior.state==='committed'?null:await config.parties(p.authId,actor.authId,prior.doctorId);
       return mutate(actor,"document.issue",input.workflowId,meta,{workflowId:input.workflowId,inputHash:input.inputHash,data,receiptHash:clinicalHash(input.receipt)},async tx=>{
         await workflowLock(tx,input.workflowId);
         const w=await workflow(tx,actor,input.workflowId,true);if(w.inputHash!==input.inputHash||clinicalHash(data)!==w.inputHash)recordsDenied(409,"RECORDS_WORKFLOW_CONFLICT");
@@ -175,17 +180,39 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
         if(appointmentId){const row=await lockAppointment(tx,appointmentId);appointment=row;if(row.patientId!==w.patientId||row.doctorId!==w.doctorId||row.ehrCaseId!==evidence.claims.caseId)recordsDenied(409,"RECORDS_EHR_CASE_MISMATCH");
           if(w.appointmentId&&(row.version!==w.expectedVersion||row.associationVersion!==w.associationVersion))recordsDenied(409,"RECORDS_WORKFLOW_STALE");await eligibility(tx,actor,row);
         }else await medicalConsent(tx,w.patientId);
-        const id=randomUUID(),assetId=randomUUID(),issuedAt=new Date(clock()),accessCode=(w.kind==="prescription"?"RX-":"MC-")+randomUUID().slice(0,8).toUpperCase();
+        const correction=data as {supersedesId?:string|null;correctionReason?:string|null};
+        if(correction.supersedesId){
+          if(!correction.correctionReason?.trim())recordsDenied(400,'DOCUMENT_CORRECTION_REASON_REQUIRED');
+          const previous=(await tx.query('SELECT id FROM records_documents WHERE id=$1::uuid AND "patientId"=$2 AND "doctorId"=$3 AND "appointmentId" IS NOT DISTINCT FROM $4::text AND kind=$5 FOR UPDATE',[correction.supersedesId,w.patientId,w.doctorId,appointmentId,w.kind])).rows[0];
+          if(!previous||(await tx.query('SELECT id FROM records_documents WHERE "supersedesId"=$1::uuid',[previous.id])).rows.length)recordsDenied(409,'DOCUMENT_CORRECTION_CONFLICT');
+        }else if(correction.correctionReason)recordsDenied(400,'DOCUMENT_CORRECTION_TARGET_REQUIRED');
+        const id=randomUUID(),assetId=randomUUID(),issuedAt=new Date(clock()),accessCode=(w.kind==="prescription"?"VITAL-RX-":"VITAL-MC-")+id.toUpperCase();
+        if(!signing)recordsDenied(409,'SIGNING_PROFILE_REQUIRED');
+        const currentSignature=(await tx.query('SELECT "signatureAssetId","s2License","s2ValidFrom"::text AS "s2ValidFrom","s2ValidUntil"::text AS "s2ValidUntil" FROM vital_doctors WHERE "authId"=$1 FOR UPDATE',[actor.authId])).rows[0];
+        if(currentSignature?.signatureAssetId!==signing.signatureAssetId||currentSignature.s2License!==signing.s2License||(!currentSignature.s2ValidFrom||signatureDate(currentSignature.s2ValidFrom)!==signing.s2ValidFrom)||(!currentSignature.s2ValidUntil||signatureDate(currentSignature.s2ValidUntil)!==signing.s2ValidUntil))recordsDenied(409,'SIGNING_PROFILE_CHANGED');
+        const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).format(issuedAt);
+        if(w.kind==='prescription'&&(data as {lines:{isControlled:boolean}[]}).lines.some(line=>line.isControlled)&&(today<signing.s2ValidFrom||today>signing.s2ValidUntil))recordsDenied(409,'S2_VALIDITY_REQUIRED');
         if(!parties)recordsDenied(503,'RECORDS_PARTIES_REQUIRED');
         const doctor=(await tx.query<{prcLicense:string|null}>(`SELECT "prc_license" AS "prcLicense" FROM vital_doctors WHERE "userId"=$1 AND "authId"=$2 FOR UPDATE`,[w.doctorId,actor.authId])).rows[0];
+        if(!doctor?.prcLicense?.trim())recordsDenied(409,'SIGNING_PROFILE_REQUIRED');
         if(!doctor||parties.doctorLicense!==(doctor.prcLicense??''))recordsDenied(409,'RECORDS_DOCTOR_PROFILE_CHANGED');
         const clinicalData=w.kind==='medical-certificate'&&!(data as {consultationDate?:string|null}).consultationDate&&appointment?
           {...data,consultationDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).format(appointment.scheduledAt)}:data;
-        const canonical={...clinicalData,...parties,issuedAt:issuedAt.toISOString(),accessCode};const payload=protectPayload(config.keyring,payloadBinding(w.patientId,id,"document.v1"),canonical);
+        let demographics:Record<string,unknown>={};
+        if(appointment){const saved=(await tx.query('SELECT s.id,s."protectedPayload" FROM records_snapshots s JOIN records_episode_grants g ON g."snapshotId"=s.id WHERE g."appointmentId"=$1 AND s."patientId"=$2',[appointment.id,w.patientId])).rows[0];
+          if(saved){const snapshot=unprotectPayload<{ehr?:{patient?:Record<string,unknown>}}>(config.keyring,payloadBinding(w.patientId,saved.id,'snapshot.v1'),saved.protectedPayload);const patient=snapshot.ehr?.patient;
+            if(patient){const dob=typeof patient.date_of_birth==='string'?new Date(patient.date_of_birth):null;
+              const age=dob&&!Number.isNaN(dob.getTime())?issuedAt.getUTCFullYear()-dob.getUTCFullYear()-(issuedAt.toISOString().slice(5,10)<dob.toISOString().slice(5,10)?1:0):null;
+              demographics={patientAge:age===null?'Not recorded':String(age),patientSex:typeof patient.sex==='string'?patient.sex:'Not recorded',patientAddress:typeof patient.address==='string'?patient.address:typeof patient.address_street==='string'?patient.address_street:'Not recorded'};
+            }
+          }
+        }
+        const unsigned={...demographics,retrievalUrl:new URL('/documents/prescription/'+id,config.appOrigin).href,...clinicalData,...parties,...signing,payloadSchemaVersion:2,templateVersion:'bgh-capstone-v1',signedBy:actor.authId,signedAt:issuedAt.toISOString(),issuedAt:issuedAt.toISOString(),accessCode};const canonical={...unsigned,contentHash:clinicalHash(unsigned)};const payload=protectPayload(config.keyring,payloadBinding(w.patientId,id,"document.v1"),canonical);
         const filePayload=protectPayload(config.keyring,payloadBinding(w.patientId,assetId,"file.v1"),{documentId:id});
         await tx.query(`INSERT INTO records_file_assets (id,"patientId","appointmentId",kind,version,state,"protectedPayload","objectKey","mimeType","byteLength","createdAt")
           VALUES($1,$2,$3,$4,0,'processing',$5::jsonb,$6,'application/pdf',0,$7)`,[assetId,w.patientId,appointmentId,w.kind,JSON.stringify(filePayload),"quarantine/records/"+assetId+".pdf",issuedAt]);
         await tx.query(`INSERT INTO records_documents (id,"patientId","doctorId","appointmentId",kind,"accessCode","protectedPayload","assetId","issuedAt") VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)`,[id,w.patientId,w.doctorId,appointmentId,w.kind,accessCode,JSON.stringify(payload),assetId,issuedAt]);
+        if(correction.supersedesId)await tx.query('UPDATE records_documents SET "supersedesId"=$2::uuid,"correctionReason"=$3 WHERE id=$1::uuid',[id,correction.supersedesId,correction.correctionReason]);
         await tx.query(`INSERT INTO record_operations (id,"resourceId","actorAuthId","patientId",kind,state,version,attempts,"nextAttemptAt","createdAt","updatedAt") VALUES($1,$2,$3,$4,'artifact','pending',0,0,NOW(),NOW(),NOW())`,[meta.operationId,assetId,actor.authId,w.patientId]);
         await tx.query(`UPDATE records_workflows SET state='committed',"resourceId"=$2,"receiptMetadata"=$3::jsonb,"commitOperationId"=$4,"updatedAt"=NOW() WHERE id=$1::uuid`,[w.id,id,JSON.stringify(evidence.metadata),meta.operationId]);
         await appendSqlOutbox(tx,{producer:"records",eventType:"vital.records.artifact.requested",aggregateId:assetId,aggregateVersion:0,correlationId:actor.correlationId,causationId:meta.operationId,data:{assetId,operationId:meta.operationId}});
@@ -209,8 +236,8 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
           AND (c."appointmentId" IS NULL OR c."appointmentId"=d."appointmentId") ORDER BY c."consentedAt" DESC,c.id DESC LIMIT 1),FALSE))`;
       const args=[patientId,doctorId,filter.kind??null,filter.appointmentId??null,filter.accessCode??null,filter.dateFrom??null,filter.dateTo??null,!integration&&actor.role==='doctor'];
       const total=Number((await pool.query('SELECT COUNT(*)::int AS total FROM records_documents d'+where,args)).rows[0]?.total??0);
-      const docs=(await pool.query<{id:string;patientId:string;doctorId:string;appointmentId:string|null;kind:string;assetId:string;accessCode:string;protectedPayload:unknown;issuedAt:Date;state:string;assetVersion:number}>(`SELECT d.*,a.state,a.version AS "assetVersion" FROM records_documents d JOIN records_file_assets a ON a.id=d."assetId"`+where+' ORDER BY d."issuedAt" DESC,d.id LIMIT $9 OFFSET $10',[...args,filter.limit,(filter.page-1)*filter.limit])).rows;
-      return{items:docs.map(d=>{const data=unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(d.patientId,d.id,"document.v1"),d.protectedPayload);const lines=data.lines as Array<Record<string,unknown>>|undefined,first=lines?.[0];return{id:d.id,patientId:d.patientId,doctorId:d.doctorId,appointmentId:d.appointmentId,kind:d.kind,type:d.kind,assetId:d.assetId,version:d.assetVersion,accessCode:d.accessCode,issuedAt:d.issuedAt.toISOString(),generatedAt:d.issuedAt.toISOString(),...data,
+      const docs=(await pool.query<{id:string;patientId:string;doctorId:string;appointmentId:string|null;kind:string;assetId:string;accessCode:string;protectedPayload:unknown;issuedAt:Date;state:string;assetVersion:number;supersededBy:string|null}>(`SELECT d.*,a.state,a.version AS "assetVersion",(SELECT r.id FROM records_documents r WHERE r."supersedesId"=d.id) AS "supersededBy" FROM records_documents d JOIN records_file_assets a ON a.id=d."assetId"`+where+' ORDER BY d."issuedAt" DESC,d.id LIMIT $9 OFFSET $10',[...args,filter.limit,(filter.page-1)*filter.limit])).rows;
+      return{items:docs.map(d=>{const data=unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(d.patientId,d.id,"document.v1"),d.protectedPayload);const lines=data.lines as Array<Record<string,unknown>>|undefined,first=lines?.[0];return{id:d.id,patientId:d.patientId,doctorId:d.doctorId,appointmentId:d.appointmentId,kind:d.kind,type:d.kind,assetId:d.assetId,version:d.assetVersion,accessCode:d.accessCode,issuedAt:d.issuedAt.toISOString(),generatedAt:d.issuedAt.toISOString(),...publicDocument(data),supersededBy:d.supersededBy??null,
         medicationName:first?.medicineName??null,dosage:first?[first.dosageAmount,first.dosageUnit].join(' '):null,frequency:first?.frequency??null,medicineLines:lines??null,
         duration:first?.duration??null,specialInstructions:lines?.map(line=>line.instructions).filter(Boolean).join('\n')||null,
         validUntil:typeof data.validityLimit==='string'?data.validityLimit+'T00:00:00.000Z':null,prescriptionValidityLimit:data.validityLimit??null,

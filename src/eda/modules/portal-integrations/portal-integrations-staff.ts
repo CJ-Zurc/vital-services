@@ -21,7 +21,7 @@ export function createPortalStaffComposer(pool: Pool, owners: PortalStaffOwners)
     }
     for (const ref of references) {
       requirePortalStaffSource(source);
-      const row = (await pool.query(`SELECT a.*,p."authId" AS "patientAuthId",d."authId" AS "doctorAuthId",d.title,d.specialty,
+      const row = (await pool.query(`SELECT a.*,p."authId" AS "patientAuthId",d."authId" AS "doctorAuthId",d.specialty,
         s."slotDate"::text AS "slotDate",s."startTime"::text AS "startTime",s."endTime"::text AS "endTime",
         pc."chiefComplaint",pc.opqrst,c."sessionStartedAt",c."sessionEndedAt"
         FROM appointments a JOIN vital_patients p ON p."userId"=a."patientId" JOIN vital_doctors d ON d."userId"=a."doctorId"
@@ -73,7 +73,7 @@ export function createPortalStaffComposer(pool: Pool, owners: PortalStaffOwners)
         proposedEndAt: value.proposedEndAt, updatedAt: value.updatedAt, cancellationReason: value.cancellationReason,
         scheduleSlot: schedule(value), statusLogs: value.statusLogs });
       result.push({ id: row.id, version: row.version, patientId: row.patientId, doctorId: row.doctorId, patientAuthId: row.patientAuthId,
-        doctorAuthId: row.doctorAuthId, title: row.title, specialty: row.specialty, status: row.status, consultationType: row.consultationType,
+        doctorAuthId: row.doctorAuthId, specialty: row.specialty, status: row.status, consultationType: row.consultationType,
         scheduleSlotId: row.scheduleSlotId, scheduleSlot: schedule(row), sourceAppointmentId: row.sourceAppointmentId,
         appointmentKind: row.appointmentKind, followUpOfAppointmentId: row.followUpOfAppointmentId,
         patientRescheduleCount: row.patientRescheduleCount, doctorRescheduleCount: row.doctorRescheduleCount,

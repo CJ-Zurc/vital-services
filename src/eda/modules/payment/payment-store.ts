@@ -1,3 +1,4 @@
+import type { AcknowledgmentPdf } from '../records/bgh-pdf.js';
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { DomainError } from "../../contracts/actor.js";
@@ -39,7 +40,7 @@ export interface PaymentTx {
   command(actorId: string, id: string): Promise<PaymentCommand | null>;
   saveCommand(row: PaymentCommand): Promise<void>;
   emit(input: OutboxInput): Promise<void>;
-  insertInvoice(payment: PaymentRow, intentId: string, completedAt: string): Promise<boolean>;
+  insertInvoice(payment: PaymentRow, intentId: string, completedAt: string, snapshot?: AcknowledgmentPdf): Promise<boolean>;
 }
 export interface PaymentStore {
   transaction<T>(lineage: string, execute: (tx: PaymentTx) => Promise<T>): Promise<T>;
@@ -120,17 +121,18 @@ function postgresTx(client: PoolClient): PaymentTx {
       if (result.rowCount !== 1) throw new DomainError(409, "COMMAND_REPLAY_CONFLICT", "Mutation ID is already bound to another request.");
     },
     async emit(input) { await appendSqlOutbox(client, input); },
-    async insertInvoice(payment, intentId, completedAt) {
+    async insertInvoice(payment, intentId, completedAt, snapshot) {
       const result = await client.query(`INSERT INTO invoices (id,"paymentId","appointmentId",service,"paymentMethod","generatedAt",
-        "amountCentavos",currency,"billingLineageId","completedIntentId") VALUES ($1,$2,$3,'Consultation','PayMongo Sandbox',$4,$5,'PHP',$6,$7)
+        "amountCentavos",currency,"billingLineageId","completedIntentId") VALUES ($1,$2,$3,'Consultation',$8,$4,$5,'PHP',$6,$7)
         ON CONFLICT ("paymentId") DO NOTHING RETURNING id`,
-      [randomUUID(), payment.id, payment.appointmentId, completedAt, payment.amountCentavos, payment.billingLineageId, intentId]);
+      [randomUUID(), payment.id, payment.appointmentId, completedAt, payment.amountCentavos, payment.billingLineageId, intentId, payment.paymentProvider+(payment.providerMode==='sandbox'?' Sandbox':'')]);
       if (result.rowCount !== 1) {
         const existing = await client.query(`SELECT "appointmentId","billingLineageId","amountCentavos",currency FROM invoices WHERE "paymentId"=$1`, [payment.id]);
         const row = existing.rows[0];
         if (!row || row.appointmentId !== payment.appointmentId || row.billingLineageId !== payment.billingLineageId
           || Number(row.amountCentavos) !== payment.amountCentavos || row.currency !== "PHP") throw new DomainError(409, "PAYMENT_INVOICE_CONFLICT", "Invoice receipt conflicts.");
       }
+      if(snapshot)await client.query('UPDATE invoices SET "acknowledgmentSnapshot"=$2::jsonb WHERE "paymentId"=$1 AND "acknowledgmentSnapshot" IS NULL',[payment.id,JSON.stringify(snapshot)]);
       return result.rowCount === 1;
     },
   };

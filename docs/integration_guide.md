@@ -20,3 +20,7 @@
   Analytics reads only the authenticated submitted-preconsultation export.
 - Gateway diagnostics calls Web's protected `/api/internal/vital/readiness`;
   Web checks API `/internal/readiness` over mTLS without impersonating a user.
+
+## Capstone document contract release
+
+Doctor honorific has been removed from Profile, appointment and portal doctor DTOs. Deploy the paired Web schema after Core/Integrations migrations. New self-scoped signature and patient/admin acknowledgment routes, snapshot versions and QR retrieval are detailed in [Capstone documents](capstone-documents.md). EHR evidence endpoints are unchanged; no EHR-owned tables are modified.

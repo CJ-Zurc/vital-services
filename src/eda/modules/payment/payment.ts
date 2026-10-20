@@ -74,6 +74,7 @@ async function saved(tx: PaymentTx, input: PaymentCommand, result: PaymentResult
 export function createPaymentModule(config: {
   store: PaymentStore; billing: BillingAuthority; provider: PaymentProvider; appOrigin: string; enabled: boolean; clock?: () => number;
   association?: AppointmentParticipant;
+  acknowledgmentNames?:(patientAuthId:string,doctorAuthId:string)=>Promise<{patientName:string;doctorName:string}>;
 }) {
   const { store, billing, provider } = config;
   const now = config.clock ?? Date.now;
@@ -426,13 +427,17 @@ export function createPaymentModule(config: {
       active(); const intent = await billing.committedIntent(intentId);
       if (intent.kind !== "complete") fail(409, "BILLING_INTENT_KIND_INVALID");
       const context = await billing.current(intent.appointmentId);
-      if (context.status !== "completed" || context.appointmentVersion !== intent.appointmentVersion) fail(409, "BILLING_AUTHORIZATION_STALE");
+      if (context.status !== "completed" || context.reviewRequired || context.appointmentVersion !== intent.appointmentVersion) fail(409, "BILLING_AUTHORIZATION_STALE");
       if (!intent.completedAt || !Number.isFinite(intent.completedAt.getTime())) fail(409, "BILLING_COMPLETION_RECEIPT_REQUIRED");
+      const names=await config.acknowledgmentNames?.(context.patientAuthId,context.doctorAuthId);
       return store.transaction(intent.billingLineageId, async tx => {
         const row = await tx.paymentByLineage(intent.billingLineageId);
         if (!row || row.status !== "paid" || row.reviewRequired || row.associationVersion !== intent.associationVersion) fail(409, "PAYMENT_INVOICE_NOT_ELIGIBLE");
         association(row, context);
-        const inserted = await tx.insertInvoice(row, intent.id, intent.completedAt!.toISOString());
+        const inserted = await tx.insertInvoice(row, intent.id, intent.completedAt!.toISOString(),names?{
+          ...names,reference:'VITAL-ACK-'+row.id.toUpperCase(),appointmentId:row.appointmentId,paymentReference:row.paymongoPaymentId??row.paymentIntentId??row.id,
+          paymentMethod:row.paymentProvider,amountCentavos:row.amountCentavos,paidAt:row.paidAt!,completedAt:intent.completedAt!.toISOString(),issuedAt:intent.completedAt!.toISOString(),sandbox:row.providerMode==='sandbox',service:'Consultation',templateVersion:'bgh-capstone-v1'
+        }:undefined);
         if (inserted && intent.expectedPaymentVersion !== undefined && row.version !== intent.expectedPaymentVersion) fail(409, "PAYMENT_VERSION_CHANGED");
         if (inserted) await effect(tx, row, "invoice_created", null, correlationId); return inserted;
       });

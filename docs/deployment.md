@@ -28,3 +28,7 @@ staging deployment.
 
 See the root [monthly VM runbook](../../docs/deployment/single-azure-vm.md) for
 provisioning, environment setup and recovery.
+
+## Sprint 6 coordinated migration
+
+The two `202610200001` migrations must run through the existing tools-image migration service before updated API/worker containers start. This release removes doctor `title` and adds S2/signature/document and invoice snapshot storage; compatible Web must follow. Existing doctors return to onboarding. Routine rebuilds do not reset databases. See [Capstone documents](capstone-documents.md).

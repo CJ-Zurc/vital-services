@@ -50,7 +50,7 @@ function databaseStub() {
     if (table === "vitalPatient") return { profilePic: null, isRecordAvailable: false, ehrPatientId: null,
       ehrRecordOrigin: "none", existingEhrRecordNoticeDismissedAt: null, isOnboardingComplete: false,
       emergencyContactName: null, emergencyContactRelationship: null, emergencyContactPhone: null };
-    if (table === "vitalDoctor") return { role: "doctor", title: null, specialty: null, departmentExternalId: null,
+    if (table === "vitalDoctor") return { role: "doctor", s2License:null,s2ValidFrom:null,s2ValidUntil:null,signatureAssetId:"11111111-1111-4111-8111-111111111111", specialty: null, departmentExternalId: null,
       departmentName: null, prcLicense: null, availabilityType: null, virtualFee: null, inPersonFee: null,
       starRating: 0, changedAt: null, bio: null, education: null, isDoctorOnboardingComplete: false, termsAgreedAt: null };
     return {};
@@ -185,7 +185,7 @@ test('notice dismissal commits once and rechecks patient ownership on replay', a
   await assert.rejects(profile.dismissPatientNotice(actor(), {}, command), error => error instanceof ProfileError && error.status === 403);
   await assert.rejects(profile.dismissPatientNotice(actor('doctor'), {}, metadata()), error => error instanceof ProfileError && error.status === 403);
 });
-const doctorOnboarding = { title: "MD", specialty: "Cardiology", prcLicense: "123456", bio: "Clinical biography",
+const doctorOnboarding = { s2License:"DEMO-S2",s2ValidFrom:"2026-01-01",s2ValidUntil:"2027-01-01",specialty: "Cardiology", prcLicense: "123456", bio: "Clinical biography",
   availabilityType: "both", isDoctorOnboardingComplete: true, terms_accepted: true };
 function receipt(kind: string, workflowId: string, input: unknown, targetAuthId?: string) {
   const binding = { operationId: workflowId, inputHash: canonicalHash("PROFILE", kind, input) };
@@ -769,4 +769,18 @@ test("profile registration: outbox failure rolls back marker consent and command
   assert.equal(stub.rows().consentRecord.length, 0);
   assert.equal(stub.rows().commands.length, 0);
   assert.equal(stub.rows().allEvents.length, 0);
+});
+
+
+test('S6 onboarding denies missing signature, missing S2, reversed dates and removed honorific',async()=>{
+ const stub=databaseStub();await createProfileModule(stub.db,permit).materialize(actor('doctor'));
+ const profile=createProfileModule(stub.db,createProfileCommandGuard());
+ const prepare=(input:unknown)=>profile.workflows.prepare(actor('doctor'),{workflowId:randomUUID(),kind:'doctor.onboarding',input},metadata());
+ stub.rows().vitalDoctor[0]!.signatureAssetId=null;
+ await assert.rejects(prepare(doctorOnboarding));
+ stub.rows().vitalDoctor[0]!.signatureAssetId=randomUUID();
+ const{s2License,...missing}=doctorOnboarding;assert.ok(s2License);await assert.rejects(prepare(missing));
+ await assert.rejects(prepare({...doctorOnboarding,s2ValidFrom:'2027-01-01',s2ValidUntil:'2026-01-01'}));
+ await assert.rejects(prepare({...doctorOnboarding,title:'Dr.'}));
+ assert.equal(stub.rows().vitalDoctor[0]!.isDoctorOnboardingComplete,false);
 });

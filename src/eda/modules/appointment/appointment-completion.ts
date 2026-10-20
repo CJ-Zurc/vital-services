@@ -31,7 +31,7 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
           'SELECT status,COUNT(*) AS count FROM appointments WHERE "patientId"=$1 GROUP BY status', [patientId])).rows;
         statusCounts = Object.fromEntries(counts.map(row => [row.status, completionCount(row.count)]));
         // Only the four cards are hydrated. Aggregates and financial associations cover all rows.
-        selected = (await tx.query<Upcoming>(`SELECT a.*,p."authId" AS "patientAuthId",d."authId" AS "doctorAuthId",d.title,d.specialty,
+        selected = (await tx.query<Upcoming>(`SELECT a.*,p."authId" AS "patientAuthId",d."authId" AS "doctorAuthId",d.specialty,
           CASE WHEN s.id IS NULL THEN NULL ELSE jsonb_build_object('slotDate',s."slotDate"::text,'startTime',LEFT(s."startTime"::text,5),'endTime',LEFT(s."endTime"::text,5)) END AS "scheduleSlot",
           jsonb_build_object('chiefComplaint',pc."chiefComplaint",'opqrst',pc.opqrst) AS "preConsultation",
           c."sessionStartedAt",c."sessionEndedAt",
@@ -75,7 +75,7 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
           scheduledAt: new Date(r.scheduledAt), proposedEndAt: r.proposedEndAt ? new Date(r.proposedEndAt) : null, updatedAt: new Date(r.updatedAt),
           statusLogs: r.statusLogs.map(l => ({ ...l, changedAt: new Date(l.changedAt).toISOString() })) });
         appointments.push({ id: row.id, version: row.version, patientId: row.patientId, doctorId: row.doctorId, patientAuthId: row.patientAuthId, doctorAuthId: row.doctorAuthId,
-          title: row.title, specialty: row.specialty, status: row.status, consultationType: row.consultationType, scheduleSlotId: row.scheduleSlotId, scheduleSlot: row.scheduleSlot,
+          specialty: row.specialty, status: row.status, consultationType: row.consultationType, scheduleSlotId: row.scheduleSlotId, scheduleSlot: row.scheduleSlot,
           sourceAppointmentId: row.sourceAppointmentId, appointmentKind: row.appointmentKind, followUpOfAppointmentId: row.followUpOfAppointmentId,
           patientRescheduleCount: row.patientRescheduleCount, doctorRescheduleCount: row.doctorRescheduleCount, cancellationReason: row.cancellationReason, rejectionReason: row.rejectionReason,
           ehrCaseId: row.ehrCaseId, scheduledAt: row.scheduledAt, proposedEndAt: row.proposedEndAt, createdAt: row.createdAt, updatedAt: row.updatedAt,

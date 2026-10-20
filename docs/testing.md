@@ -15,3 +15,7 @@ manual checks GitHub CI or claim unexecuted bulk/load/fresh-OS checks passed.
 contacts, schedule availability and SQL effects, including durable events and
 unchanged-contact no-ops. `VitalUser` has no `updatedAt` column; these updates
 must change only `version` to avoid PostgreSQL `42703` and transaction rollback.
+
+## Sprint 6 document checks
+
+See [Capstone documents](capstone-documents.md) for strict signing/classification, private signature replacement, immutable issuance, S2 validity, acknowledgment authorization/replay and migration tests. The root test catalog records retained coverage and the temporary S6 suites removed after execution at the user's request. Their historical results remain in the implementation report; the removed migration harness is no longer runnable.

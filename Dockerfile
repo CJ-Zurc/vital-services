@@ -8,6 +8,7 @@ COPY package.json package-lock.json tsconfig.json ./
 RUN npm ci
 COPY prisma ./prisma
 COPY src/eda ./src/eda
+COPY assets ./assets
 COPY scripts/eda/clean-output.mjs ./scripts/eda/clean-output.mjs
 RUN npm run build
 COPY docker/eda/runtime.mjs ./docker/eda/runtime.mjs
@@ -26,11 +27,13 @@ FROM build AS production-dependencies
 RUN npm prune --omit=dev
 
 FROM node:22-bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /etc/ssl/certs /etc/ssl/certs
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/assets ./assets
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/docker/eda/runtime.mjs ./docker/eda/runtime.mjs
 COPY --from=build /app/docker/eda/health.mjs ./docker/eda/health.mjs

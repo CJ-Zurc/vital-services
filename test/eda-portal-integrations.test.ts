@@ -60,13 +60,13 @@ test('portal integration delegation cannot impersonate local administrators', as
 test('staff integration readers preserve doctor patient and appointment contracts', async () => {
   const authId = randomUUID(), patientId = randomUUID(), doctorId = randomUUID(), id = randomUUID();
   const doctors = Array.from({ length: 230 }, (_, index) => ({ userId: index === 0 ? doctorId : randomUUID(), authId,
-    user: { role: 'doctor' }, title: null, specialty: 'General', departmentExternalId: null, departmentName: null,
+    user: { role: 'doctor' }, specialty: 'General', departmentExternalId: null, departmentName: null,
     prcLicense: 'PRC', availabilityType: 'both', virtualFee: '0', inPersonFee: '200.00', starRating: 0,
     isDoctorOnboardingComplete: true, hospitalAffiliations: [{ hospitalName: 'BGH' }] }));
   const calls: Record<string, unknown>[] = [];
   const row = { id, patientId, doctorId, version: 1, billingLineageId: randomUUID(), associationVersion: 1,
     status: 'confirmed', scheduledAt: new Date('2026-10-17T01:00:00Z'), proposedEndAt: null, updatedAt: new Date(),
-    doctor: { authId, userId: doctorId, title: null, specialty: 'General' }, scheduleSlot: null, appointmentKind: 'standard', consultationType: 'virtual' };
+    doctor: { authId, userId: doctorId, specialty: 'General' }, scheduleSlot: null, appointmentKind: 'standard', consultationType: 'virtual' };
   const tx = {
     vitalUser: { findUnique: async () => ({ id: patientId, authId, role: 'patient', patient: { userId: patientId, authId, isOnboardingComplete: false }, doctor: null, admin: null }) },
     appointment: { count: async () => 230, findMany: async (query: Record<string, unknown>) => { calls.push(query); return [row]; },

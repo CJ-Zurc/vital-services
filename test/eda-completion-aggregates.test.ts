@@ -27,7 +27,7 @@ function dashboard() {
     scheduledAt: date, billingLineageId: randomUUID(), associationVersion: 1, doctorAuthId }));
   const payments = references.slice(0, 550).map(ref => ({ id: randomUUID(), version: 1, appointmentId: ref.id,
     billingLineageId: ref.billingLineageId, associationVersion: 1, patientAuthId: patient.authId, doctorAuthId, status: 'paid' }));
-  const upcoming = references.slice(0, 4).map(ref => ({ ...ref, patientId, doctorId, patientAuthId: patient.authId, title: null, specialty: 'Medicine',
+  const upcoming = references.slice(0, 4).map(ref => ({ ...ref, patientId, doctorId, patientAuthId: patient.authId, specialty: 'Medicine',
     consultationType: 'in_person', scheduleSlotId: null, scheduleSlot: null, sourceAppointmentId: null, appointmentKind: 'standard', followUpOfAppointmentId: null,
     patientRescheduleCount: 0, doctorRescheduleCount: 0, cancellationReason: null, rejectionReason: null, ehrCaseId: null, proposedEndAt: null,
     createdAt: date, updatedAt: date, doctorConfirmedAt: null, patientConfirmedAt: null, completionDeadlineAt: null, autoCompletedAt: null, paperworkLockedAt: null,

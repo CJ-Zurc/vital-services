@@ -173,7 +173,11 @@ model VitalDoctor {
   user             VitalUser         @relation(fields: [userId], references: [id])
   authId           String            @unique
   role             String?
-  title            String?
+  s2License        String?
+  s2ValidFrom      DateTime? @db.Date
+  s2ValidUntil     DateTime? @db.Date
+  signatureAssetId String? @db.Uuid
+  signatureAsset DoctorSignature? @relation("currentDoctorSignature",fields:[signatureAssetId],references:[id],onDelete:Restrict,onUpdate:NoAction)
   specialty        String?
   departmentExternalId String?    @map("department_external_id")
   departmentName   String?        @map("department_name")
@@ -849,6 +853,10 @@ model RecordsWorkflow {
 }
 
 model RecordsDocument {
+  supersedesId String? @unique(map:"records_documents_one_replacement") @db.Uuid
+  supersedes RecordsDocument? @relation("documentCorrections",fields:[supersedesId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  replacement RecordsDocument? @relation("documentCorrections")
+  correctionReason String?
   id String @id @db.Uuid
   patientId String
   patient VitalPatient @relation(fields: [patientId], references: [userId], onDelete: Restrict)
@@ -1012,4 +1020,18 @@ model AppointmentCommandPreparation {
 
   @@unique([actorAuthId, commandId])
   @@map("appointment_command_preparations")
+}
+
+model DoctorSignature {
+  currentDoctors VitalDoctor[] @relation("currentDoctorSignature")
+  id String @id @db.Uuid
+  doctorAuthId String
+  operationId String @db.Uuid
+  inputHash String
+  contentHash String
+  protectedPayload Json
+  scanEvidence Json
+  createdAt DateTime @default(now())
+  @@unique([doctorAuthId, operationId],map:"doctor_signatures_operation_key")
+  @@map("doctor_signatures")
 }
