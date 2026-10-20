@@ -7,3 +7,10 @@ Unknown external outcomes require receipt lookup rather than repeated mutations.
 
 Auth owns credentials; EHR owns clinical records; TRACE owns department UUIDs.
 See [integration contracts](integration_guide.md) and [architecture](architecture.md).
+
+
+Sprint 6 patient administration adds a separate read-only patient-monitoring
+view and bounded admin summary route. Messaging now follows scheduled 24-hour
+appointment/follow-up windows with retained read-only history. See
+[integration contracts](integration_guide.md#s6-005-patient-monitoring-and-s6-009-messaging)
+for routes, ownership, response fields and boundary behavior.

@@ -6,9 +6,11 @@ import { appointmentOwn, lockAppointment, membership, readAppointment } from './
 export type MessagingAppointment = {
   id: string; patientId: string; doctorId: string; status: string; completedAt: Date | null;
   appointmentKind: string; followUpOfAppointmentId: string | null; sourceAppointmentId: string | null;
+  scheduledAt: Date; proposedEndAt: Date | null; slotEndsAt: Date | null;
   statusLogs: { fromStatus: string | null; toStatus: string; changedAt: Date }[];
 };
-export type MessageAccess = { canSend: boolean; sendUntil: string | null; hasActiveFollowUp: boolean };
+export type MessageAccess = { canSend: boolean; sendUntil: string | null; hasActiveFollowUp: boolean;
+  nextOpenAt: string | null; availabilityReason: 'open' | 'before_follow_up' | 'window_closed' | 'cancelled' | 'rescheduled' | 'schedule_unavailable' | 'processing' | 'purged' };
 const active = new Set(['approved', 'confirmed']);
 export const messageHistoryStatuses = ['approved', 'confirmed', 'completed', 'cancelled', 'rescheduled'];
 function cancellationDate(row: MessagingAppointment) {
@@ -17,7 +19,7 @@ function cancellationDate(row: MessagingAppointment) {
 }
 function accepted(row: MessagingAppointment) {
   return active.has(row.status) || ['completed', 'rescheduled'].includes(row.status) ||
-    row.status === 'cancelled' && (row.appointmentKind === 'follow_up' || cancellationDate(row) !== null || row.statusLogs.some(log => active.has(log.toStatus)));
+    row.status === 'cancelled' && (cancellationDate(row) !== null || row.statusLogs.some(log => active.has(log.toStatus)));
 }
 export function linkedMessageAppointments(seed: MessagingAppointment, rows: MessagingAppointment[]) {
   const scoped = new Map(rows.filter(row => row.patientId === seed.patientId && row.doctorId === seed.doctorId).map(row => [row.id, row]));
@@ -33,22 +35,47 @@ export function linkedMessageAppointments(seed: MessagingAppointment, rows: Mess
   return [...visited].map(id => scoped.get(id)!);
 }
 export function calculateMessageAccess(seed: MessagingAppointment, rows: MessagingAppointment[] = [seed], now = new Date()): MessageAccess {
-  const closed: MessageAccess = { canSend: false, sendUntil: null, hasActiveFollowUp: false };
-  if (active.has(seed.status)) return { ...closed, canSend: true };
-  if (seed.status !== 'completed' || !seed.completedAt) return closed;
+  const closed: MessageAccess = { canSend: false, sendUntil: null, hasActiveFollowUp: false, nextOpenAt: null, availabilityReason: 'window_closed' };
+  if (seed.status === 'cancelled' || seed.status === 'rescheduled') return { ...closed, availabilityReason: seed.status };
+  if (!active.has(seed.status) && seed.status !== 'completed') return closed;
   const chain = linkedMessageAppointments(seed, rows);
-  if (chain.some(row => active.has(row.status))) return { canSend: true, sendUntil: null, hasActiveFollowUp: true };
-  let closure = seed.completedAt.getTime();
-  for (const row of chain) {
-    if (row.status === 'completed') { if (!row.completedAt) return closed; closure = Math.max(closure, row.completedAt.getTime()); }
-    else if (row.status === 'cancelled' && accepted(row)) { const at = cancellationDate(row); if (at === null) return closed; closure = Math.max(closure, at); }
+  const byId = new Map(chain.map(row => [row.id, row]));
+  const isFollowUp = (row: MessagingAppointment) => {
+    const seen = new Set<string>();
+    let current: MessagingAppointment | undefined = row;
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      if (current.appointmentKind === 'follow_up') return true;
+      current = current.sourceAppointmentId ? byId.get(current.sourceAppointmentId) : undefined;
+    }
+    return false;
+  };
+  const validSchedule = (row: MessagingAppointment) => {
+    const end = row.slotEndsAt ?? row.proposedEndAt;
+    return end instanceof Date && row.scheduledAt instanceof Date && Number.isFinite(+end) && Number.isFinite(+row.scheduledAt) && end > row.scheduledAt ? end : null;
+  };
+  if (!validSchedule(seed)) return { ...closed, availabilityReason: 'schedule_unavailable' };
+  const day = 86_400_000;
+  const windows = chain.flatMap(row => {
+    if (!active.has(row.status) && row.status !== 'completed') return [];
+    const followUp = isFollowUp(row), end = validSchedule(row);
+    if (!end || row.id !== seed.id && (seed.status !== 'completed' || !followUp)) return [];
+    return [{ start: followUp ? +row.scheduledAt - day : -Infinity, end: +end + day, followUp }];
+  }).sort((a, b) => a.start - b.start);
+  const current = windows.filter(window => window.start <= +now && +now < window.end);
+  if (current.length) {
+    let end = Math.max(...current.map(window => window.end));
+    for (const window of windows) if (window.start <= end && window.end > end) end = window.end;
+    return { ...closed, canSend: true, sendUntil: new Date(end).toISOString(),
+      hasActiveFollowUp: current.some(window => window.followUp), availabilityReason: 'open' };
   }
-  const deadline = new Date(closure + 7 * 86_400_000);
-  return { canSend: now < deadline, sendUntil: deadline.toISOString(), hasActiveFollowUp: false };
+  const next = windows.find(window => window.start > +now);
+  return next ? { ...closed, nextOpenAt: new Date(next.start).toISOString(), availabilityReason: 'before_follow_up' } : closed;
 }
 export async function loadMessagingChain(tx: Pick<PoolClient, 'query'>, seed: { patientId: string; doctorId: string }) {
-  const rows = (await tx.query<MessagingAppointment>(`SELECT a.id,a."patientId",a."doctorId",a.status,a."completedAt",a."appointmentKind",a."followUpOfAppointmentId",a."sourceAppointmentId"
-    FROM appointments a WHERE a."patientId"=$1 AND a."doctorId"=$2 ORDER BY a.id LIMIT 2001`, [seed.patientId, seed.doctorId])).rows;
+  const rows = (await tx.query<MessagingAppointment>(`SELECT a.id,a."patientId",a."doctorId",a.status,a."completedAt",a."appointmentKind",a."followUpOfAppointmentId",a."sourceAppointmentId",a."scheduledAt",a."proposedEndAt",
+    CASE WHEN s.id IS NOT NULL THEN (s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila' END AS "slotEndsAt"
+    FROM appointments a LEFT JOIN schedules s ON s.id=a."scheduleSlotId" WHERE a."patientId"=$1 AND a."doctorId"=$2 ORDER BY a.id LIMIT 2001`, [seed.patientId, seed.doctorId])).rows;
   if (rows.length > 2000) throw new DomainError(503, 'MESSAGING_CHAIN_LIMIT', 'Conversation eligibility is temporarily unavailable.');
   const logs = (await tx.query<{ appointmentId: string; fromStatus: string | null; toStatus: string; changedAt: Date }>(
     `SELECT "appointmentId","fromStatus","toStatus","changedAt" FROM appointment_logs WHERE "appointmentId"=ANY($1::text[]) AND "toStatus" IN ('approved','confirmed','cancelled')`, [rows.map(row => row.id)])).rows;

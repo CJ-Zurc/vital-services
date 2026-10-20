@@ -385,6 +385,17 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
         return { items, total: items.length };
       }, { isolationLevel: "Serializable" });
     },
+    async adminPatients(actor: Actor, input: unknown) {
+      ownRole(actor, "admin");
+      requireScope(actor, "profile.admin.read", actor.authId);
+      const authIds = z.array(z.uuid()).min(1).max(100).parse(input);
+      return db.$transaction(async (tx) => {
+        await requireProfileAdmin(tx, actor);
+        const items = await tx.vitalPatient.findMany({ where: { authId: { in: [...new Set(authIds)] } },
+          select: { authId: true, isOnboardingComplete: true } });
+        return { items };
+      }, { isolationLevel: "Serializable" });
+    },
     async adminMembership(actor: Actor) {
       ownRole(actor, "admin");
       requireScope(actor, "profile.admin.read", actor.authId);

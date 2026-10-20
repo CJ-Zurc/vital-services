@@ -68,9 +68,9 @@ export function createMessagingModule(pool: Pool, environment: NodeJS.ProcessEnv
       return messagingTransaction(pool, async tx => {
         const context = await messagingAppointment(tx, actor, id);
         const access = calculateMessageAccess(context.seed, context.chain, new Date(clock()));
-        if (context.processing) access.canSend = false;
+        if (context.processing) Object.assign(access, { canSend: false, sendUntil: null, nextOpenAt: null, availabilityReason: 'processing' });
         const found = await conversation(tx, id);
-        if (!found || found.purgedAt) return { messages: [], nextCursor: null, ...access, ...(found?.purgedAt ? { canSend: false } : {}) };
+        if (!found || found.purgedAt) return { messages: [], nextCursor: null, ...access, ...(found?.purgedAt ? { canSend: false, sendUntil: null, nextOpenAt: null, availabilityReason: 'purged' as const } : {}) };
         const page = (await tx.query<Message>(`SELECT * FROM appointment_messages WHERE "conversationId"=$1
           AND ($2::timestamp IS NULL OR ("createdAt",id)<($2,$3)) ORDER BY "createdAt" DESC,id DESC LIMIT 31`, [found.id, boundary?.at ?? null, boundary?.id ?? null])).rows;
         const visible = page.slice(0, 30), oldest = visible.at(-1);
@@ -96,7 +96,7 @@ export function createMessagingModule(pool: Pool, environment: NodeJS.ProcessEnv
             COUNT(*) FILTER(WHERE "senderRole"=$2::"MessageSenderRole" AND ($3::timestamp IS NULL OR "createdAt">$3))::integer AS "unreadCount"
             FROM appointment_messages WHERE "conversationId"=$1`, [found.id, actor.role === 'patient' ? 'doctor' : 'patient', lastReadAt ?? null])).rows[0] : undefined;
           const processing = await appointmentMessagingProcessing(tx, row);
-          if (processing || found?.purgedAt) access.canSend = false;
+          if (processing || found?.purgedAt) Object.assign(access, { canSend: false, sendUntil: null, nextOpenAt: null, availabilityReason: found?.purgedAt ? 'purged' : 'processing' });
           conversations.push({ appointmentId: row.id, counterpartAuthId: row.counterpartAuthId, specialty: row.specialty, status: row.status,
             scheduledAt: row.scheduledAt.toISOString(), lastMessageAt: state?.lastMessageAt?.toISOString() ?? null, unreadCount: state?.unreadCount ?? 0, ...access });
         }

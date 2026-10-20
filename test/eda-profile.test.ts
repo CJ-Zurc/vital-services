@@ -67,7 +67,8 @@ function databaseStub() {
   }
   const delegates = Object.fromEntries((["vitalUser", "vitalPatient", "vitalDoctor", "vitalAdmin", "profileWorkflow", "consentRecord"] as const).map((table) => [table, {
     async findFirst(query: Query) { return project(find(table, query), query.select); },
-    async findMany(query: Query) { return state[table].map((row) => project(row, query.select)); },
+    async findMany(query: Query) { return state[table].filter(row => Object.entries(query.where ?? {}).every(([key, value]) =>
+      value && typeof value === 'object' && 'in' in value ? (value.in as unknown[]).includes(row[key]) : row[key] === value)).map((row) => project(row, query.select)); },
     async findUnique(query: Query) { reads.push({ table, query }); return project(find(table, query), query.select); },
     async findUniqueOrThrow(query: Query) {
       const row = project(find(table, query), query.select);
@@ -783,4 +784,27 @@ test('S6 onboarding denies missing signature, missing S2, reversed dates and rem
  await assert.rejects(prepare({...doctorOnboarding,s2ValidFrom:'2027-01-01',s2ValidUntil:'2026-01-01'}));
  await assert.rejects(prepare({...doctorOnboarding,title:'Dr.'}));
  assert.equal(stub.rows().vitalDoctor[0]!.isDoctorOnboardingComplete,false);
+});
+
+test("profile: patient monitoring summaries are bounded minimal and require current admin membership", async () => {
+  const stub = databaseStub(), profile = createProfileModule(stub.db, permit);
+  await profile.materialize(actor('admin'));
+  await profile.materialize(actor('patient', otherAuthId));
+  await profile.materialize(actor('doctor', randomUUID()));
+  assert.deepEqual(await profile.adminPatients(adminActor(), [otherAuthId, randomUUID()]),
+    { items: [{ authId: otherAuthId, isOnboardingComplete: false }] });
+  await assert.rejects(profile.adminPatients(actor('patient', otherAuthId), [otherAuthId]));
+  await assert.rejects(profile.adminPatients({ ...adminActor(), resource: otherAuthId }, [otherAuthId]));
+  await assert.rejects(profile.adminPatients(adminActor(), []));
+  await assert.rejects(profile.adminPatients(adminActor(), Array(101).fill(otherAuthId)));
+  await assert.rejects(profile.adminPatients(adminActor(), ['invalid']));
+  await withRouter(stub.db, adminActor(), undefined, async base => {
+    const response = await fetch(`${base}/admin/patients?authIds=${otherAuthId}`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true, data: { items: [{ authId: otherAuthId, isOnboardingComplete: false }] } });
+    for (const query of ['', '?authIds=invalid', `?authIds=${otherAuthId}&role=doctor`])
+      assert.equal((await fetch(`${base}/admin/patients${query}`)).status, 400);
+  });
+  stub.rows().vitalAdmin.length = 0;
+  await assert.rejects(profile.adminPatients(adminActor(), [otherAuthId]), (error: unknown) => error instanceof ProfileError && error.status === 403);
 });

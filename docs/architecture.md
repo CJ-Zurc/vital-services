@@ -20,3 +20,10 @@ delivery contracts. Analytics reads only the documented operational exports.
 Object storage has separate Records/profile principals. Files are scanned and
 encrypted as required; browser links use the public Gateway media route. API,
 worker and Web have process-specific configuration and bounded resource limits.
+
+
+Sprint 6 patient administration adds a separate read-only patient-monitoring
+view and bounded admin summary route. Messaging now follows scheduled 24-hour
+appointment/follow-up windows with retained read-only history. See
+[integration contracts](integration_guide.md#s6-005-patient-monitoring-and-s6-009-messaging)
+for routes, ownership, response fields and boundary behavior.

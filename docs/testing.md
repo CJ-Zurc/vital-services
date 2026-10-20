@@ -29,3 +29,22 @@ and development/staging pushes continue using their matching Web branch. Remove
 the PR-specific variable when closing the PR. No SHA file or helper script is
 needed. Manual runs retain `web_sha` with `eda_action=none` for validation only.
 Do not reduce route counts or refresh fingerprints against incompatible source.
+
+
+## S6-005 / S6-009 source verification
+
+Maintained Profile/admin-management suites cover bounded current-admin patient
+summaries, safe field projection, combined filters, role override denial and
+pagination past 100 accounts. Messaging owner/BFF suites cover exact scheduled
+boundaries, missing schedules, cancellation, accepted replacements, overlapping
+windows/gaps, ownership, locks, encrypted history and committed retries after
+closure. The existing Philippine overnight interval tests remain unchanged.
+
+Local 2026-10-21 results: Services 435 passed / 2 isolated-DB checks skipped;
+Web 279 passed; final transport 14 passed; route source review 5 passed for 124
+routes. Services build/configured lint and Web TypeScript/build/BFF check passed.
+Chromium verified admin patient UI/filter links and both messaging roles' timer
+transitions/draft preservation/clock-skew backoff using fictional mocked APIs.
+The temporary browser script is removed; retained unit suites remain registered
+in the workspace catalog. Docker was unavailable: real authentication, external
+account actions and live concurrent event/SSE workflows remain acceptance gates.
