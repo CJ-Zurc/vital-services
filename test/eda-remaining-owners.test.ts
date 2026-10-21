@@ -10,7 +10,7 @@ import { createPortalIdentityLookup } from '../src/eda/modules/portal-integratio
 
 function fixture() {
   const patientId = randomUUID(), doctorId = randomUUID(), authId = randomUUID(), doctorAuthId = randomUUID(), id = randomUUID();
-  const row = { id, patientId, doctorId, patientAuthId: authId, doctorAuthId, version: 3, status: 'confirmed', billingLineageId: randomUUID(), associationVersion: 1 };
+  const row = { id, patientId, doctorId, patientAuthId: authId, doctorAuthId, version: 3, status: 'completed', billingLineageId: randomUUID(), associationVersion: 1 };
   let state = { feedback: null as Record<string, unknown> | null, command: null as Record<string, any> | null, events: [] as unknown[][], ratingWrites: 0 };
   let previous = structuredClone(state), revoked = false, failAudit = false, paid = true, verified = 0, intakeCount = 1;
   const calls: { sql: string; args: unknown[] }[] = [];
@@ -24,7 +24,7 @@ function fixture() {
     else if (sql.includes('FROM command_operations')) return { rows: state.command ? [state.command] : [] };
     else if (sql.includes('FROM saga_operations')) return { rows: [] };
     else if (sql.includes('FROM appointment_payment_projections')) return { rows: [{ paymentId: randomUUID(), status: paid ? 'paid' : 'pending', sourceVersion: 4, billingLineageId: row.billingLineageId, associationVersion: 1 }] };
-    else if (sql.startsWith('INSERT INTO feedback')) { state.feedback = { id: args[0], appointmentId: args[1], patientId: args[2], doctorId: args[3], starRating: args[4], feedback: args[5], submittedAt: args[6] }; return { rows: [state.feedback] }; }
+    else if (sql.startsWith('INSERT INTO feedback')) { if(state.feedback)return {rows:[]}; state.feedback = { id: args[0], appointmentId: args[1], patientId: args[2], doctorId: args[3], starRating: args[4], feedback: args[5], submittedAt: args[6] }; return { rows: [state.feedback] }; }
     else if (sql.startsWith('UPDATE vital_doctors')) state.ratingWrites++;
     else if (sql.startsWith('INSERT INTO command_operations')) state.command = { action: 'appointment.feedback', resourceId: args[3], requestHash: args[4], status: 'completed', result: JSON.parse(String(args[5])) };
     else if (sql.startsWith('SELECT * FROM feedback')) return { rows: state.feedback ? [state.feedback] : [] };
@@ -35,13 +35,13 @@ function fixture() {
   } };
   const pool = { connect: async () => tx, query: tx.query.bind(tx) } as unknown as Pool;
   const actor = (scope = 'appointments.feedback', role: 'patient' | 'doctor' = 'patient', resource = id): Actor => ({ authId: role === 'patient' ? authId : doctorAuthId, role, resource, scopes: [scope], correlationId: randomUUID(), serviceId: 'vital-web', isSuperAdmin: false });
-  return { id, row, patientId, calls, pool, actor, meta: { operationId: randomUUID(), requestHash: 'a'.repeat(64) }, input: { expectedVersion: 3, rating: 5, comment: "private'; DROP TABLE feedback; --" },
+  return { id, row, patientId, calls, pool, actor, meta: { operationId: randomUUID(), requestHash: 'a'.repeat(64) }, input: { expectedVersion: 3, rating: 5 },
     owner: createAppointmentExtras(pool, { financial: { verifyPaid: async () => { verified++; } } }), state: () => state, verified: () => verified,
     revoke: () => { revoked = true; }, fail: () => { failAudit = true; }, unpaid: () => { paid = false; }, manyIntakes: () => { intakeCount = 11; } };
 }
 
-test('feedback preserves confirmed or completed paid eligibility and updates doctor rating atomically', async () => {
-  for (const status of ['confirmed', 'completed']) {
+test('feedback requires completed paid eligibility and updates doctor rating atomically', async () => {
+  for (const status of ['completed']) {
     const f = fixture(); f.row.status = status;
     const result = await f.owner.feedback(f.actor(), f.id, f.meta, f.input);
     assert.equal(result.feedback.starRating, 5); assert.equal(f.verified(), 1); assert.equal(f.state().ratingWrites, 1);
@@ -50,6 +50,7 @@ test('feedback preserves confirmed or completed paid eligibility and updates doc
     assert.doesNotMatch(JSON.stringify(f.state().events), /private|DROP/);
     assert.ok(f.calls.findIndex(call => call.sql.includes('pg_advisory_xact_lock')) < f.calls.findIndex(call => call.sql.startsWith('INSERT INTO feedback')));
   }
+  const confirmed=fixture();confirmed.row.status='confirmed';await assert.rejects(confirmed.owner.feedback(confirmed.actor(),confirmed.id,confirmed.meta,confirmed.input),{code:'APPOINTMENT_FEEDBACK_INELIGIBLE'});
   const unpaid = fixture(); unpaid.unpaid(); await assert.rejects(unpaid.owner.feedback(unpaid.actor(), unpaid.id, unpaid.meta, unpaid.input), { code: 'APPOINTMENT_PAYMENT_UNVERIFIED' });
 });
 test('feedback replay conflicts rollback and revoked ownership fail closed', async () => {
@@ -74,8 +75,8 @@ test('intake reads preserve submitted dates and deny unrelated clinicians', asyn
 });
 test('remaining owner SQL binds hostile values and rejects dynamic identifiers', async () => {
   const f = fixture(); await f.owner.feedback(f.actor(), f.id, f.meta, f.input);
-  for (const call of f.calls) assert.ok(!call.sql.includes(f.input.comment));
-  assert.ok(f.calls.some(call => call.args.includes(f.input.comment)));
+  await assert.rejects(f.owner.feedback(f.actor(),f.id,{...f.meta,operationId:randomUUID()},{...f.input,comment:"private"}));
+  assert.equal(f.state().feedback?.feedback,null);
   const hostile = "x'; DROP TABLE payments; --";
   const calls: { sql: string; args: unknown[] }[] = [];
   const store = createPaymentStore({ query: async (sql: string, args: unknown[]) => { calls.push({ sql, args }); return { rows: [] }; } } as unknown as Pool);

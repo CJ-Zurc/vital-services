@@ -89,3 +89,9 @@ export const appointmentFactData = (row: AppointmentRow, actorAuthId: string | n
   appointmentId: row.id, appointmentVersion: row.version, billingLineageId: row.billingLineageId,
   associationVersion: row.associationVersion, actorAuthId, operationId,
 });
+
+export const rescheduleLimits = { patient: 1, doctor: 3 } as const;
+export function rescheduleAllowed(row: Pick<AppointmentRow, 'patientRescheduleCount' | 'doctorRescheduleCount'>, role: 'patient' | 'doctor') {
+  return row.patientRescheduleCount + row.doctorRescheduleCount < 4 &&
+    (role === 'patient' ? row.patientRescheduleCount : row.doctorRescheduleCount) < rescheduleLimits[role];
+}

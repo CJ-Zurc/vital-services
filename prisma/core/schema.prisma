@@ -371,6 +371,7 @@ model Appointment {
   prescriptions       Prescription[]
   medicalCertificates MedicalCertificate[]
   messageConversation MessageConversation?
+  complaintHistory    ChiefComplaintHistory[]
   feedback            Feedback?
   consentRecords      ConsentRecord[]
 
@@ -392,6 +393,8 @@ model AppointmentLog {
   fromStatus    String?
   toStatus      String
   changedByRole String?
+  changedByAuthId String?
+  rescheduleDetails Json?
   note          String?
   changedAt     DateTime    @default(now())
   billingIntents AppointmentBillingIntent[]
@@ -1034,4 +1037,17 @@ model DoctorSignature {
   createdAt DateTime @default(now())
   @@unique([doctorAuthId, operationId],map:"doctor_signatures_operation_key")
   @@map("doctor_signatures")
+}
+
+model ChiefComplaintHistory {
+  id String @id @default(uuid())
+  appointmentId String
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  previousText String?
+  currentText String?
+  doctorAuthId String
+  changedAt DateTime @default(now())
+  appointmentVersion Int
+  @@index([appointmentId, changedAt])
+  @@map("chief_complaint_history")
 }

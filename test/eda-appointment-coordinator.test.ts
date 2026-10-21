@@ -68,7 +68,7 @@ function fixture(initiator:'doctor'|'patient'='doctor',queued=true){
 for(const initiator of ['patient','doctor'] as const){
   test(`EDA Appointment coordinator rejects exhausted ${initiator} quota at acceptance without consuming either counter`,async()=>{
     const f=fixture(initiator,false),source=f.state().rows.get(f.sourceId)!;
-    source.patientRescheduleCount=initiator==='patient'?2:0;source.doctorRescheduleCount=initiator==='doctor'?2:0;
+    source.patientRescheduleCount=initiator==='patient'?1:0;source.doctorRescheduleCount=initiator==='doctor'?3:0;
     const before=structuredClone(f.state());
     await assert.rejects(f.saga.accept(f.actor(),f.nextId,{operationId:f.id,requestHash:'a'.repeat(64)},
       {expectedVersion:0,expectedSourceVersion:0}),error=>error instanceof DomainError&&error.status===409&&error.code==='RESCHEDULE_LIMIT_REACHED');
@@ -79,7 +79,7 @@ for(const initiator of ['patient','doctor'] as const){
   test(`EDA Appointment coordinator accepted ${initiator} proposal increments only its initiator counter through rollback finalization retry and replay`,async()=>{
     for(const failure of ['pivot','finalize'] as const){
       const f=fixture(initiator,false),source=f.state().rows.get(f.sourceId)!,proposal=f.state().rows.get(f.nextId)!;
-      source.patientRescheduleCount=initiator==='patient'?1:2;source.doctorRescheduleCount=initiator==='doctor'?1:2;
+      source.patientRescheduleCount=initiator==='patient'?0:1;source.doctorRescheduleCount=initiator==='doctor'?2:2;
       proposal.patientRescheduleCount=source.patientRescheduleCount;proposal.doctorRescheduleCount=source.doctorRescheduleCount;
       const originalSource=structuredClone(source),originalProposal=structuredClone(proposal);
       const actor=f.actor(),meta={operationId:f.id,requestHash:'a'.repeat(64)},input={expectedVersion:0,expectedSourceVersion:0};
@@ -92,7 +92,7 @@ for(const initiator of ['patient','doctor'] as const){
       assert.deepEqual(await f.saga.accept(actor,f.nextId,meta,input),first);
       assert.equal(f.state().saga.status,'completed');assert.equal(f.state().saga.targetRequest.initiator,initiator);
       const accepted=f.state().rows.get(f.nextId)!;
-      assert.equal(accepted.patientRescheduleCount,2);assert.equal(accepted.doctorRescheduleCount,2);
+      assert.equal(accepted.patientRescheduleCount,1);assert.equal(accepted.doctorRescheduleCount,initiator==='doctor'?3:2);
       assert.equal(accepted.patientRescheduleCount-originalSource.patientRescheduleCount,initiator==='patient'?1:0);
       assert.equal(accepted.doctorRescheduleCount-originalSource.doctorRescheduleCount,initiator==='doctor'?1:0);
       assert.equal(f.state().rows.get(f.sourceId)!.patientRescheduleCount,originalSource.patientRescheduleCount);
@@ -101,6 +101,11 @@ for(const initiator of ['patient','doctor'] as const){
       const committed=structuredClone(f.state()),calls={...f.calls};
       assert.deepEqual(await f.saga.accept(actor,f.nextId,meta,input),first);await f.saga.advance(f.id);
       assert.deepEqual(f.state(),committed);assert.deepEqual(f.calls,calls);assert.equal(f.state().logs.length,2);
+      const notifications=f.state().events.filter(event=>event.eventType==='vital.notification.requested');
+      assert.equal(notifications.length,1);assert.equal(notifications[0]!.data.template,'appointment.rescheduled');
+      assert.equal(notifications[0]!.data.recipientAuthId,initiator==='doctor'?accepted.patientAuthId:accepted.doctorAuthId);
+      const details=JSON.parse(String(f.state().logs[0]![8]));assert.equal(details.initiatorRole,initiator);assert.equal(details.acceptedByAuthId,actor.authId);
+
     }
   });
 }
@@ -121,4 +126,19 @@ test('EDA Appointment coordinator recovers only forward after pivot and preserve
   const f=fixture();f.failFinalize();await f.saga.advance(f.id);assert.equal(f.state().saga.status,'finalizing');assert.ok(f.state().saga.pivotCommittedAt);
   assert.equal(f.state().reservation.status,'consumed');await f.saga.advance(f.id);assert.equal(f.state().saga.status,'completed');assert.equal(f.calls.abort,0);
   assert.equal(f.state().rows.get(f.nextId)!.doctorRescheduleCount,1);assert.equal(f.state().logs.length,2);
+});
+
+
+test('S6 successful reschedule notification failure retries independently without another quota increment',async()=>{
+  const f=fixture('doctor');f.failFinalize();await f.saga.advance(f.id);
+  assert.ok(f.state().saga.pivotCommittedAt);assert.equal(f.state().saga.status,'finalizing');
+  const count=f.state().rows.get(f.nextId)!.doctorRescheduleCount;
+  f.crash('INSERT INTO outbox_events');await f.saga.advance(f.id);
+  assert.equal(f.state().saga.status,'finalizing');
+  assert.equal(f.state().events.filter(event=>event.eventType==='vital.notification.requested').length,0);
+  assert.equal(f.state().rows.get(f.nextId)!.doctorRescheduleCount,count);
+  await f.saga.advance(f.id);assert.equal(f.state().saga.status,'completed');
+  assert.equal(f.state().events.filter(event=>event.eventType==='vital.notification.requested').length,1);
+  assert.equal(f.state().rows.get(f.nextId)!.doctorRescheduleCount,count);
+  await f.saga.advance(f.id);assert.equal(f.state().events.filter(event=>event.eventType==='vital.notification.requested').length,1);
 });

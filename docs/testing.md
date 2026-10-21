@@ -48,3 +48,6 @@ transitions/draft preservation/clock-skew backoff using fictional mocked APIs.
 The temporary browser script is removed; retained unit suites remain registered
 in the workspace catalog. Docker was unavailable: real authentication, external
 account actions and live concurrent event/SSE workflows remain acceptance gates.
+
+
+S6-011–S6-014 local verification (2026-10-21): Services 442 passed / 2 isolated-stack checks skipped, Web 283 passed, Gateway 235 passed, Central Notification affected suite 53 passed, and source contract review 5 passed for 131 routes. Builds, TypeScript/BFF checks and focused lint passed. Actual Prisma fresh/previous-schema/repeat deployment and direct SQL tests passed against temporary in-memory PostgreSQL instances. Fictional mocked-API Chromium checks passed for doctor calendar/complaint/inbox, patient numerical ratings/read-only history and admin ratings. Genuine multi-connection PostgreSQL and full Auth/broker/payment/video/Records acceptance remain pending because Docker is unavailable. See the saved Sprint 6 checklist; no deployment or database reset was performed.

@@ -12,3 +12,6 @@
 The root [VM runbook](../../docs/deployment/single-azure-vm.md) is authoritative
 for server provisioning and manual staging deployment. Feature contract documents
 describe implemented interfaces; source tests do not certify a deployed workflow.
+
+
+- [S6 appointment revisions](eda/sprint6-appointment-revisions.md): ratings, complaint history, calendar review, quotas and VITAL inbox contracts.

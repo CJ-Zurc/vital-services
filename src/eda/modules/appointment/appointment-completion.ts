@@ -75,6 +75,7 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
           scheduledAt: new Date(r.scheduledAt), proposedEndAt: r.proposedEndAt ? new Date(r.proposedEndAt) : null, updatedAt: new Date(r.updatedAt),
           statusLogs: r.statusLogs.map(l => ({ ...l, changedAt: new Date(l.changedAt).toISOString() })) });
         appointments.push({ id: row.id, version: row.version, patientId: row.patientId, doctorId: row.doctorId, patientAuthId: row.patientAuthId, doctorAuthId: row.doctorAuthId,
+          rating: null, canRate: false,
           specialty: row.specialty, status: row.status, consultationType: row.consultationType, scheduleSlotId: row.scheduleSlotId, scheduleSlot: row.scheduleSlot,
           sourceAppointmentId: row.sourceAppointmentId, appointmentKind: row.appointmentKind, followUpOfAppointmentId: row.followUpOfAppointmentId,
           patientRescheduleCount: row.patientRescheduleCount, doctorRescheduleCount: row.doctorRescheduleCount, cancellationReason: row.cancellationReason, rejectionReason: row.rejectionReason,

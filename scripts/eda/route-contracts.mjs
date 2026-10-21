@@ -13,6 +13,18 @@ const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIO
 const hash = text => createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex');
 // A review snapshot, not a parity certificate. Changes require a fresh source review.
 const reviewedHashes = Object.freeze({
+  'app/api/doctor/date-blocks/batch/route.ts': 'ab10c50e04e09a6e7b06a4d9b0eb1e9cd28aca592a940bd0462a0c1f9899746b',
+  'app/api/doctor/date-blocks/preview/route.ts': 'ab10c50e04e09a6e7b06a4d9b0eb1e9cd28aca592a940bd0462a0c1f9899746b',
+  'tests/eda-appointment-revisions.test.ts': '91adaa73402d33ca72d070661194b4da71a6e73e881082711d445bcd76b4403c',
+  'lib/eda/notification-inbox.ts': 'c55d34d88fc4109c48043da0d9e02fd1671fda5144deeb7f7a352f114939d3e6',
+  'lib/eda/notification-inbox-bff.ts': '13b9aeeed4c2b2f4422642e32b2b3cf5d627d798155fa195af17075b65dfe554',
+  'lib/eda/appointment-revisions-paths.ts': '53eea2f02e95178b6d1304e175e5b31761d12401e5cc13573e40cb786134e59c',
+  'lib/eda/appointment-revisions-bff.ts': '2ee783d57b2f73514c83821c40cd85c891436f265f5491a41874f975b51a29b4',
+  'app/api/notifications/route.ts': '2cfa24b7cc20971922d304a3c08e1940a9cdb5e7a997ff557c8d408fdf3a1a16',
+  'app/api/notifications/[notificationId]/read/route.ts': 'd9118796de4983b47778a22e6fd2717b42ce6770c33dcb467b00c918de825561',
+  'app/api/doctor/appointments/[appointmentId]/chief-complaint/route.ts': 'ac475cbe2a7749795dd331fd0bffb9ebe4fbae2294a411d6c68e12cf3a6e09a7',
+  'app/api/appointments/[appointmentId]/chief-complaint/route.ts': '5cad957232ae57112581c66a3294e739aad081fd15c63ca5fcde52147039e7b2',
+  'app/api/admin/doctors/[authId]/ratings/route.ts': '5cad957232ae57112581c66a3294e739aad081fd15c63ca5fcde52147039e7b2',
   'lib/eda/admin-directory.ts': '5906d7ac8b97f199f301ecaf4725145934522ae4c1d09461865985a7e84cb1ba',
   'app/api/admin/patients/route.ts': 'e36a083c52d0c5d8e7709b01886c82a805e1945a873fe74c48e48fa829b94847',
   'app/api/admin/appointments/[appointmentId]/acknowledgment/file/route.ts': 'e46cd775590bcbb236ae0bb13f0e74bab030ba1ebdb28d9749811715d9a261ef',
@@ -144,7 +156,7 @@ const reviewedHashes = Object.freeze({
   'lib/allergies.ts': '90c0767d3818cc6dea00d19dd374b35b40f08aae2421f38c88553c0d49e13ff1',
   'lib/appointment-action-state.ts': 'bb725cb2a1956750493e931e8c137adc222a4bb6e3684d25f9ce4cd3ba6249aa',
   'lib/appointment-lifecycle.ts': 'b4c5cec819a9e80d835bbcd6abe146730cf267115ee46dceeaa34ff7197fe49e',
-  'lib/appointment-serializer.ts': '22d641184f88aa70ab532467fcb5fa09991536060d68d71e4a5891d61ab01f3d',
+  'lib/appointment-serializer.ts': '61515520aea160c65dbc6656f5c7f22be8a8929e2634cd9c8c8186548cb04110',
   'lib/auth-error-response.ts': 'cd64d0baf1d6709bdb15ba4f79d5630799f5bc679ccc0c18b384324f0702a089',
   'lib/auth-errors.ts': 'fd4ecbbce99bcd47423a074274dc9ef9bf81843a031d8eca07b1d17731739aff',
   'lib/auth-profile-format.ts': '7b747465ce29a41dabd9cfb06927e90a1eeca55c66d8f9fe1ec28510d0a6f27d',
@@ -159,17 +171,17 @@ const reviewedHashes = Object.freeze({
   'lib/document-records.ts': 'ff94579da0c31e404de591f0648b509129b519a1cd47a05c87a727d520c28e2a',
   'lib/e2e-test-support.ts': 'b88ec8a7e3f6f5e9c7ac42219c116a9fb9e722b3c6515fc80e5dee1f49fa09d9',
   'lib/eda/appointment-bff.ts': 'ab84801549e15127e373c96ffdd0ac3076c791f3ceab35d6601e32368d7b1428',
-  'lib/eda/appointment-compatibility.ts': 'bb84e542b4c754db09f857711e6a0480e74cb264291e41347d206b7893ed256d',
-  'lib/eda/appointment-extras-bff.ts': 'b0e31ec24874fd441899dd3364107d2c893f3dcf7bcdc82169eb98881a9469ef',
-  'lib/eda/appointment-paths.ts': 'e7c73aadc99e730c5b7ea4993624d0a8f1791f1423f190e1efdcef428f21d212',
-  'lib/eda/appointment-read-bff.ts': '7388274165c18b63f93817a92c0a89d9e1c07293b60d79c4c4d1ca899f471ee2',
-  'lib/eda/appointment-read-dto.ts': '475fac54c27d30274d1d9d0d93cbfc718b2af77fe532d97d029c4e782af0c32c',
+  'lib/eda/appointment-compatibility.ts': '03d21c0081be59d4bd74539c1f619042d363c1e45f89e353d9017ba6a6df9a68',
+  'lib/eda/appointment-extras-bff.ts': '6b92206eb36e00b9020fe5b60ca51cedd439b49a037804528e8d67ef69d7a9c9',
+  'lib/eda/appointment-paths.ts': '230ff97ab4a9ba2cbdae99c78eaa41cecbcddafd864a08818daf796d401c6a9f',
+  'lib/eda/appointment-read-bff.ts': 'b3f41f611b193f65429d7f3476c7f3882436a74b4afe85a8f4d80e39888510c9',
+  'lib/eda/appointment-read-dto.ts': 'fe4a56fbd378dbdd6f78f251bc0a09cdc2d80e249b8e82880994631b9715d7a6',
   'lib/eda/candidate.ts': '94f79ef985d6ff3301f3c902871b912d77229039bcbcc8d8ea56c7625b649115',
   'lib/eda/completion-bff.ts': 'ce3c9a12dce7089ae765f411be29130dd90663579bd51c7bd96bd20355e91a94',
   'lib/eda/completion-consent-list.ts': '7dad713da1ae78a1d6efeaf2ea8722ef9ce4c8443db4e3201e61382185996175',
   'lib/eda/completion-dto.ts': 'a5b4371edd03475500238a48e0e2721f5956a530258a60d3cd342339e7f9ccfe',
   'lib/eda/completion-export.ts': '86253ac46aff7904b418b578799025eb6055e7cc3b5a6cac71518f1c49ac9fad',
-  'lib/eda/completion-notifications.ts': 'b844911b583f02ac9ed86bbfa5edf6bc40ccac14e7483e5eff0d08f8d5385a28',
+  'lib/eda/completion-notifications.ts': '251db7084385a1d72f589a98768fef1cf3f6c40e87a3d3bd57dfbc3b1ac99386',
   'lib/eda/completion-paths.ts': 'c4707d7717bb7bc82ff65e68b24ac80efa58079d32673bcd1222f685869a101e',
   'lib/eda/completion-route-policy.ts': '8cfc1d8bbe3bbc94efea2aa3914ea6647ef2b8909f05ccbfb6756e5fef344e52',
   'lib/eda/messaging-bff.ts': '9a2e15ee25df1dddaabcc43c189f7bfe91a62f366004a8d742abbef78eba02e8',
@@ -177,7 +189,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/messaging-paths.ts': '320185fde0904df6ac25828bebe20dd3a2a126138eac68b0980d5c7988dcced5',
   'lib/eda/messaging-route-policy.ts': 'f8fe5c61d6c5f7105e0fe9241816258bc5a63fb27ef37708831e7cef332b5e94',
   'lib/eda/messaging.ts': '1ce8421f0dbd074d669eaf85d5ee119f2a98cddcfd62efb74e9b9c8b5ceb9cd9',
-  'lib/eda/mode-policy.ts': '459d5d5c78c2445c59af60d10ac90da0aeedaaeb9104906ab0ab4ec62f22cab4',
+  'lib/eda/mode-policy.ts': 'aeffc5ec10a37746e7e24ec4b80080b241b4da1da9b526436e3950b9fdf01ebc',
   'lib/eda/patient-onboarding.ts': 'bf14670643dc52a6693e4bb8ea452b247b43834246196f28554d9686673e092d',
   'lib/eda/patient-record-notice.ts': '966b336c56669936b94c6470a6598802335f0509f562e2373142f841a97db35c',
   'lib/eda/patient-workflow.ts': '81de5bf45249c1d71da5f7df9fda58866fcbd3a998cc5ca50e4b01b277533f4b',
@@ -234,7 +246,7 @@ const reviewedHashes = Object.freeze({
   'lib/patient-file-open.ts': '80a5a0a0ef634598fbb1aff73055c3cede7b687ca70f646c0a7021a5d0209940',
   'lib/ph-address.ts': '62d896dcfc81323f9f03aade96b908103504c1a39bf8d7e245e4089c35f0b9dd',
   'lib/profile-operation.ts': '6c0191f1023ba0cddda195bcbae6d9738a2c40da68656e4fb78c5c701e868158',
-  'lib/reschedule-usage.ts': 'd6439cfd0e9fad61fb4b46d4a5026db351ae70b65d1c78f8ef90ff3a4c6f94d8',
+  'lib/reschedule-usage.ts': '584ec7c08356947ba226d7104a479b4abdf8ac88c3ec104fdd929e02f369dc4b',
   'lib/route-access.ts': 'ef5e8cd9f54f117214c5adfa08a7ad03753eba957efd781e20f35ea2df738c96',
   'lib/schedule-format.ts': '7dd0decb52f27260ebd1b2d8cf1fd599213f4e831f16f30fd36786f21dde9320',
   'lib/server-auth.ts': 'e613c514c8b0309b10ab1deaf9211a0d211e831a49eef5044e341e83caa2e9af',
@@ -255,10 +267,10 @@ const reviewedHashes = Object.freeze({
   'tests/doctor-date-blocks.test.ts': '4991273d672bb454e2ff719137231b358fbd5a271d1d58d76f2444627abc61fd',
   'tests/doctor-record-snapshot.test.ts': '25eb2b06571fbd9469fdb75ce877b4f52cd592277f05f725fbb3b0c6f40f7f01',
   'tests/eda-appointment-compatibility.test.ts': '7f7090c216e2b5457585ae6a8630586c5cf50386bca40287e01268a205632949',
-  'tests/eda-appointment-reads.test.ts': 'c28acf703dec824127167730815537fd7be973eec9883a7c0ffbfbcfdc7f6e89',
+  'tests/eda-appointment-reads.test.ts': '9f60a653501a2c5f6efa356ea78ebca48cccda08a834751a7ad10b44a5793d0c',
   'tests/eda-appointment.test.ts': 'd9645cfa0f47c71b1880682fe84808d70c8d7f1ab7f3861c8735f8c7559b2420',
-  'tests/eda-completion-aggregates.test.ts': '2cce58b7ad848d80f3c626a5c89c50ef6e8b8504a9f6a79c5c3e80ba06a321d5',
-  'tests/eda-completion-qr.test.ts': '4c1007221ad06faafd0a0bee22913629d7c6bb73c5563a857fd7789509bd0257',
+  'tests/eda-completion-aggregates.test.ts': '0e2f2cf2f671e2bc53ab80a69e4b153952f9d86e973855ed49c687bfc0864958',
+  'tests/eda-completion-qr.test.ts': 'ec892990b4dbc18f825aae18fc46105bfec6536d5dfe9ad7ffe5e66347169efa',
   'tests/eda-messaging-bff.test.ts': 'ec82df7de2b887035e6b273379e5574dd68be65112c2f8618a82848fc37f5b95',
   'tests/eda-payment.test.ts': 'e9e3df2b5b1b88903650779452ce6c01c49a6aedf48d955885641530551c465d',
   'tests/eda-portal-integrations.test.ts': 'e08c5851a8a2a76d64fc95b8d2cdeebabbef2455bef5b44aab8e0e4a75d50485',
@@ -269,7 +281,7 @@ const reviewedHashes = Object.freeze({
   'tests/eda-public-registration.test.ts': '66c48ccd6e7d5a7e76aa3f2893777deab6f3ed58cc59663c3feffd5008d3b4a0',
   'tests/eda-records-pagination.test.ts': '18a990da29ef3ef05cb9c1cc7ae2f846bcd5bc20a827a3c51d8262411d4cd2db',
   'tests/eda-records.test.ts': 'e90d42277c970bf0f24456117ff90d4f160f9c30e7c32a88bc0656841213b35c',
-  'tests/eda-remaining-owners.test.ts': '75d1630e63af3ea1066a08ad2f3eb07e1f2cf425a8aadff0565a88b3666a8582',
+  'tests/eda-remaining-owners.test.ts': '7636d90da065ad7830294bc4c0494c34e0323f5dbda6a4730eb5eece418c4bd8',
   'tests/eda-sse.test.ts': '1fb489e045e2b0a4b57bd48071ee92b22a32a421107dd7042036aeedae69c2d2',
   'tests/eda-transport.test.ts': 'cb1655b61712663535af377df977fe72cadd5ca415b17d606313550bd82a12a9',
   'tests/eda-video-appointment.test.ts': 'f0fb5b22446153a5a0416b5c14c1ee46a4df2863716392aeee259d3eb5ab49da',
@@ -288,7 +300,7 @@ const reviewedHashes = Object.freeze({
   'tests/patient-file-open.test.ts': 'd85ca83ffd7892b84e307ae5e805a258c8b31f56df93824053c9c6ec2b91c629',
   'tests/ph-address.test.ts': 'f8476ae492c7611f07b596a20a6ed9b3b9def79179ea236df29e3f170d3561da',
   'tests/playwright-journey-profile.test.ts': 'f153bc65c948643e75032890d4d908b1ad64e291fce4eb8ea38352c03047cdae',
-  'tests/reschedule-usage.test.ts': '28fdbd32f14aadcf440657de1184485e43f4d3892702b5f7aae7300585738aca',
+  'tests/reschedule-usage.test.ts': '3eb634a1f1c17d1b94c692f48a3c3f8f95e323cc0b0d18a90d3c174ecd8909c8',
   'tests/retired-concerns.test.ts': 'ee7d029344e984083635dc0d08e757c79b847129d964560ad42b279603363638',
   'tests/session-navigation.test.ts': 'e6ac9c5cbf8d8e0ff44ee9e6488116d667cbbedbfc8a3b236f9d16cda0b5500d',
   'tests/session-response.test.ts': '92bd9fb8904f7347c3d289e3915147e60c723e268ec73f79a48ae4459db45943',
@@ -297,6 +309,13 @@ const reviewedHashes = Object.freeze({
 });
 
 const families = {
+  revisions: { owner:'Services Appointment',entry:'lib/eda/appointment-revisions-bff.ts',dispatch:'targetAppointmentRevision',
+    files:['lib/eda/appointment-revisions-paths.ts','lib/eda/appointment-paths.ts'],tests:['eda-appointment-revisions.test.ts'],
+    request:'Strict role-bound complaint correction, paged admin ratings, bounded calendar preview and atomic batch command with UUID idempotency key',
+    response:'Versioned complaint/history, rating page or calendar review/save receipt',statuses:[200,400,403,409,502,503],deps:['Core Appointment','Auth profiles'],flags:['VITAL_EDA_ENABLED','VITAL_EDA_APPOINTMENT_ENABLED']},
+  notifications: {owner:'Central Notification',entry:'lib/eda/notification-inbox-bff.ts',dispatch:'targetNotificationInbox',
+    files:['lib/eda/notification-inbox.ts'],tests:['eda-appointment-revisions.test.ts'],request:'Recipient-scoped VITAL inbox pagination or same-origin mark-read UUID',
+    response:'VITAL-only unread count, persistent read state, server-generated appointment destination',statuses:[200,400,403,404,502,503],deps:['Gateway Notification VITAL inbox'],flags:['VITAL_EDA_ENABLED','VITAL_EDA_APPOINTMENT_ENABLED']},
   acknowledgment: {owner:'Services Payment',entry:'lib/eda/acknowledgment-bff.ts',dispatch:'acknowledgmentBff',
     files:['lib/eda/transport.ts','lib/eda/mode-policy.ts','lib/eda/profile.ts','lib/eda/records-bff.ts'],tests:['eda-payment.test.ts','eda-records.test.ts'],
     request:'GET own-patient or authorized admin acknowledgment by appointment UUID; backend authorization rechecks identity',
@@ -311,7 +330,7 @@ const families = {
     statuses: [200, 201, 202, 409], deps: ['Core Appointment', 'Auth profiles', 'EHR identity/case receipt for booking/approval/follow-up', 'Payment checkout', 'Video finalization', 'Records completion snapshot'], flags: ['VITAL_EDA_ENABLED', 'VITAL_EDA_APPOINTMENT_ENABLED'] },
   extras: { owner: 'Services Appointment', entry: 'lib/eda/appointment-extras-bff.ts', dispatch: 'targetAppointmentExtras',
     policy: ['lib/eda/appointment-paths.ts', 'appointmentRoute'], files: ['lib/opqrst.ts'], tests: ['eda-remaining-owners.test.ts', 'opqrst.test.ts'],
-    request: 'feedback strict rating 1..5/comment max4000; current revision; opqrst UUID patient; typed intake cursors',
+    request: 'feedback strict integer rating 1..5 without comments; current revision; opqrst UUID patient; typed intake cursors',
     response: 'feedback receipt or complete paged intake projection; readOpqrst normalizes clinical intake', statuses: [200], deps: ['Core Appointment'], flags: ['VITAL_EDA_ENABLED', 'VITAL_EDA_APPOINTMENT_ENABLED'] },
   completion: { owner: 'Services Completion/Profile', entry: 'lib/eda/completion-bff.ts', dispatch: 'targetCompletion',
     policy: ['lib/eda/completion-route-policy.ts', 'completionRouteAllowed'],
@@ -410,6 +429,15 @@ function add(family, declarations) {
     }
   }
 }
+add('revisions', `
+GET /api/appointments/[appointmentId]/chief-complaint
+PATCH /api/doctor/appointments/[appointmentId]/chief-complaint
+GET /api/admin/doctors/[authId]/ratings
+POST /api/doctor/date-blocks/preview
+POST /api/doctor/date-blocks/batch`);
+add('notifications', `
+GET /api/notifications
+PATCH /api/notifications/[notificationId]/read`);
 add('appointment', `
 GET /api/doctor/appointment-requests
 GET /api/doctor/dashboard
@@ -604,7 +632,7 @@ function dispatchBinding(entry, symbol) {
 const policyCatalogs = new Map();
 function policyProbe(file, symbol, paths, method, read, environment = {}) {
   // Only reviewed pure routing tables are evaluated; no BFF/transport or Web runtime is loaded.
-  const allowed = new Set(['lib/eda/appointment-paths.ts', 'lib/eda/completion-route-policy.ts',
+  const allowed = new Set(['lib/eda/appointment-revisions-paths.ts', 'lib/eda/appointment-paths.ts', 'lib/eda/completion-route-policy.ts',
     'lib/eda/messaging-route-policy.ts', 'lib/eda/profile-qr-paths.ts', 'lib/eda/records-paths.ts',
     'lib/eda/video-paths.ts', 'lib/eda/portal-integrations-route-policy.ts', 'lib/eda/mode-policy.ts']);
   const sources = new Map([...allowed].map(name => [name, read(name)]));
@@ -814,7 +842,7 @@ export function reviewRouteContract(route, options = {}) {
     } catch (error) { issue('HANDLER_UNREVIEWED', source, String(error.message)); }
     const files = [...new Set(['proxy.ts', 'lib/env.ts', 'lib/route-access.ts', 'lib/eda/mode-policy.ts', ...(family.entry ? [family.entry] : []), ...(binding?.file ? [binding.file] : []), ...(family.files ?? []),
       ...(rule.family !== 'retired' && rule.family !== 'worker' && !['address', 'e2e', 'readiness'].includes(rule.family) ? ['lib/auth.ts', 'lib/cookies.ts'] : []),
-      ...(['appointment', 'extras', 'completion', 'payment', 'records', 'recordsIntegration', 'video', 'messaging', 'stream', 'qr', 'portal', 'profile', 'registration', 'export'].includes(rule.family)
+      ...(['revisions', 'notifications', 'appointment', 'extras', 'completion', 'payment', 'records', 'recordsIntegration', 'video', 'messaging', 'stream', 'qr', 'portal', 'profile', 'registration', 'export'].includes(rule.family)
         ? ['lib/eda/transport.ts', 'lib/eda/mode-policy.ts', 'lib/eda/candidate.ts', 'lib/eda/request-body.ts'] : []),
       ...(family.policy ? [family.policy[0]] : [])])];
     const facts = { validators: [], statuses: [], errors: [], cookies: [], dependencies: [] };

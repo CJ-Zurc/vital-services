@@ -1,9 +1,10 @@
+import { rescheduleNotification } from './appointment-notifications.js';
 import { randomUUID,createHash } from "node:crypto";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { DomainError, requireScope, type Actor } from "../../contracts/actor.js";
 import { appointmentCommand, appointmentOwn, appointmentTransition, assertCalendarAvailable, calendarLock, lockAppointment, membership, readAppointment } from "./appointment.js";
-import { appointmentExpired,appointmentFactData, requireOwner, versionSchema, type AppointmentCommand, type AppointmentOwners, type ParticipantReceipt,type AppointmentRow } from "./appointment-contracts.js";
+import { appointmentExpired,appointmentFactData,rescheduleAllowed, requireOwner, versionSchema, type AppointmentCommand, type AppointmentOwners, type ParticipantReceipt,type AppointmentRow } from "./appointment-contracts.js";
 import { appendSqlOutbox } from "../../infrastructure/outbox.js";
 
 const acceptInput=z.object({expectedVersion:versionSchema,expectedSourceVersion:versionSchema}).strict();
@@ -77,7 +78,7 @@ export function createAppointmentSaga(pool:Pool,owners:AppointmentOwners,clock=D
           await assertCalendarAvailable(tx,source.doctorId,next.scheduledAt,next.proposedEndAt??next.scheduledAt,[source.id,next.id],id);
           if(source.status==='confirmed'&&!current.prepareReceipts?.payment?.verifiedPaid)fail("SAGA_PAID_RECEIPT_REQUIRED");
           await requireOwner(owners.records,"records").apply(tx,source,"reschedule",{operationId:id,beforeState:source.status,afterState:"rescheduled",replacement:next,effectiveAt:new Date(clock())});
-          const initiator=current.targetRequest.initiator;const count=initiator==='doctor'?source.doctorRescheduleCount:source.patientRescheduleCount;if(count>=2)fail("RESCHEDULE_LIMIT_REACHED");
+          const initiator=current.targetRequest.initiator;if(!rescheduleAllowed(source,initiator))fail("RESCHEDULE_LIMIT_REACHED");
           await tx.query('UPDATE appointments SET "ehrCaseId"=NULL WHERE id=$1',[source.id]);
           await tx.query(`INSERT INTO consultations (id,"appointmentId","videoResourceId","videoResourceVersion") VALUES($1,$2,$3,$4)
             ON CONFLICT ("appointmentId") DO NOTHING`,[randomUUID(),next.id,current.prepareReceipts?.video?.resourceId??null,
@@ -86,7 +87,10 @@ export function createAppointmentSaga(pool:Pool,owners:AppointmentOwners,clock=D
             [next.id,source.ehrCaseId,source.id,source.associationVersion+1,source.patientRescheduleCount+(initiator==='patient'?1:0),source.doctorRescheduleCount+(initiator==='doctor'?1:0)]);
           next.associationVersion=source.associationVersion+1;
           const actor:Actor={authId:current.actorAuthId,role:current.actorRole,serviceId:"vital-web",scopes:[],resource:source.id,correlationId:current.correlationId,isSuperAdmin:false};
-          const receipt=await appointmentTransition(tx,source,"rescheduled",actor,id,current.correlationId,null,{replacementAppointmentId:next.id,replacementVersion:next.version+1});
+          const receipt=await appointmentTransition(tx,source,"rescheduled",actor,id,current.correlationId,null,{replacementAppointmentId:next.id,replacementVersion:next.version+1},
+            {initiatorRole:initiator,initiatorAuthId:initiator==='doctor'?source.doctorAuthId:source.patientAuthId,acceptedByAuthId:current.actorAuthId,
+              originalStart:source.scheduledAt.toISOString(),originalEnd:(source.slotEndsAt??source.proposedEndAt)?.toISOString()??null,
+              replacementStart:next.scheduledAt.toISOString(),replacementEnd:next.proposedEndAt?.toISOString()??null});
           await appointmentTransition(tx,next,current.prepareReceipts?.payment?.verifiedPaid?'confirmed':'approved',actor,id,current.correlationId);
           await tx.query('UPDATE slot_reservations SET status=\'consumed\',"consumedAt"=NOW() WHERE id=$1',[current.reservationId]);
           await tx.query('UPDATE saga_operations SET status=\'finalizing\',"pivotCommittedAt"=$2,"ownerLogId"=$3,"leaseUntil"=$4 WHERE id=$1',[id,receipt.changedAt,receipt.logId,new Date(clock()+60000)]);
@@ -98,6 +102,8 @@ export function createAppointmentSaga(pool:Pool,owners:AppointmentOwners,clock=D
         const records=requireOwner(owners.records,"records");
         const source=await readAppointment(tx,current.sourceAppointmentId,true),replacement=await readAppointment(tx,current.replacementAppointmentId,true);
         await records.finalizeReschedule?.(tx,source,replacement,{operationId:id,beforeState:source.status,afterState:replacement.status,replacement,effectiveAt:new Date(clock())});
+        await rescheduleNotification(tx,replacement,{authId:current.actorAuthId,role:current.actorRole,correlationId:current.correlationId} as Actor,
+          id,'appointment.rescheduled',current.targetRequest.initiator==='doctor'?replacement.patientAuthId:replacement.doctorAuthId);
         await tx.query('UPDATE saga_operations SET status=\'completed\',"completedAt"=NOW(),"leaseOwner"=NULL,"leaseUntil"=NULL WHERE id=$1',[id]);});
     }catch(error){
       const permanent=error instanceof DomainError&&[400,403,404,409,422].includes(error.status);
@@ -115,7 +121,7 @@ export function createAppointmentSaga(pool:Pool,owners:AppointmentOwners,clock=D
         participants();requireOwner(owners.records,"records");
         const active=await tx.query(`SELECT id FROM saga_operations WHERE "billingLineageId"=$1 AND status NOT IN ('completed','compensated','cancelled','failed') LIMIT 1`,[source.billingLineageId]);if(active.rows.length)fail("APPOINTMENT_TRANSITION_PENDING");
         await assertCalendarAvailable(tx,source.doctorId,proposal.scheduledAt,proposal.proposedEndAt??proposal.scheduledAt,[source.id,proposal.id]);
-        const initiator=proposal.proposalRole;if(!['doctor','patient'].includes(initiator??''))fail("RESCHEDULE_INITIATOR_UNVERIFIED");if((initiator==='doctor'?source.doctorRescheduleCount:source.patientRescheduleCount)>=2)fail("RESCHEDULE_LIMIT_REACHED");
+        const initiator=proposal.proposalRole;if(!['doctor','patient'].includes(initiator??''))fail("RESCHEDULE_INITIATOR_UNVERIFIED");if(!rescheduleAllowed(source,initiator as 'doctor'|'patient'))fail("RESCHEDULE_LIMIT_REACHED");
         const id=meta.operationId;const reservationId=randomUUID();
         // Reclaim only uncommitted expired holds while holding the same doctor calendar lock.
         await tx.query(`UPDATE slot_reservations r SET status='released',"releasedAt"=NOW() WHERE r."doctorId"=$1 AND r.status='reserved' AND r."leaseUntil"<=NOW()

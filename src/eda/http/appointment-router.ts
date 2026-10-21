@@ -45,7 +45,12 @@ export function createAppointmentRouters(runtime?:AppointmentRuntime){
   schedules.post('/',handle((actor,_id,meta,input)=>runtime!.module.createSchedule(actor,command(meta),input)));
   schedules.patch('/:id',handle((actor,id,meta,input)=>runtime!.module.changeSchedule(actor,id,command(meta),input)));
   schedules.post('/:id/delete',handle((actor,id,meta,input)=>runtime!.module.changeSchedule(actor,id,command(meta),input,true)));
-  blocks.get('/',handle((actor,_id,_meta,input)=>runtime!.reads.blocks(actor,input)));
+  blocks.get('/preview', handle((actor,_id,_meta,input) => {
+    const query=z.object({ selection:z.string().max(4096) }).strict().parse(input);
+    return runtime!.module.previewDateBlocks(actor,JSON.parse(query.selection));
+  }));
+  blocks.post('/batch',handle((actor,_id,meta,input)=>runtime!.module.batchDateBlocks(actor,command(meta),input)));
+  blocks.get('/', handle((actor,_id,_meta,input)=>runtime!.reads.blocks(actor,input)));
   blocks.post('/',handle((actor,_id,meta,input)=>runtime!.module.createDateBlock(actor,command(meta),input)));
   blocks.post('/:id/delete',handle((actor,id,meta,input)=>runtime!.module.deleteDateBlock(actor,id,command(meta),input)));
   return{appointments,schedules,blocks};

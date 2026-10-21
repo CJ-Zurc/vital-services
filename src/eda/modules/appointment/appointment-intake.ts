@@ -29,6 +29,9 @@ export const intakeSchema = z.object({
 export const emergencyContactSchema = z.object({ fullName: z.string().trim().min(1).max(160), relationship: z.string().trim().min(1).max(80),
   phoneNumber: z.string().transform(x => x.trim().replace(/[\s()-]/g, "")).transform(x => /^09\d{9}$/.test(x) ? "+63" + x.slice(1) : x)
     .pipe(z.string().regex(/^\+639\d{9}$/)) }).strict();
-export const complaintSchema = z.string().trim().max(20000).refine(x => {
-  const count = x.split(/\s+/).filter(Boolean).length; return count >= 20 && count <= 300;
-});
+export const complaintSchema = z.string().trim().max(2000).nullable().optional().transform(value => value || null);
+export function customBookingEnd(startTime: string) {
+  const [hour, minute] = startTime.split(':').map(Number);
+  const total = (hour! * 60 + minute! + 30) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
