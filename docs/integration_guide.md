@@ -63,3 +63,8 @@ return their original message; sending never grants history to another actor.
 Stream read authorization remains independent of send-window availability.
 Closing does not delete messages or change retention/legal-hold behavior.
 No database migration, data reset or additional environment variable is needed.
+
+
+## S6-011–S6-014 contracts
+
+See [appointment revisions](eda/sprint6-appointment-revisions.md) for the coordinated Core/Web/Gateway/Notification routes. Deploy compatible sources together. Core owns migration `202610210001_s6_appointment_revisions`; EHR schemas remain unchanged. Notification delivery is durable metadata-only in-app intent with recipient-scoped VITAL reads; no producer URLs or clinical text are accepted.

@@ -34,6 +34,7 @@ function fixture(){
     if(sql.includes('SELECT a.id FROM appointments')&&sql.includes("a.status='pending'")&&sql.includes('ORDER BY a."createdAt",a.id'))return{rows:pendingConflicts.map(id=>({id})),rowCount:pendingConflicts.length};
     if(sql.includes("INSERT INTO command_operations")){state.commands.set(String(args[2]),{action:args[3],resourceId:args[4],requestHash:args[5],status:"completed",result:JSON.parse(String(args[6]))});return{rows:[],rowCount:1};}
     if(sql.includes("SELECT a.*"))return{rows:sql.includes('a.id<>$2')||sql.includes('a."sourceAppointmentId"=$1')?[]:[structuredClone(state.proposals.get(String(args[0]))??state.row)],rowCount:1};
+    if(sql.startsWith('INSERT INTO pre_consultations'))return{rows:[],rowCount:1};
     if(sql.startsWith('INSERT INTO appointments')){
       assert.ok(sql.includes('"patientRescheduleCount","doctorRescheduleCount"'));
       state.proposals.set(String(args[0]),{...structuredClone(state.row),id:String(args[0]),sourceAppointmentId:String(args[3]),
@@ -81,8 +82,8 @@ function fixture(){
 }
 
 for(const role of ['patient','doctor'] as const){
-  test(`EDA Appointment ${role} third reschedule proposal is denied before writes`,async()=>{
-    const f=fixture();Object.assign(f.state().row,{status:'confirmed',patientRescheduleCount:role==='patient'?2:1,doctorRescheduleCount:role==='doctor'?2:1});
+  test(`EDA Appointment ${role} exhausted reschedule proposal is denied before writes`,async()=>{
+    const f=fixture();Object.assign(f.state().row,{status:'confirmed',patientRescheduleCount:role==='patient'?1:0,doctorRescheduleCount:role==='doctor'?3:0});
     const before=structuredClone(f.state());
     await assert.rejects(f.module().propose(f.actor('reschedule',role),f.id,f.meta(),{
       expectedVersion:0,reason:'New time',slotDate:'2099-01-02',startTime:'10:00',endTime:'11:00',
@@ -92,7 +93,7 @@ for(const role of ['patient','doctor'] as const){
   });
 
   test(`EDA Appointment ${role} proposal inherits both counters without consuming quota on replay`,async()=>{
-    const f=fixture();Object.assign(f.state().row,{status:'confirmed',patientRescheduleCount:role==='patient'?1:2,doctorRescheduleCount:role==='doctor'?1:2});
+    const f=fixture();Object.assign(f.state().row,{status:'confirmed',patientRescheduleCount:role==='patient'?0:1,doctorRescheduleCount:role==='doctor'?2:2});
     const source=structuredClone(f.state().row),meta=f.meta(),actor=f.actor('reschedule',role);
     const input={expectedVersion:0,reason:'New time',slotDate:'2099-01-02',startTime:'10:00',endTime:'11:00'};
     const result=await f.module().propose(actor,f.id,meta,input);
@@ -109,7 +110,7 @@ for(const role of ['patient','doctor'] as const){
   });
 
   test(`EDA Appointment ${role} proposal rejection preserves source and proposal counters on replay`,async()=>{
-    const f=fixture();Object.assign(f.state().row,{status:'confirmed',patientRescheduleCount:role==='patient'?1:2,doctorRescheduleCount:role==='doctor'?1:2});
+    const f=fixture();Object.assign(f.state().row,{status:'confirmed',patientRescheduleCount:role==='patient'?0:1,doctorRescheduleCount:role==='doctor'?2:2});
     const source=structuredClone(f.state().row);
     const proposal=await f.module().propose(f.actor('reschedule',role),f.id,f.meta(),{
       expectedVersion:0,reason:'New time',slotDate:'2099-01-02',startTime:'10:00',endTime:'11:00',
@@ -155,7 +156,7 @@ test("EDA Appointment schemas reject authority fields invalid intake and unsafe 
   assert.throws(()=>scheduleInput.parse({slotDate:"2026-10-15",startTime:"10:00",endTime:"11:00",consultationType:"virtual",doctorId:randomUUID()}));
   assert.equal(emergencyContactSchema.parse({fullName:"Contact",relationship:"Parent",phoneNumber:"09123456789"}).phoneNumber,"+639123456789");
   assert.throws(()=>emergencyContactSchema.parse({fullName:"",relationship:"Parent",phoneNumber:"123"}));
-  assert.throws(()=>complaintSchema.parse("too short"));assert.equal(complaintSchema.parse(Array(20).fill("symptom").join(" ")).split(" ").length,20);
+  assert.equal(complaintSchema.parse("  "),null);assert.equal(complaintSchema.parse(undefined),null);assert.equal(complaintSchema.parse(" headache "),"headache");assert.throws(()=>complaintSchema.parse("x".repeat(2001)));
   assert.throws(()=>intakeSchema.parse({version:1,token:"forbidden"}));
 });
 test("EDA Appointment command replay binds actor action resource hash and current membership",async()=>{

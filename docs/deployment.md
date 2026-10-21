@@ -32,3 +32,8 @@ provisioning, environment setup and recovery.
 ## Sprint 6 coordinated migration
 
 The two `202610200001` migrations must run through the existing tools-image migration service before updated API/worker containers start. This release removes doctor `title` and adds S2/signature/document and invoice snapshot storage; compatible Web must follow. Existing doctors return to onboarding. Routine rebuilds do not reset databases. See [Capstone documents](capstone-documents.md).
+
+
+## S6 appointment migration
+
+The tools image runs committed Core migration `202610210001_s6_appointment_revisions` through the existing locked deployment runner before API/worker startup. Migration failure remains fatal. Apply normally to existing databases; do not reset them. This revision adds no deployment action or environment variables. See [feature contract](eda/sprint6-appointment-revisions.md).
