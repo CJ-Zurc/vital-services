@@ -1,3 +1,5 @@
+import { previewDateBlocks, saveDateBlocks } from './appointment-date-blocks.js';
+import { rescheduleNotification } from './appointment-notifications.js';
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from "pg";
@@ -5,10 +7,10 @@ import { z } from "zod";
 import { DomainError, AppointmentPendingConflictsError, requireScope, type Actor } from "../../contracts/actor.js";
 import { requestHash } from "../../infrastructure/security.js";
 import { appendSqlOutbox } from "../../infrastructure/outbox.js";
-import { acknowledgementInput, appointmentExpired, appointmentFactData, dateBlockInput, reasonInput,
+import { acknowledgementInput, appointmentExpired, rescheduleAllowed, appointmentFactData, dateBlockInput, reasonInput,
   requireOwner, scheduleInput, slotInterval, versionSchema, effectiveCompletionDeadline, type AppointmentRow, type AppointmentCommand,
   type AppointmentOwners } from "./appointment-contracts.js";
-import { complaintSchema, emergencyContactSchema, intakeSchema } from "./appointment-intake.js";
+import { complaintSchema, customBookingEnd, emergencyContactSchema, intakeSchema } from "./appointment-intake.js";
 import { saveBookingContact } from "../profile/profile-booking.js";
 import { upgradeScheduleAvailability } from '../profile/profile-schedule.js';
 import { videoSelection,selectionHash,type VideoSelection } from '../video/contracts.js';
@@ -97,13 +99,13 @@ export async function appointmentCommand<T>(pool: Pool, actor: Actor, action: st
     await tx.query("COMMIT"); return result;
   } catch(error) {await tx.query("ROLLBACK");throw error;} finally{tx.release();}
 }
-export async function appointmentTransition(tx: PoolClient,row: AppointmentRow,status:string,actor: Actor|null,operationId:string,correlationId:string,note:string|null=null,extra:Record<string,unknown>={}) {
+export async function appointmentTransition(tx: PoolClient,row: AppointmentRow,status:string,actor: Actor|null,operationId:string,correlationId:string,note:string|null=null,extra:Record<string,unknown>={},rescheduleDetails:Record<string,unknown>|null=null) {
   if (status === 'completed') await patientRetentionLock(tx, row.patientId);
   const logId=randomUUID(); const changedAt=new Date(); const prior=row.status;
   const result=await tx.query('UPDATE appointments SET status=$2::"AppointmentStatus",version=version+1,"updatedAt"=$3 WHERE id=$1 AND version=$4 RETURNING version',[row.id,status,changedAt,row.version]);
   if(result.rowCount!==1) fail(409,"APPOINTMENT_VERSION_CHANGED");
   row.version=result.rows[0].version;row.status=status;
-  await tx.query(`INSERT INTO appointment_logs (id,"appointmentId","fromStatus","toStatus","changedByRole",note,"changedAt") VALUES ($1,$2,$3,$4,$5,$6,$7)`,[logId,row.id,prior,status,actor?.role??"service",note,changedAt]);
+  await tx.query(`INSERT INTO appointment_logs (id,"appointmentId","fromStatus","toStatus","changedByRole",note,"changedAt","changedByAuthId","rescheduleDetails") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,[logId,row.id,prior,status,actor?.role??"service",note,changedAt,actor?.authId??null,rescheduleDetails?JSON.stringify(rescheduleDetails):null]);
   const action=status==="pending"||status==="pending_patient_confirmation"?"requested":status;
   await appendSqlOutbox(tx,{producer:"appointment",eventType:("vital.appointment."+action) as Parameters<typeof appendSqlOutbox>[1]["eventType"],aggregateId:row.id,
     aggregateVersion:row.version,correlationId,causationId:operationId,data:{...appointmentFactData(row,actor?.authId??null,operationId),...extra}});
@@ -170,6 +172,8 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
   }
   return {
     owners,
+    previewDateBlocks: (actor: Actor, selection: unknown) => previewDateBlocks(pool, actor, selection, clock()),
+    batchDateBlocks: (actor: Actor, meta: AppointmentCommand, input: unknown) => saveDateBlocks(pool, actor, meta, input, clock()),
     async read(actor:Actor,id:string) {requireScope(actor,"appointments.read",id);await membership(pool,actor);const row=await readAppointment(pool,id);appointmentOwn(actor,row);return row;},
     async createSchedule(actor:Actor,meta:AppointmentCommand,body:unknown) {const input=scheduleInput.parse(body);
       return mutate(actor,"schedule.write",actor.authId,meta,input,async tx=>{const member=await membership(tx,actor,"doctor");await calendarLock(tx,member.userId);
@@ -241,7 +245,8 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       let scheduleSlotId=input.scheduleSlotId??null;let range:{startsAt:Date;endsAt:Date};
       if(scheduleSlotId){const slot=(await tx.query('SELECT * FROM schedules WHERE id=$1 AND "doctorId"=$2 AND "isPublished"=true FOR UPDATE',[scheduleSlotId,doctorId])).rows[0];
         if(!slot||![input.consultationType,"both"].includes(slot.consultationType))fail(409,"SCHEDULE_UNAVAILABLE");range=slotInterval(slot.slotDate.toISOString().slice(0,10),slot.startTime.slice(0,5),slot.endTime.slice(0,5));}
-      else{if(!input.slotDate||!input.startTime||!input.endTime)fail(400,"SCHEDULE_REQUIRED");range=slotInterval(input.slotDate,input.startTime,input.endTime);}
+      else{if(!input.slotDate||!input.startTime)fail(400,"SCHEDULE_REQUIRED");const calculatedEnd=customBookingEnd(input.startTime);
+        if(input.endTime!==undefined&&input.endTime!==calculatedEnd)fail(400,"CUSTOM_DURATION_INVALID");range=slotInterval(input.slotDate,input.startTime,calculatedEnd);}
       if(range.startsAt.getTime()<=clock())fail(400,"SLOT_IN_PAST");await assertCalendarAvailable(tx,doctorId,range.startsAt,range.endsAt);
       const duplicate=await tx.query(`SELECT id FROM appointments WHERE "patientId"=$1 AND "doctorId"=$2 AND "scheduledAt"=$3 AND status IN ('pending','approved','confirmed') LIMIT 1`,[patient.userId,doctorId,range.startsAt]);if(duplicate.rows.length)fail(409,"APPOINTMENT_REQUEST_EXISTS");
       const id=randomUUID();await tx.query(`INSERT INTO appointments (id,"patientId","doctorId","scheduleSlotId","consultationType",status,"scheduledAt","proposedEndAt","billingLineageId","createdAt","updatedAt")
@@ -253,17 +258,18 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
     async reject(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=reasonInput.parse(body);return mutate(actor,"reject",id,meta,input,async tx=>{
       await membership(tx,actor,"doctor");const row=await lockAppointment(tx,id);appointmentOwn(actor,row);expected(row,input.expectedVersion);await noTransition(tx,row);
-      if(row.status!=="pending"||appointmentExpired(row,clock()))fail(409,"APPOINTMENT_REJECT_INVALID");await tx.query('UPDATE appointments SET "rejectionReason"=$2 WHERE id=$1',[id,input.reason]);await appointmentTransition(tx,row,"rejected",actor,meta.operationId,actor.correlationId,input.reason);return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
+      if(row.status!=="pending"||appointmentExpired(row,clock()))fail(409,"APPOINTMENT_REJECT_INVALID");await tx.query('UPDATE appointments SET "rejectionReason"=$2 WHERE id=$1',[id,input.reason]);await appointmentTransition(tx,row,"rejected",actor,meta.operationId,actor.correlationId,input.reason);if(row.sourceAppointmentId)await rescheduleNotification(tx,row,actor,meta.operationId,"appointment.reschedule_declined",row.patientAuthId,row.sourceAppointmentId);return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
     async propose(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=proposalInput.parse(body);return mutate(actor,"reschedule",id,meta,input,async tx=>{
       const row=await lockAppointment(tx,id);appointmentOwn(actor,row);expected(row,input.expectedVersion);await noTransition(tx,row);await noProposal(tx,row);
-      if(!["approved","confirmed"].includes(row.status)||appointmentExpired(row,clock()))fail(409,"RESCHEDULE_INVALID");if((actor.role==="patient"?row.patientRescheduleCount:row.doctorRescheduleCount)>=2)fail(409,"RESCHEDULE_LIMIT_REACHED");
+      if(!["approved","confirmed"].includes(row.status)||appointmentExpired(row,clock()))fail(409,"RESCHEDULE_INVALID");if(!rescheduleAllowed(row,actor.role as "patient"|"doctor"))fail(409,"RESCHEDULE_LIMIT_REACHED");
       const range=slotInterval(input.slotDate,input.startTime,input.endTime);if(range.startsAt.getTime()<=clock())fail(400,"SLOT_IN_PAST");await assertCalendarAvailable(tx,row.doctorId,range.startsAt,range.endsAt,[row.id]);
       const next=randomUUID();await tx.query(`INSERT INTO appointments (id,"patientId","doctorId","sourceAppointmentId","consultationType",status,"scheduledAt","proposedEndAt","billingLineageId","associationVersion","patientRescheduleCount","doctorRescheduleCount","createdAt","updatedAt")
         VALUES($1,$2,$3,$4,$5::"ConsultationType",$6::"AppointmentStatus",$7,$8,$9,$10,$11,$12,NOW(),NOW())`,[next,row.patientId,row.doctorId,row.id,row.consultationType,actor.role==="doctor"?"pending_patient_confirmation":"pending",range.startsAt,range.endsAt,row.billingLineageId,row.associationVersion,row.patientRescheduleCount,row.doctorRescheduleCount]);
-      const proposal=await readAppointment(tx,next);await appointmentTransition(tx,proposal,proposal.status,actor,meta.operationId,actor.correlationId,input.reason);return{id:next,version:proposal.version,status:proposal.status,operationStatus:"completed"};});},
+      await tx.query('INSERT INTO pre_consultations (id,"appointmentId","chiefComplaint",opqrst,"isSubmitted","submittedAt") SELECT $1,$2,"chiefComplaint",opqrst,"isSubmitted","submittedAt" FROM pre_consultations WHERE "appointmentId"=$3',[randomUUID(),next,row.id]);
+      const proposal=await readAppointment(tx,next);await appointmentTransition(tx,proposal,proposal.status,actor,meta.operationId,actor.correlationId,input.reason);await rescheduleNotification(tx,proposal,actor,meta.operationId,"appointment.reschedule_proposed",actor.role==="doctor"?proposal.patientAuthId:proposal.doctorAuthId);return{id:next,version:proposal.version,status:proposal.status,operationStatus:"completed"};});},
     async decline(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=reasonInput.parse(body);return mutate(actor,"decline-reschedule",id,meta,input,async tx=>{
       const row=await lockAppointment(tx,id);appointmentOwn(actor,row);expected(row,input.expectedVersion);await noTransition(tx,row);
-      if(!row.sourceAppointmentId||row.status!=="pending_patient_confirmation"||actor.role!=="patient")fail(409,"RESCHEDULE_DECLINE_INVALID");await appointmentTransition(tx,row,"rejected",actor,meta.operationId,actor.correlationId,input.reason);return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
+      if(!row.sourceAppointmentId||row.status!=="pending_patient_confirmation"||actor.role!=="patient")fail(409,"RESCHEDULE_DECLINE_INVALID");await appointmentTransition(tx,row,"rejected",actor,meta.operationId,actor.correlationId,input.reason);await rescheduleNotification(tx,row,actor,meta.operationId,"appointment.reschedule_declined",row.doctorAuthId,row.sourceAppointmentId);return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
     async cancel(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=reasonInput.parse(body);return mutate(actor,"cancel",id,meta,input,async tx=>{
       const row=await lockAppointment(tx,id);appointmentOwn(actor,row);expected(row,input.expectedVersion);if(appointmentExpired(row,clock()))fail(409,"APPOINTMENT_EXPIRED");await applyCancellation(tx,row,actor,meta.operationId,input.reason);return{id,version:row.version,status:row.status,operationStatus:"processing"};});},
     async prepareWorkflow(actor:Actor,meta:AppointmentCommand,body:unknown){const input=preparedInput.parse(body);
@@ -332,7 +338,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
         await requireOwner(owners.video,"video").validate(target);
         const patient=(await pool.query('SELECT "ehrPatientId" FROM vital_patients WHERE "userId"=$1',[target.patientId])).rows[0];
         const intake=(await pool.query('SELECT "chiefComplaint" FROM pre_consultations WHERE "appointmentId"=$1 AND "isSubmitted"=true',[target.id])).rows[0];
-        if(!patient?.ehrPatientId||!intake?.chiefComplaint)fail(409,"APPOINTMENT_EHR_PREPARATION_INVALID");
+        if(!patient?.ehrPatientId||!intake?.chiefComplaint)fail(409,"APPOINTMENT_CHIEF_COMPLAINT_REQUIRED");
         if(row.externalStartedAt){
           const recovered=await requireOwner(owners.ehrRecovery,"ehr_recovery")(target.id);
           if(recovered){

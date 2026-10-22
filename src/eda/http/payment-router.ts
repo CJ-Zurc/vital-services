@@ -3,7 +3,7 @@ import { z } from "zod";
 import { DomainError, type Actor } from "../contracts/actor.js";
 import type { createPaymentModule, PaymentMetadata, PaymentResult } from "../modules/payment/payment.js";
 
-export type PaymentModule = ReturnType<typeof createPaymentModule>;
+export type PaymentModule = ReturnType<typeof createPaymentModule> & {acknowledgment?:ReturnType<typeof import('../modules/payment/acknowledgments.js').createAcknowledgments>};
 type Handler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, unknown>, { actor?: Actor; command?: PaymentMetadata }>;
 const empty = z.object({}).strict();
 export function createPaymentRouter(payment?: PaymentModule) {
@@ -23,6 +23,8 @@ export function createPaymentRouter(payment?: PaymentModule) {
     if (!metadata) throw new DomainError(401, "COMMAND_METADATA_REQUIRED", "Signed command ID required.");
     return metadata;
   };
+  router.get('/appointments/:appointmentId/acknowledgment',handle((actor,id)=>{if(!payment?.acknowledgment)throw new DomainError(503,'ACKNOWLEDGMENT_DISABLED','Unavailable.');return payment.acknowledgment(actor,id);}));
+  router.get('/appointments/:appointmentId/acknowledgment/file',handle((actor,id)=>{if(!payment?.acknowledgment)throw new DomainError(503,'ACKNOWLEDGMENT_DISABLED','Unavailable.');return payment.acknowledgment(actor,id,true);}));
   router.get("/appointments/:appointmentId", handle((actor, id) => payment!.read(actor, id)));
   router.post("/appointments/:appointmentId/checkout", handle((actor, id, metadata, body) => {
     empty.parse(body); return payment!.checkout(actor, id, mutation(metadata));

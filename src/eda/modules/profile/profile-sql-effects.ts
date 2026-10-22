@@ -9,7 +9,7 @@ export async function appendProfileSqlEffects(tx: PoolClient, input: {
   userId: string; authId: string; role: 'patient' | 'doctor'; correlationId: string;
 }) {
   const user = (await tx.query<{ version: number }>(
-    'UPDATE vital_users SET version=version+1,"updatedAt"=NOW() WHERE id=$1 AND "authId"=$2 AND role=$3 RETURNING version',
+    'UPDATE vital_users SET version=version+1 WHERE id=$1 AND "authId"=$2 AND role=$3 RETURNING version',
     [input.userId, input.authId, input.role])).rows[0];
   if (!user) throw new DomainError(409, 'PROFILE_MEMBERSHIP_CHANGED', 'Profile membership changed.');
   const source = await appendSqlOutbox(tx, { producer: 'profile', eventType: 'vital.profile.changed',

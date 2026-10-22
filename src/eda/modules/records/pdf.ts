@@ -1,3 +1,4 @@
+import { bghPrescription,bghCertificate,type SigningFields } from './bgh-pdf.js';
 import PDFDocument from "pdfkit";
 import { lstat } from "node:fs/promises";
 import { ArtifactError, MAX_UPLOAD_BYTES } from "./upload-validation.js";
@@ -6,7 +7,7 @@ export type PrescriptionLine = {
   medicineId?: string | null; medicineName: string; dosageAmount: string; dosageUnit: string; frequency: string;
   duration?: string | null; route?: string | null; quantity?: string | null; instructions?: string | null;
 };
-export type DocumentBase = { accessCode: string; patientName: string; doctorName: string; doctorLicense: string; issuedAt: Date };
+export type DocumentBase = SigningFields & { accessCode: string; patientName: string; doctorName: string; doctorLicense: string; issuedAt: Date };
 export type PrescriptionPdf = DocumentBase & { lines: PrescriptionLine[] };
 export type CertificatePdf = DocumentBase & {
   purpose: string; diagnosis: string; consultationDate?: Date | null; restStartDate?: Date | null; restEndDate?: Date | null;
@@ -93,6 +94,7 @@ function document(base: DocumentBase): PDFKit.PDFDocument {
   return new PDFDocument({ size: "A4", margin: 50, compress: false, info: { CreationDate: base.issuedAt, ModDate: base.issuedAt, Producer: "VITAL Records", Creator: "VITAL Records" } });
 }
 export async function createPrescriptionPdfBuffer(args: PrescriptionPdf, config?: RecordsFontConfig): Promise<Buffer> {
+  if(args.templateVersion)return bghPrescription(args,config);
   validateBase(args); validatePrescriptionLines(args.lines);
   const doc = document(args); const result = collect(doc);
   try {
@@ -108,6 +110,7 @@ export async function createPrescriptionPdfBuffer(args: PrescriptionPdf, config?
   } catch (error) { doc.destroy(); void result.catch(() => {}); throw error; }
 }
 export async function createCertificatePdfBuffer(args: CertificatePdf, config?: RecordsFontConfig): Promise<Buffer> {
+  if(args.templateVersion)return bghCertificate(args,config);
   validateBase(args); text(args.purpose); text(args.diagnosis,true,4000);
   for (const value of [args.consultationDate, args.restStartDate, args.restEndDate]) if (value != null) date(value);
   for (const value of [args.recommendation, args.remarks]) if (value != null) text(value, false);

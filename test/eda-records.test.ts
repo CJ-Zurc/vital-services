@@ -34,10 +34,16 @@ function fixture(){
   let state={appointment,commands:new Map<string,any>(),workflows:new Map<string,any>(),snapshots:new Map<string,any>(),documents:new Map<string,any>(),assets:new Map<string,any>(),operations:new Map<string,any>(),refs:[] as unknown[][],
     grant:{status:'live',snapshotId:null as string|null,frozenSnapshotId:null as string|null},events:[] as any[],freezes:new Map<string,any>()};
   let prior=structuredClone(state),revoked=false,consented=true,busy=false,outboxFail=false,paymentStale=false,partyCalls=0,objectWrites=0,profileVersion=0;
+  const signatureId=randomUUID(),signatureBytes=Buffer.from('synthetic signature');
+  const signature={id:signatureId,contentHash:sha256(signatureBytes),s2License:'DEMO-S2',s2ValidFrom:new Date('2026-01-01Z'),s2ValidUntil:new Date('2027-01-01Z'),protectedPayload:protectPayload(keyring,{patientId:doctorAuthId,resourceId:signatureId,schema:'doctor-signature.v1'},{base64:signatureBytes.toString('base64')})};
+  let prcLicense:string|null='TEST-LICENSE';
   const calls:Array<{sql:string;args:unknown[]}>=[];
   const tx={release(){},async query(sql:string,args:unknown[]=[]):Promise<{rows:any[];rowCount:number}>{
     calls.push({sql,args});const done=(rows:any[]=[],rowCount=rows.length)=>({rows,rowCount});
     if(sql.startsWith('BEGIN')){prior=structuredClone(state);return done();}if(sql==='ROLLBACK'){state=prior;return done();}if(sql==='COMMIT'||sql.includes('pg_advisory_xact_lock'))return done();
+    if(sql.includes('FROM vital_doctors d JOIN doctor_signatures'))return done([signature]);
+    if(sql.startsWith('SELECT "signatureAssetId"'))return done([{signatureAssetId:signatureId,...signature}]);
+    if(sql.startsWith('SELECT s.id,s."protectedPayload"'))return done([]);
     if(sql.includes(' AS revision,COUNT(*)'))return done([{revision:String(consented),total:consented?'1':'0'}]);
     if(sql.startsWith('SELECT r.*')&&sql.includes('SELECT DISTINCT p.'))return done(consented?[{id:patientId,patientId,authId:patientAuthId,ehrPatientId}]:[]);
     if(sql.startsWith('SELECT r.*')&&sql.includes('a.id AS "appointmentId"'))return done(consented?[{id,appointmentId:id,version:state.appointment.version,associationVersion:1,status:state.appointment.status,
@@ -45,7 +51,7 @@ function fixture(){
     if(sql.includes('SELECT p.* FROM vital_'))return done(revoked?[]:[{userId:sql.includes('vital_doctors')?doctorId:patientId}]);
     if(sql.includes('SELECT p."userId",p."authId"'))return done(args[0]===patientId?[{userId:patientId,authId:patientAuthId,ehrPatientId,version:profileVersion}]:[]);
     if(sql==='SELECT "userId" FROM vital_patients WHERE "authId"=$1')return done(args[0]===patientAuthId?[{userId:patientId}]:[]);
-    if(sql.includes('SELECT "prc_license"'))return done([{prcLicense:'TEST-LICENSE'}]);
+    if(sql.includes('SELECT "prc_license"'))return done([{prcLicense}]);
     if(sql.includes('SELECT * FROM command_operations'))return done(state.commands.has(String(args[1]))?[state.commands.get(String(args[1]))]:[]);
     if(sql.includes('INSERT INTO command_operations')){state.commands.set(String(args[2]),{action:args[3],resourceId:args[4],requestHash:args[5],status:'completed',result:JSON.parse(String(args[6]))});return done([],1);}
     if(sql.includes('SELECT a.*'))return done(args[0]===id?[structuredClone(state.appointment)]:[]);
@@ -89,13 +95,13 @@ function fixture(){
     throw new Error('UNEXPECTED_RECORDS_TEST_SQL:'+sql);
   }};
   const pool={connect:async()=>tx,query:tx.query.bind(tx)} as unknown as Pool;
-  const config={keyring,evidence:{keys:{ehr:publicKey}},financial:{verifyPaid:async()=>{if(paymentStale)throw new DomainError(409,'PAYMENT_AUTHORIZATION_STALE','Stale.');}},parties:async()=>{partyCalls++;return{patientName:'SYNTHETIC PATIENT',doctorName:'SYNTHETIC DOCTOR',doctorLicense:'TEST-LICENSE'};}};
+  const config={appOrigin:"https://web.example.test",keyring,evidence:{keys:{ehr:publicKey}},financial:{verifyPaid:async()=>{if(paymentStale)throw new DomainError(409,'PAYMENT_AUTHORIZATION_STALE','Stale.');}},parties:async()=>{partyCalls++;return{patientName:'SYNTHETIC PATIENT',doctorName:'SYNTHETIC DOCTOR',doctorLicense:prcLicense??''};}};
   const actor=(action:string,resource:string=id,role:'doctor'|'patient'='doctor'):Actor=>({authId:role==='doctor'?doctorAuthId:patientAuthId,role,scopes:['records.'+action],resource,serviceId:'vital-web',correlationId:randomUUID(),isSuperAdmin:false});
   const meta=()=>({operationId:randomUUID(),requestHash:'a'.repeat(64)});
   const receipt=(workflowId:string,payload:unknown,kind='snapshot',overrides:Record<string,unknown>={})=>jwt.sign({kind,workflowId,actorAuthId:doctorAuthId,patientId:ehrPatientId,caseId:ehrCaseId,payloadHash:clinicalHash(payload),externalSystemRef:'vital:appointment:'+id,
     iss:'uhse-ehr',aud:'vital-services.records',iat:Math.floor(now/1000),exp:Math.floor(now/1000)+60,jti:randomUUID(),...overrides},privateKey,{algorithm:'RS256',keyid:'ehr'});
   const storage={key:(area:string,assetId:string,hash:string,mime:string)=>area+'/'+assetId+'/'+hash+(mime==='application/pdf'?'.pdf':'.png'),putQuarantine:async()=>{objectWrites++;},readQuarantine:async()=>Buffer.alloc(0),ensureFinal:async()=>{},inspectFinal:async()=>false,signedLink:async()=>'https://gateway.invalid/media?signature=private'};
-  return{now,id,patientId,patientAuthId,doctorId,doctorAuthId,ehrPatientId,ehrCaseId,pool,tx,config,actor,meta,receipt,state:()=>state,calls,module:createRecordsModule(pool,config,()=>now),files:createRecordsFiles(pool,config,storage,()=>now),lifecycle:createRecordsLifecycle(keyring,()=>now),
+  return{prc:(value:string|null)=>{prcLicense=value;},signature,now,id,patientId,patientAuthId,doctorId,doctorAuthId,ehrPatientId,ehrCaseId,pool,tx,config,actor,meta,receipt,state:()=>state,calls,module:createRecordsModule(pool,config,()=>now),files:createRecordsFiles(pool,config,storage,()=>now),lifecycle:createRecordsLifecycle(keyring,()=>now),
     revoked:()=>{revoked=true;},consent:(v:boolean)=>{consented=v;},busy:()=>{busy=true;},stale:()=>{paymentStale=true;},fail:()=>{outboxFail=true;},profileVersion:(v:number)=>{profileVersion=v;},partyCalls:()=>partyCalls,objectWrites:()=>objectWrites};
 }
 
@@ -117,8 +123,8 @@ test('EDA Records EHR evidence rejects substituted payload patient workflow acto
   for(const overrides of [{aud:'other'},{exp:Math.floor(f.now/1000)-1},{exp:Math.floor(f.now/1000)+61},{iat:Math.floor(f.now/1000)+1}])assert.throws(()=>verifyEhrEvidence(f.receipt(workflowId,payload,'snapshot',overrides),f.config.evidence,expected,Math.floor(f.now/1000)));
 });
 test('EDA Records prescription rejects a malformed line instead of partial issuance',()=>{
-  const valid={medicineName:'Synthetic',dosageAmount:'1',dosageUnit:'mg',frequency:'Daily'};assert.equal(prescriptionData.parse({lines:[valid]}).lines.length,1);
-  assert.throws(()=>prescriptionData.parse({lines:[valid,{...valid,dosageUnit:''}]}));assert.throws(()=>prescriptionData.parse({lines:[valid],doctorName:'BROWSER AUTHORITY'}));
+  const valid={medicineName:'Synthetic',isControlled:false,dosageAmount:'1',dosageUnit:'mg',frequency:'Daily'};assert.equal(prescriptionData.parse({signingConfirmed:true,lines:[valid]}).lines.length,1);
+  assert.throws(()=>prescriptionData.parse({signingConfirmed:true,lines:[valid,{...valid,dosageUnit:''}]}));assert.throws(()=>prescriptionData.parse({signingConfirmed:true,lines:[valid],doctorName:'BROWSER AUTHORITY'}));
 });
 test('EDA Records preparation capture and replay commit encrypted evidence and one audit without tokens',async()=>{
   const f=fixture(),workflowId=randomUUID(),prepared=await f.module.prepareSnapshot(f.actor('snapshot.prepare'),f.meta(),{workflowId,appointmentId:f.id,expectedVersion:1}),payload={patient:{id:f.ehrPatientId},clinical:'SYNTHETIC CLINICAL'};
@@ -176,13 +182,13 @@ test('EDA Records cancellation freezes post-baseline local evidence without rewr
   const f=fixture(),workflowId=randomUUID(),prepared=await f.module.prepareSnapshot(f.actor('snapshot.prepare'),f.meta(),{workflowId,appointmentId:f.id,expectedVersion:1}),payload={clinical:'SYNTHETIC'};
   const captured=await f.module.captureSnapshot(f.actor('snapshot.capture',workflowId),workflowId,f.meta(),{inputHash:prepared.inputHash,payload,receipt:f.receipt(workflowId,payload)});
   const source=JSON.stringify(f.state().snapshots.get(captured.snapshotId!)),documentId=randomUUID(),assetId=randomUUID();
-  f.state().documents.set(documentId,{id:documentId,assetId,patientId:f.patientId,kind:'prescription',issuedAt:new Date(f.now+1000),protectedPayload:protectPayload(keyring,{patientId:f.patientId,resourceId:documentId,schema:'document.v1'},{lines:[]})});
+  f.state().documents.set(documentId,{id:documentId,assetId,patientId:f.patientId,kind:'prescription',issuedAt:new Date(f.now+1000),protectedPayload:protectPayload(keyring,{patientId:f.patientId,resourceId:documentId,schema:'document.v1'},{lines:[],signatureBase64:'PRIVATE_SIGNATURE_TEST',signatureHash:'test-hash'})});
   const context={operationId:randomUUID(),beforeState:'confirmed',afterState:'cancelled',effectiveAt:new Date(f.now+2000)} as const;
   await f.lifecycle.apply(f.tx as any,f.state().appointment,'cancel',context);
   assert.equal(f.state().grant.status,'historical');assert.equal(f.state().grant.frozenSnapshotId,captured.snapshotId);
   const freeze=f.state().freezes.get(f.id)!;
   const local=unprotectPayload<any>(keyring,{patientId:f.patientId,resourceId:f.id,schema:'freeze.v1'},freeze.protectedPayload);
-  assert.equal(local.documents[0].id,documentId);assert.equal(JSON.stringify(f.state().snapshots.get(captured.snapshotId!)),source);
+  assert.equal(local.documents[0].id,documentId);assert.equal(local.documents[0].signatureBase64,undefined);assert.equal(local.documents[0].signatureHash,'test-hash');assert.equal(JSON.stringify(f.state().snapshots.get(captured.snapshotId!)),source);
   assert.ok(f.state().refs.some(ref=>ref[0]===captured.snapshotId&&ref[1]===assetId));
 });
 
@@ -200,7 +206,7 @@ test('EDA Records evidence collection bounds fail atomically instead of truncati
 });
 
 test('EDA Records document commits once before rendering and unresolved reschedules prevent issuance',async()=>{
-  const f=fixture(),workflowId=randomUUID(),data={lines:[{medicineName:'SYNTHETIC MEDICINE',dosageAmount:'1',dosageUnit:'mg',frequency:'Daily'}]},p=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
+  const f=fixture(),workflowId=randomUUID(),data={signingConfirmed:true,lines:[{medicineName:'SYNTHETIC MEDICINE',isControlled:false,dosageAmount:'1',dosageUnit:'mg',frequency:'Daily'}]},p=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
   const meta=f.meta(),body={workflowId,inputHash:p.inputHash,data,receipt:f.receipt(workflowId,data,'treatment')},actor=f.actor('document.issue',workflowId);
   const result=await f.module.issueDocument(actor,meta,body);assert.equal(result.operationStatus,'pending');assert.deepEqual(await f.module.issueDocument(actor,meta,body),result);
   assert.equal(f.state().documents.size,1);assert.equal(f.state().operations.size,1);assert.equal(f.objectWrites(),0);assert.equal(f.partyCalls(),1);
@@ -208,14 +214,14 @@ test('EDA Records document commits once before rendering and unresolved reschedu
   const blocked=fixture();blocked.busy();await assert.rejects(blocked.module.prepareDocument(blocked.actor('document.prepare'),blocked.meta(),{workflowId:randomUUID(),kind:'prescription',patientId:blocked.patientId,appointmentId:blocked.id,expectedVersion:1,data}),isCode('RECORDS_APPOINTMENT_TRANSITION_PENDING'));
 });
 test('EDA Records omitted appointment cannot bypass linked-case paperwork and current financial checks',async()=>{
-  const f=fixture(),workflowId=randomUUID(),data={purpose:'SYNTHETIC',diagnosis:'SYNTHETIC'};
+  const f=fixture(),workflowId=randomUUID(),data={signingConfirmed:true,purpose:'SYNTHETIC',diagnosis:'SYNTHETIC'};
   const p=await f.module.prepareDocument(f.actor('document.prepare',f.patientId),f.meta(),{workflowId,kind:'medical-certificate',patientId:f.patientId,expectedVersion:0,data});
   f.state().appointment.paperworkLockedAt=new Date(f.now);
   await assert.rejects(f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),{workflowId,inputHash:p.inputHash,data,receipt:f.receipt(workflowId,data,'treatment')}),isCode('RECORDS_PAPERWORK_CLOSED'));
   assert.equal(f.state().documents.size,0);
 });
 test('EDA Records Auth-ID document preparation resolves Core identity and fences the captured Profile revision',async()=>{
-  const f=fixture(),workflowId=randomUUID(),data={purpose:'SYNTHETIC',diagnosis:'SYNTHETIC'};f.profileVersion(7);
+  const f=fixture(),workflowId=randomUUID(),data={signingConfirmed:true,purpose:'SYNTHETIC',diagnosis:'SYNTHETIC'};f.profileVersion(7);
   const input={workflowId,kind:'medical-certificate',patientAuthId:f.patientAuthId,expectedVersion:0,data};
   const prepared=await f.module.prepareDocument(f.actor('document.prepare',f.patientAuthId),f.meta(),input);
   assert.equal(prepared.expectedVersion,7);assert.equal(f.state().workflows.get(workflowId).patientId,f.patientId);
@@ -332,4 +338,32 @@ test('EDA Records actual HTTP binary hop rejects header forgery byte substitutio
     const altered={...descriptor,title:'CHANGED INPUT'};assert.equal((await fetch(url+path,{method:'POST',headers:{...headers,'X-Vital-Upload-Descriptor':Buffer.from(JSON.stringify(altered)).toString('base64url')},body:bytes})).status,401);
     assert.equal(f.state().assets.size,1);assert.equal(f.state().events.filter(e=>e.eventType==='vital.audit.requested').length,1);
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+
+test('S6 ordinary, mixed and controlled issuance snapshots flags, signature and current S2 dates',async()=>{
+ const missing=fixture();missing.prc(null);const workflowId=randomUUID(),data={signingConfirmed:true,lines:[{medicineName:'DEMO Generic',isControlled:false,dosageAmount:'1',dosageUnit:'tablet',frequency:'Daily'}]};
+ const prepared=await missing.module.prepareDocument(missing.actor('document.prepare'),missing.meta(),{workflowId,kind:'prescription',patientId:missing.patientId,appointmentId:missing.id,expectedVersion:1,data});
+ await assert.rejects(missing.module.issueDocument(missing.actor('document.issue',workflowId),missing.meta(),{workflowId,inputHash:prepared.inputHash,data,receipt:missing.receipt(workflowId,data,'treatment')}),isCode('SIGNING_PROFILE_REQUIRED'));
+ assert.equal(missing.state().documents.size,0);
+
+ for(const flags of [[false],[true],[false,true]]){
+  const f=fixture(),workflowId=randomUUID(),data={signingConfirmed:true,lines:flags.map(isControlled=>({medicineName:'DEMO Generic',isControlled,dosageAmount:'1',dosageUnit:'tablet',frequency:'Daily'}))};
+  const prepared=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
+  const issued=await f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),{workflowId,inputHash:prepared.inputHash,data,receipt:f.receipt(workflowId,data,'treatment')});
+  const saved=f.state().documents.get(issued.id),binding={patientId:f.patientId,resourceId:issued.id,schema:'document.v1'};
+  const snapshot=unprotectPayload<Record<string,any>>(keyring,binding,saved.protectedPayload);
+  assert.deepEqual(snapshot.lines.map((line:any)=>line.isControlled),flags);assert.equal(snapshot.templateVersion,'bgh-capstone-v1');
+  const retrieval=new URL(snapshot.retrievalUrl);
+  assert.equal(retrieval.origin,'https://web.example.test');assert.equal(retrieval.pathname,'/documents/prescription/'+issued.id);assert.equal(retrieval.search,'');
+  const{contentHash,...unsigned}=snapshot;assert.equal(contentHash,clinicalHash(unsigned));
+  const before=JSON.stringify(saved.protectedPayload);f.signature.s2License='CHANGED-DEMO';assert.equal(JSON.stringify(saved.protectedPayload),before);
+ }
+ for(const until of ['2020-01-01','2030-01-01']){
+  const f=fixture();f.signature.s2ValidFrom=new Date(until==='2020-01-01'?'2019-01-01Z':'2029-01-01Z');f.signature.s2ValidUntil=new Date(until+'Z');
+  const workflowId=randomUUID(),data={signingConfirmed:true,lines:[{medicineName:'DEMO Generic',isControlled:true,dosageAmount:'1',dosageUnit:'tablet',frequency:'Daily'}]};
+  const prepared=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
+  await assert.rejects(f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),{workflowId,inputHash:prepared.inputHash,data,receipt:f.receipt(workflowId,data,'treatment')}),isCode('S2_VALIDITY_REQUIRED'));
+  assert.equal(f.state().documents.size,0);
+ }
 });

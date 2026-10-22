@@ -66,6 +66,10 @@ export function createProfileRouter(core: CorePrismaClient, options: { commandGu
     return { success: true, data: { ...result, items: result.items.map((item) => ({ ...item, syncStatus: current.get(item.authId) ?? "pending" })) } };
   }));
   router.get("/admin/membership", handle(async (actor) => ({ success: true, data: await profile.adminMembership(actor) })));
+  router.get("/admin/patients", async (req, res) => {
+    const query = z.object({ authIds: z.string().max(3699) }).strict().parse(req.query);
+    res.json({ success: true, data: await profile.adminPatients(res.locals.actor as Actor, query.authIds.split(',')) });
+  });
   const adminCommitSchema = z.object({ workflowId: z.uuid(), input: z.unknown(), receipt: z.unknown() }).strict();
   router.post("/admin/doctors", handle(async (actor, body, _params, command) => {
     const { workflowId, ...input } = adminCommitSchema.parse(body);
