@@ -354,6 +354,8 @@ test('S6 ordinary, mixed and controlled issuance snapshots flags, signature and 
   const saved=f.state().documents.get(issued.id),binding={patientId:f.patientId,resourceId:issued.id,schema:'document.v1'};
   const snapshot=unprotectPayload<Record<string,any>>(keyring,binding,saved.protectedPayload);
   assert.deepEqual(snapshot.lines.map((line:any)=>line.isControlled),flags);assert.equal(snapshot.templateVersion,'bgh-capstone-v1');
+  const retrieval=new URL(snapshot.retrievalUrl);
+  assert.equal(retrieval.origin,'https://web.example.test');assert.equal(retrieval.pathname,'/documents/prescription/'+issued.id);assert.equal(retrieval.search,'');
   const{contentHash,...unsigned}=snapshot;assert.equal(contentHash,clinicalHash(unsigned));
   const before=JSON.stringify(saved.protectedPayload);f.signature.s2License='CHANGED-DEMO';assert.equal(JSON.stringify(saved.protectedPayload),before);
  }

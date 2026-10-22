@@ -27,3 +27,14 @@ view and bounded admin summary route. Messaging now follows scheduled 24-hour
 appointment/follow-up windows with retained read-only history. See
 [integration contracts](integration_guide.md#s6-005-patient-monitoring-and-s6-009-messaging)
 for routes, ownership, response fields and boundary behavior.
+
+
+## S6 local workflow routing
+
+VITAL browser -> same-origin VITAL Web BFF -> private VITAL Services is the
+operational path. Gateway connects the BFF to Auth/SSO, EHR, central Notifications
+and other owners. Signatures, prescription/QR retrieval, acknowledgments, patient
+monitoring, ratings, complaint correction, calendar review/save and the bell's
+local API need no new Gateway BFF routes. The shared notification service keeps
+its Gateway routes and recipient isolation. All Gateway browser compatibility routes are retired;
+no migration or domain-policy change is introduced by this routing revision.

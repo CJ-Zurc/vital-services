@@ -68,3 +68,34 @@ The Gateway-locality revision remains paused while the existing feature work
 is committed/pushed by the user. No branch switch, stash, commit, push or Gateway
 edit was performed during this cleanup check. Publish the matching Web source
 with Services so exact-source CI can verify the reviewed companion checkout.
+
+
+## S6 local-workflow boundary — 2026-10-22
+
+Created S6-Revision from freshly fetched origin/development (423b306); the working
+tree was clean, so no recovery stash was needed. No production Services module,
+API, domain rule or migration changed. Extended the maintained issuance test to
+verify that ordinary/mixed/controlled prescription QR URLs use the configured
+VITAL Web origin and authenticated page, without query data. Refreshed only the
+reviewed fingerprint of the changed Web appointment-revisions test, retaining
+all 131 route checks and unknown/changed-source rejection.
+The route-contract/Records batch passed **33/33** (including all five static
+contract checks). The initial sandbox run blocked one loopback HTTP connection
+with EACCES; the same batch passed outside the sandbox. Container and live-stack
+acceptance remain pending because Docker was unavailable. Existing migrations,
+private mTLS/signed transport and authorization rules are unchanged.
+Publish matching Web source before Services, or select it through the existing
+PR companion setting. No commit, push, PR, database reset or deployment occurred.
+
+## Complete browser compatibility retirement (2026-10-22)
+
+Supersedes the earlier decision to preserve older browser compatibility routes.
+All `/vital/bff/...` paths are now rejected unconditionally by the router and
+have no manifest entries. This includes Auth browser wrappers; actual `/auth/*`
+SSO/Auth integration remains, along with EHR, Analytics, TRACE, central
+Notifications and `/vital/integrations/v1/*` cross-system contracts.
+No Web or Services runtime caller uses the retired prefix. No database migration,
+commit, push or deployment is included. Legacy stream helper unit tests remain;
+obsolete positive browser routing/forwarding tests are replaced with rejection
+coverage. Full Gateway suite: 428 passed. Focused Ruff passes. Container rebuild
+and genuine live browser/SSO acceptance remain pending; no live result is claimed.

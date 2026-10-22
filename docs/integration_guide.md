@@ -1,8 +1,12 @@
 # VITAL integration contracts
 
-- Browser business/auth calls enter Web BFF or Gateway. User session/RBAC checks
-  use Gateway; active UHSE integration routes remain `/vital/integrations/v1/*`
-  and reviewed `/vital/bff/*` routes. Unknown generic paths are rejected.
+- VITAL browser workflows call same-origin Web BFF `/api/...` routes. Web
+  delegates VITAL domain operations directly to Services over private mTLS and
+  signed actor assertions. Gateway remains the cross-system boundary for
+  Auth/SSO, EHR, Notifications and other owners; session/RBAC checks still use
+  canonical Gateway/Auth claims. Existing `/vital/integrations/v1/*` cross-system contracts remain; all
+  `/vital/bff/*` browser compatibility routes are retired. No local-only exposure is
+  required. Unknown generic paths are rejected.
 - Web/API transport uses mTLS and signed assertions bound to actor, method, path,
   request hash, resource and correlation ID. Plain `X-User-*` headers do not grant
   API access.
@@ -67,4 +71,4 @@ No database migration, data reset or additional environment variable is needed.
 
 ## S6-011–S6-014 contracts
 
-See [appointment revisions](eda/sprint6-appointment-revisions.md) for the coordinated Core/Web/Gateway/Notification routes. Deploy compatible sources together. Core owns migration `202610210001_s6_appointment_revisions`; EHR schemas remain unchanged. Notification delivery is durable metadata-only in-app intent with recipient-scoped VITAL reads; no producer URLs or clinical text are accepted.
+See [appointment revisions](eda/sprint6-appointment-revisions.md) for local Core/Web contracts and the shared Notification connection through Gateway. Deploy compatible sources together. Core owns migration `202610210001_s6_appointment_revisions`; EHR schemas remain unchanged. Notification delivery is durable metadata-only in-app intent with recipient-scoped VITAL reads; no producer URLs or clinical text are accepted.
