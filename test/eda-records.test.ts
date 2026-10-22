@@ -16,7 +16,14 @@ import { recordsRuntime } from '../src/eda/modules/records/runtime.js';
 import { prescriptionData } from '../src/eda/modules/records/contracts.js';
 import { recordsReaderDelegation } from '../src/eda/http/records-reader.js';
 import { parseEvent } from '../src/eda/contracts/events.js';
-import { sha256 } from '../src/eda/modules/records/upload-validation.js';
+import { ArtifactError, sha256 } from '../src/eda/modules/records/upload-validation.js';
+import { createFileInspector, type FileInspector } from '../src/eda/modules/records/inspection.js';
+import { createDoctorSigning } from '../src/eda/modules/records/signing.js';
+import type { RecordsScanner } from '../src/eda/modules/records/scanner.js';
+import sharp from 'sharp';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AppointmentRow } from '../src/eda/modules/appointment/appointment-contracts.js';
 import express from 'express';
 import { createEdaApp } from '../src/eda/http/app.js';
@@ -366,4 +373,87 @@ test('S6 ordinary, mixed and controlled issuance snapshots flags, signature and 
   await assert.rejects(f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),{workflowId,inputHash:prepared.inputHash,data,receipt:f.receipt(workflowId,data,'treatment')}),isCode('S2_VALIDITY_REQUIRED'));
   assert.equal(f.state().documents.size,0);
  }
+});
+
+function signingFixture(failure?: string, inspector?: FileInspector) {
+  const owner=randomUUID(),rows:Array<Record<string,any>>=[],events:unknown[]=[],queries:string[]=[];
+  let pointer:string|null=null, scans=0;
+  const query=async(sql:string,args:unknown[]=[])=>{
+    queries.push(sql);let result:unknown[]=[];
+    if(sql.startsWith('SELECT p.* FROM vital_doctors'))result=args[0]===owner?[{userId:randomUUID()}]:[];
+    else if(sql.startsWith('SELECT s.id'))result=rows.filter(row=>row.id===pointer&&row.doctorAuthId===args[0]);
+    else if(sql.startsWith('SELECT id,"inputHash"'))result=rows.filter(row=>row.doctorAuthId===args[0]&&row.operationId===args[1]);
+    else if(sql.startsWith('INSERT INTO doctor_signatures'))rows.push({id:args[0],doctorAuthId:args[1],operationId:args[2],inputHash:args[3],contentHash:args[4],protectedPayload:JSON.parse(String(args[5])),createdAt:new Date()});
+    else if(sql.startsWith('UPDATE vital_doctors'))pointer=String(args[1]);
+    else if(sql.startsWith('INSERT INTO outbox_events'))events.push(args);
+    else if(!['BEGIN','COMMIT','ROLLBACK'].includes(sql)&&!sql.includes('pg_advisory_xact_lock'))throw new Error('Unexpected signing query');
+    return{rows:result,rowCount:result.length};
+  };
+  const pool={query,connect:async()=>({query,release(){}})} as unknown as Pool;
+  const scanner:RecordsScanner={async scan(bytes){scans++;if(failure)throw new ArtifactError(failure,true);return{engine:'clamav',engineVersion:'TEST',databaseVersion:1,databaseDate:new Date(Date.now()-1000).toISOString(),scannedAt:new Date().toISOString(),contentHash:sha256(bytes),byteLength:bytes.length,verdict:'clean'};}};
+  const actor=(write=true):Actor=>({authId:owner,resource:owner,role:'doctor',serviceId:'vital-web',scopes:['records.signature.'+(write?'write':'read')],correlationId:randomUUID(),isSuperAdmin:false});
+  return{module:createDoctorSigning(pool,keyring,inspector??scanner),actor,rows,events,queries,scans:()=>scans};
+}
+
+test('S6 signature saves scanned encrypted versions and preserves replay and owner isolation',async()=>{
+  const f=signingFixture(),bytes=await sharp({create:{width:30,height:10,channels:4,background:'#111111'}}).png().toBuffer();
+  const raw={base64:bytes.toString('base64'),mimeType:'image/png'},operation=randomUUID(),first=await f.module.upload(f.actor(),operation,raw);
+  assert.equal(f.scans(),2);assert.equal(f.rows.length,1);assert.equal(f.events.length,1);
+  assert.doesNotMatch(JSON.stringify(f.rows[0]!.protectedPayload),new RegExp(raw.base64));
+  assert.equal((await f.module.read(f.actor(false))).signature?.id,first.id);
+  assert.deepEqual(await f.module.upload(f.actor(),operation,raw),first);assert.equal(f.rows.length,1);assert.equal(f.events.length,1);
+  const original=JSON.stringify(f.rows[0]!.protectedPayload),second=await f.module.upload(f.actor(),randomUUID(),raw);
+  assert.notEqual(second.id,first.id);assert.equal(f.rows.length,2);assert.equal(JSON.stringify(f.rows[0]!.protectedPayload),original);
+  assert.equal((await f.module.read(f.actor(false))).signature?.id,second.id);
+  await assert.rejects(f.module.read({...f.actor(false),role:'patient'}),isCode('SIGNATURE_DOCTOR_REQUIRED'));
+  await assert.rejects(f.module.read({...f.actor(false),authId:randomUUID()}),isCode('ACTOR_SCOPE_DENIED'));
+  await assert.rejects(f.module.upload(f.actor(),operation,{base64:Buffer.from('invalid').toString('base64'),mimeType:'image/png'}),isCode('SIGNATURE_INVALID'));
+});
+
+test('S6 signature scanner failures return safe retryable errors with metadata-only diagnostics',async t=>{
+  const diagnostics:unknown[][]=[];t.mock.method(console,'error',(...args:unknown[])=>{diagnostics.push(args);});
+  const bytes=await sharp({create:{width:10,height:10,channels:3,background:'#000000'}}).png().toBuffer();
+  for(const failure of ['SCANNER_POLICY_UNVERIFIED','SCANNER_UNAVAILABLE','SCANNER_DATABASE_STALE']){
+    const f=signingFixture(failure),actor=f.actor();
+    await assert.rejects(f.module.upload(actor,randomUUID(),{base64:bytes.toString('base64'),mimeType:'image/png'}),error=>error instanceof DomainError&&error.status===503&&error.code==='SIGNATURE_SERVICE_UNAVAILABLE'&&!error.message.includes('SCANNER'));
+    assert.equal(f.rows.length,0);assert.equal(f.events.length,0);assert.ok(!f.queries.includes('BEGIN'));
+    assert.deepEqual(JSON.parse(String(diagnostics.at(-1)![0])),{level:'error',event:'vital.signature.upload_failed',correlationId:actor.correlationId,stage:'input_scan',code:failure});
+  }
+  assert.doesNotMatch(JSON.stringify(diagnostics),new RegExp(bytes.toString('base64')));
+});
+
+test('S6 signature HTTP scanner failure returns 503 and Retry-After instead of a generic 500',async t=>{
+  t.mock.method(console,'error',()=>{});
+  const f=signingFixture('SCANNER_POLICY_UNVERIFIED'),app=express();
+  app.use((req,_res,next)=>{Object.defineProperty(req.socket,'authorized',{value:true,configurable:true});Object.assign(req.socket,{getPeerCertificate:()=>({subject:{CN:'vital-web'}})});next();});
+  app.use(createEdaApp({} as any,{issuer:'vital-web',audience:'vital-services',peerName:'vital-web',keyId:'test',publicKey},false,undefined,undefined,undefined,{signing:f.module} as RecordsRuntime));
+  const server=app.listen(0,'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));
+  try{
+    const path='/internal/v1/records/signing-profile',body={base64:(await sharp({create:{width:10,height:10,channels:3,background:'#000000'}}).png().toBuffer()).toString('base64'),mimeType:'image/png'},actor=f.actor();
+    const token=jwt.sign({actor,action:'POST '+path,requestHash:requestHash('POST',path,body)},privateKey,{algorithm:'RS256',keyid:'test',issuer:'vital-web',audience:'vital-services',subject:actor.authId,jwtid:randomUUID(),expiresIn:30});
+    const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+path,{method:'POST',headers:{'Content-Type':'application/json','X-Vital-Actor-Assertion':token},body:JSON.stringify(body)});
+    assert.equal(response.status,503);assert.equal(response.headers.get('retry-after'),'5');assert.equal(response.headers.get('x-correlation-id'),actor.correlationId);
+    assert.deepEqual(await response.json(),{success:false,code:'SIGNATURE_SERVICE_UNAVAILABLE',message:'Signature processing is temporarily unavailable. Please try again later.'});
+  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test('Capstone signature upload preview replacement and replay do not require antivirus',async()=>{
+  const f=signingFixture(undefined,createFileInspector(()=>{throw new Error('No scanner configuration');}));
+  const bytes=await sharp({create:{width:30,height:10,channels:4,background:'#111111'}}).png().toBuffer(),raw={base64:bytes.toString('base64'),mimeType:'image/png'},operation=randomUUID();
+  const first=await f.module.upload(f.actor(),operation,raw);assert.equal(f.scans(),0);assert.equal((await f.module.read(f.actor(false))).signature?.id,first.id);
+  assert.deepEqual(await f.module.upload(f.actor(),operation,raw),first);assert.equal(f.rows.length,1);
+  const prior=JSON.stringify(f.rows[0]!.protectedPayload),replacement=await f.module.upload(f.actor(),randomUUID(),raw);assert.notEqual(replacement.id,first.id);assert.equal(JSON.stringify(f.rows[0]!.protectedPayload),prior);
+  assert.equal(f.events.length,2);await assert.rejects(f.module.read({...f.actor(false),role:'patient'}),isCode('SIGNATURE_DOCTOR_REQUIRED'));
+});
+
+test('Capstone Records runtime constructs signing and artifact owners without scanner paths',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'vital-inspection-test-'));
+  try{
+    const keyFile=join(directory,'keys.json'),evidenceFile=join(directory,'evidence.json');
+    await writeFile(keyFile,JSON.stringify({activeKeyId:'demo',keys:{demo:randomBytes(32).toString('base64')}}));
+    await writeFile(evidenceFile,JSON.stringify({ehr:publicKey}));
+    const runtime=recordsRuntime({corePool:{} as Pool},undefined,{VITAL_EDA_ENABLED:'true',VITAL_EDA_RECORDS_ENABLED:'true',VITAL_EDA_RECORDS_ARTIFACTS_ENABLED:'true',
+      VITAL_RECORDS_KEYRING_FILE:keyFile,VITAL_EHR_RECORDS_PUBLIC_KEYS_FILE:evidenceFile,VITAL_RECORDS_STORAGE_ENDPOINT:'https://storage.example.test',VITAL_RECORDS_STORAGE_PUBLIC_ENDPOINT:'https://media.example.test',VITAL_RECORDS_STORAGE_BUCKET:'demo-records',VITAL_RECORDS_STORAGE_REGION:'local',VITAL_RECORDS_STORAGE_ACCESS_KEY:'fictional-access',VITAL_RECORDS_STORAGE_SECRET_KEY:'fictional-secret',VITAL_PAYMENT_APP_ORIGIN:'https://vital.example.test',VITAL_AUTH_INTERNAL_URL:'https://auth.example.test',VITAL_SERVICES_AUTH_PROFILE_KEY:'fictional-test-key',VITAL_RECORDS_FONT_REGULAR_FILE:'demo-regular.ttf',VITAL_RECORDS_FONT_BOLD_FILE:'demo-bold.ttf'});
+    assert.ok(runtime?.signing);assert.equal(typeof runtime.artifactTick,'function');
+  }finally{await rm(directory,{recursive:true,force:true});}
 });

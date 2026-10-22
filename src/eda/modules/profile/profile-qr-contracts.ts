@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DomainError } from "../../contracts/actor.js";
-import type { ScanEvidence } from "../records/scanner.js";
+import type { FileInspectionEvidence } from "../records/inspection.js";
 
 export const PROFILE_QR_LIMIT = 5 * 1024 * 1024;
 export const profileQrDescriptor = z.object({
@@ -15,7 +15,7 @@ export type QrAsset = {
   schema: "profile-qr.v1"; id: string; doctorId: string; descriptor: QrDescriptor;
   state: "pending" | "ready" | "rejected"; errorCode?: string;
   correlationId?: string;
-  content?: { contentHash: string; byteLength: number; mimeType: QrDescriptor["mimeType"]; evidence: ScanEvidence };
+  content?: { contentHash: string; byteLength: number; mimeType: QrDescriptor["mimeType"]; evidence: FileInspectionEvidence };
 };
 export type QrJob = { actorId: string; operationId: string; asset: QrAsset; leaseOwner: string };
 export const qrFilePath = (id: string) => `/api/doctor/payment-qr/${z.uuid().parse(id)}/file`;

@@ -8,6 +8,8 @@
 - [Security](security.md): trusted identity and transport requirements.
 - [Capstone documents](capstone-documents.md): S6 signing, controlled medicines,
   acknowledgments, migrations and verification limits.
+- [Temporary capstone file validation](capstone-file-validation.md): source-owned
+  demo policy, truthful inspection evidence and restoration of antivirus.
 
 The root [VM runbook](../../docs/deployment/single-azure-vm.md) is authoritative
 for server provisioning and manual staging deployment. Feature contract documents

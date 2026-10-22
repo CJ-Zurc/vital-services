@@ -9,7 +9,7 @@ import { createRecordsFiles } from "./files.js";
 import { createRecordsLifecycle } from "./lifecycle.js";
 import { createRecordsPartyResolver } from "./parties.js";
 import { S3RecordsStorage } from "./storage.js";
-import { ClamAvScanner } from "./scanner.js";
+import { createFileInspector, FILE_INSPECTION_POLICY } from "./inspection.js";
 import { RecordsArtifactWorker } from "./artifacts.js";
 import { createArtifactRepository,canonicalArtifactData } from "./artifact-repository.js";
 
@@ -28,10 +28,10 @@ export function recordsRuntime(databases:{corePool:Pool},payment:PaymentModule|u
   const module=createRecordsModule(databases.corePool,config),files=createRecordsFiles(databases.corePool,config,storage),lifecycle=createRecordsLifecycle(keyring);
   let artifacts:RecordsArtifactWorker|undefined;
   if(environment.VITAL_EDA_RECORDS_ARTIFACTS_ENABLED==='true'){
-    const scanner=new ClamAvScanner({socketPath:required('VITAL_RECORDS_CLAMAV_SOCKET'),daemonConfigPath:required('VITAL_RECORDS_CLAMAV_CONFIG'),deadlineMs:15000,maxDatabaseAgeMs:24*3600000});
+    const scanner=createFileInspector(()=>({socketPath:required('VITAL_RECORDS_CLAMAV_SOCKET'),daemonConfigPath:required('VITAL_RECORDS_CLAMAV_CONFIG'),deadlineMs:15000,maxDatabaseAgeMs:24*3600000}));
     const fonts={regularPath:required('VITAL_RECORDS_FONT_REGULAR_FILE'),boldPath:required('VITAL_RECORDS_FONT_BOLD_FILE')};
-    artifacts=new RecordsArtifactWorker({repository:createArtifactRepository(databases.corePool),storage,scanner,decryptCanonicalData:canonicalArtifactData(databases.corePool,config),fonts},{enabled:true});
+    artifacts=new RecordsArtifactWorker({repository:createArtifactRepository(databases.corePool,FILE_INSPECTION_POLICY),storage,scanner,decryptCanonicalData:canonicalArtifactData(databases.corePool,config),fonts},{enabled:true});
   }
-  const signing=createDoctorSigning(databases.corePool,keyring,new ClamAvScanner({socketPath:required('VITAL_RECORDS_CLAMAV_SOCKET'),daemonConfigPath:required('VITAL_RECORDS_CLAMAV_CONFIG'),deadlineMs:15000,maxDatabaseAgeMs:86400000}));
+  const signing=createDoctorSigning(databases.corePool,keyring,createFileInspector(()=>({socketPath:required('VITAL_RECORDS_CLAMAV_SOCKET'),daemonConfigPath:required('VITAL_RECORDS_CLAMAV_CONFIG'),deadlineMs:15000,maxDatabaseAgeMs:86400000})));
   return{module,files,lifecycle,signing,artifactTick:(signal?:AbortSignal)=>artifacts?.runOnce(signal)??Promise.resolve(0)};
 }
