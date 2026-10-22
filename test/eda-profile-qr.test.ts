@@ -5,6 +5,7 @@ import type { Pool } from "pg";
 import sharp from "sharp";
 import { DomainError, type Actor } from "../src/eda/contracts/actor.js";
 import { ArtifactError, sha256 } from "../src/eda/modules/records/upload-validation.js";
+import { createFileInspector, type FileInspector } from "../src/eda/modules/records/inspection.js";
 import type { RecordsScanner } from "../src/eda/modules/records/scanner.js";
 import { createProfileQrModule, type ProfileQrStorage } from "../src/eda/modules/profile/profile-qr.js";
 import { createProfileQrRepository, type ProfileQrRepository } from "../src/eda/modules/profile/profile-qr-repository.js";
@@ -17,7 +18,7 @@ const actor = (write = false): Actor => ({ authId, role: "doctor", serviceId: "v
   scopes: [write ? "profile.qr.write" : "profile.qr.read"], correlationId: randomUUID(), isSuperAdmin: false });
 const image = (format: "png" | "jpeg" | "webp" = "png") => sharp({ create: { width: 8, height: 8, channels: 3, background: "red" } }).toFormat(format).toBuffer();
 const denied = (code: string) => (error: unknown) => error instanceof DomainError && error.code === code;
-function fixture() {
+function fixture(inspector?: FileInspector) {
   const assets = new Map<string, QrAsset>(), rows = new Map<string, QrRow>(), leases = new Set<string>(), hashes = new Map<string, string>();
   const objects = new Map<string, Buffer>(), events: string[] = [];
   let failStorage = "", failScanner = false, forged = false, stale = false, lostCommit = false, published = 0;
@@ -63,7 +64,7 @@ function fixture() {
     return { engine: "clamav", engineVersion: "1.4.3", databaseVersion: 28000, databaseDate: new Date(now - (stale ? 172800000 : 1000)).toISOString(),
       scannedAt: new Date(now).toISOString(), contentHash: forged ? "0".repeat(64) : sha256(bytes), byteLength: bytes.length, verdict: "clean" };
   } };
-  const module = () => createProfileQrModule(repository, storage, scanner, () => now);
+  const module = () => createProfileQrModule(repository, storage, inspector??scanner, () => now);
   const upload = async (bytes: Buffer, mimeType = "image/png", paymentProvider = "gcash", operationId = randomUUID()) => {
     const descriptor = profileQrDescriptor.parse({ operationId, byteLength: bytes.length, sha256: sha256(bytes), mimeType, paymentProvider });
     return { operationId, result: await module().upload(actor(true), { operationId, requestHash: "a".repeat(64) }, descriptor, bytes), descriptor };
@@ -173,4 +174,16 @@ test("Profile QR SQL reserve commits the durable descriptor before returning to 
   assert.equal(result.state, "pending"); assert.deepEqual(statements.slice(-2), ["COMMIT", "release"]);
   assert.ok(statements.some(sql => sql.includes("INSERT INTO command_operations")));
   assert.equal(statements.some(sql => /clinical|record_operations|records_file_assets/.test(sql)), false);
+});
+
+test('Capstone payment QR processing records unscanned evidence and supports historical private reads',async()=>{
+  const inspector=createFileInspector(()=>{throw new Error('No scanner config');},'capstone-validation-only',()=>now),f=fixture(inspector),value=await f.upload(await image());
+  f.scannerDown();await f.module().recoverOnce();const status=await f.module().status(actor(),value.operationId);assert.equal(status.operationStatus,'completed');assert.equal(f.rows.size,1);assert.ok(!f.events.includes('scan'));
+  const stored=f.assets.get(value.operationId)!;assert.equal(stored.content?.evidence.verdict,'not_scanned');assert.equal('engine' in stored.content!.evidence,false);
+  const restored=createProfileQrModule(f.repository,f.storage,f.scanner,()=>now+86400000);
+  assert.ok((await restored.file(actor(),status.qrCode!.id)).base64);
+});
+
+test('Capstone payment QR runtime does not require ClamAV environment paths',()=>{
+  assert.ok(profileQrRuntime({corePool:{} as Pool},{VITAL_EDA_ENABLED:'true',VITAL_EDA_PROFILE_WRITES_ENABLED:'true',VITAL_EDA_PROFILE_QR_ENABLED:'true',VITAL_PROFILE_QR_STORAGE_ENDPOINT:'https://storage.example.test',VITAL_PROFILE_QR_STORAGE_BUCKET:'demo-qr',VITAL_PROFILE_QR_STORAGE_REGION:'local',VITAL_PROFILE_QR_STORAGE_ACCESS_KEY:'fictional-access',VITAL_PROFILE_QR_STORAGE_SECRET_KEY:'fictional-secret'}));
 });

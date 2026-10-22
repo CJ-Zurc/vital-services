@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ArtifactError, MAX_UPLOAD_BYTES, sha256, validateUpload, type RecordsMime } from "./upload-validation.js";
 import { createPrescriptionPdfBuffer, createCertificatePdfBuffer, type PrescriptionPdf, type CertificatePdf, type RecordsFontConfig } from "./pdf.js";
 import type { RecordsStorage, StoredContent } from "./storage.js";
-import type { RecordsScanner, ScanEvidence } from "./scanner.js";
+import { verifyFileInspection, type FileInspector, type FileInspectionEvidence } from "./inspection.js";
 
 export type ArtifactPrepared = StoredContent & { objectKey: string };
 export type ArtifactJob = {
@@ -13,7 +13,7 @@ export type ArtifactJob = {
   prepared?: ArtifactPrepared;
 };
 export type ArtifactClaim = { operationId: string; leaseOwner: string; fence: number };
-export type ArtifactScanEvidence = { input?: ScanEvidence; final: ScanEvidence };
+export type ArtifactScanEvidence = { input?: FileInspectionEvidence; final: FileInspectionEvidence };
 export type ArtifactPublication = ArtifactPrepared & { scanEvidence: ArtifactScanEvidence };
 
 // The owner implements each method as one fenced Core transaction. No callback is a provider transaction.
@@ -28,13 +28,12 @@ export interface ArtifactRepository {
 }
 export type CanonicalDocument = { kind: "prescription"; data: PrescriptionPdf } | { kind: "medical-certificate"; data: CertificatePdf };
 export type RecordsArtifactDependencies = {
-  repository: ArtifactRepository; storage: RecordsStorage; scanner: RecordsScanner;
+  repository: ArtifactRepository; storage: RecordsStorage; scanner: FileInspector;
   decryptCanonicalData(job: ArtifactJob): Promise<CanonicalDocument>;
   fonts?: RecordsFontConfig;
 };
-function evidenceMatches(evidence: ScanEvidence, bytes: Buffer, now: number): void {
-  const scannedAt = Date.parse(evidence.scannedAt);
-  if (evidence.verdict !== "clean" || evidence.engine !== "clamav" || evidence.contentHash !== sha256(bytes) || evidence.byteLength !== bytes.length || !Number.isFinite(scannedAt) || scannedAt > now + 5000 || now - scannedAt > 60000) throw new ArtifactError("SCAN_EVIDENCE_MISMATCH");
+function evidenceMatches(evidence: FileInspectionEvidence, bytes: Buffer, now: number, scanner: FileInspector): void {
+  verifyFileInspection(evidence, { contentHash: sha256(bytes), byteLength: bytes.length }, now, scanner.policy ?? 'clamav');
 }
 function samePrepared(a: ArtifactPrepared, b: ArtifactPrepared): boolean { return a.objectKey === b.objectKey && a.contentHash === b.contentHash && a.byteLength === b.byteLength && a.mimeType === b.mimeType; }
 
@@ -67,11 +66,11 @@ export class RecordsArtifactWorker {
     const requireLease = (ok = true) => { if (!ok || signal.aborted) throw new ArtifactError("ARTIFACT_LEASE_LOST", true); };
     try {
       requireLease();
-      let bytes: Buffer; let mimeType: RecordsMime; let inputEvidence: ScanEvidence | undefined;
+      let bytes: Buffer; let mimeType: RecordsMime; let inputEvidence: FileInspectionEvidence | undefined;
       if (job.kind === "upload") {
         if (!job.input) throw new ArtifactError("ARTIFACT_INPUT_MISSING", true);
         const raw = await storage.readQuarantine(job.input.objectKey, job.input, signal);
-        inputEvidence = await scanner.scan(raw, signal); evidenceMatches(inputEvidence, raw, this.now()); requireLease();
+        inputEvidence = await scanner.scan(raw, signal); evidenceMatches(inputEvidence, raw, this.now(), scanner); requireLease();
         const output = await validateUpload(raw, job.input.mimeType); bytes = output.bytes; mimeType = output.mimeType;
       } else {
         const canonical = await this.dependencies.decryptCanonicalData(job);
@@ -83,13 +82,13 @@ export class RecordsArtifactWorker {
       const prepared: ArtifactPrepared = { contentHash: sha256(bytes), byteLength: bytes.length, mimeType, objectKey: storage.key("final", job.assetId, sha256(bytes), mimeType) };
       if (job.prepared && !samePrepared(job.prepared, prepared)) throw new ArtifactError("ARTIFACT_CANONICAL_OUTPUT_CONFLICT");
       requireLease(await repository.savePrepared(claim, prepared));
-      const finalEvidence = await scanner.scan(bytes, signal); evidenceMatches(finalEvidence, bytes, this.now()); requireLease();
+      const finalEvidence = await scanner.scan(bytes, signal); evidenceMatches(finalEvidence, bytes, this.now(), scanner); requireLease();
       const scanEvidence: ArtifactScanEvidence = { ...(inputEvidence ? { input: inputEvidence } : {}), final: finalEvidence };
       requireLease(await repository.recordScan(claim, scanEvidence));
       await storage.ensureFinal(prepared.objectKey, bytes, mimeType, signal); requireLease();
       // Inspect exact bytes on crash recovery, not ETag or an upload acknowledgement alone.
       if (!await storage.inspectFinal(prepared.objectKey, prepared, signal)) throw new ArtifactError("ARTIFACT_OBJECT_MISSING", true);
-      evidenceMatches(finalEvidence, bytes, this.now());
+      evidenceMatches(finalEvidence, bytes, this.now(), scanner);
       requireLease(await repository.publish(claim, { ...prepared, scanEvidence }));
     } catch (error) {
       const safe = error instanceof ArtifactError ? error : new ArtifactError("ARTIFACT_DEPENDENCY_UNAVAILABLE", true);

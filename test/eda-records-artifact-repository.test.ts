@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import type { Pool } from 'pg';
+import type { FileInspectionPolicy } from '../src/eda/modules/records/inspection.js';
 import { createArtifactRepository } from '../src/eda/modules/records/artifact-repository.js';
 import type { ArtifactClaim,ArtifactJob,ArtifactPrepared,ArtifactPublication } from '../src/eda/modules/records/artifacts.js';
 
@@ -12,7 +13,7 @@ type Operation={id:string;resourceId:string;state:string;version:number;attempts
 type Asset={id:string;patientId:string;kind:string;state:string;version:number;objectKey:string;contentHash:string;byteLength:number;mimeType:string;publishedKey?:string;scanEvidence?:unknown};
 
 // Transactional SQL fixture: shared row locks, rollback and a controllable database clock.
-function fixture(count=2){
+function fixture(count=2,policy:FileInspectionPolicy='clamav'){
   let now=Date.now(),capacity:Capacity|null={operationId:null,operationFence:null,leaseOwner:null,leaseUntil:null};
   let operations=new Map<string,Operation>(),assets=new Map<string,Asset>(),events=0,holder:number|null=null,serial=0;
   let failure:string|undefined,expireOn:string|undefined;
@@ -87,7 +88,7 @@ function fixture(count=2){
       }};
     },
   } as unknown as Pool;
-  const repository=createArtifactRepository(pool);
+  const repository=createArtifactRepository(pool,policy);
   const claim=(owner='worker-a')=>repository.claimDue({leaseOwner:owner,leaseMs:60000,now:new Date(0)});
   const handle=(job:ArtifactJob,owner='worker-a'):ArtifactClaim=>({operationId:job.operationId,leaseOwner:owner,fence:job.fence});
   const prepared:ArtifactPrepared={objectKey:'final/synthetic.pdf',contentHash:'a'.repeat(64),byteLength:3,mimeType:'application/pdf'};
@@ -211,4 +212,16 @@ test('Records artifact capacity maintained schema and additive migration stay al
   assert.match(capacity,/id Int @id @db.SmallInt/);assert.match(capacity,/operationId String\? @unique @db.Uuid/);
   assert.match(capacity,/operationFence Int\?/);assert.match(capacity,/onDelete: Restrict/);
   assert.match(capacity,/@@map\("records_artifact_capacity"\)/);
+});
+
+test('Capstone repository accepts truthful validation evidence only under its selected write policy',async()=>{
+  for(const policy of ['clamav','capstone-validation-only'] as const){
+    const f=fixture(1,policy),job=(await f.claim())!,claim=f.handle(job);await f.repository.savePrepared(claim,f.prepared);
+    const publication:ArtifactPublication={...f.prepared,scanEvidence:{final:{policy:'capstone-validation-only',verdict:'not_scanned',validationVersion:1,validatedAt:new Date().toISOString(),contentHash:f.prepared.contentHash,byteLength:f.prepared.byteLength}}};
+    if(policy==='clamav'){
+      await assert.rejects(f.repository.recordScan(claim,publication.scanEvidence),/SCAN_EVIDENCE_MISMATCH/);await assert.rejects(f.repository.publish(claim,publication),/SCAN_EVIDENCE_MISMATCH/);assert.equal(f.events(),0);
+    }else{
+      assert.equal(await f.repository.recordScan(claim,publication.scanEvidence),true);assert.equal(await f.repository.publish(claim,publication),true);assert.equal(f.events(),1);assert.equal(f.assets().get(job.assetId)!.state,'ready');
+    }
+  }
 });
