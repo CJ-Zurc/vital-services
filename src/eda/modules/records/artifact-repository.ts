@@ -6,9 +6,10 @@ import type { CanonicalDocument } from "./artifacts.js";
 import type { PrescriptionPdf,CertificatePdf } from "./pdf.js";
 import { unprotectPayload } from "./protection.js";
 import { appendSqlOutbox } from "../../infrastructure/outbox.js";
+import { verifyFileInspection, type FileInspectionPolicy } from './inspection.js';
 import { recordsDenied } from "./authorization.js";
 
-export function createArtifactRepository(pool:Pool):ArtifactRepository {
+export function createArtifactRepository(pool:Pool, inspectionPolicy:FileInspectionPolicy='clamav'):ArtifactRepository {
   const fenced=`id=$1::uuid AND "leaseOwner"=$2 AND version=$3 AND state='processing' AND "leaseUntil">clock_timestamp()`;
   const capacityFenced=`id=1 AND "operationId"=$1::uuid AND "leaseOwner"=$2 AND "operationFence"=$3 AND "leaseUntil">clock_timestamp()`;
   const params=(c:ArtifactClaim)=>[c.operationId,c.leaseOwner,c.fence];
@@ -56,14 +57,14 @@ export function createArtifactRepository(pool:Pool):ArtifactRepository {
     },false);},
     async recordScan(claim,evidence){return local(claim,async(tx,op)=>{
       const expected=op.preparedArtifact as ArtifactPrepared|null;
-      if(!expected||evidence.final.contentHash!==expected.contentHash||evidence.final.byteLength!==expected.byteLength||evidence.final.verdict!=='clean')throw new Error('ARTIFACT_SCAN_BINDING_INVALID');
+      if(!expected)throw new Error('ARTIFACT_SCAN_BINDING_INVALID');
+      verifyFileInspection(evidence.final,expected,Date.now(),inspectionPolicy);
       await tx.query('UPDATE records_file_assets SET "scanEvidence"=$2::jsonb WHERE id=$1::uuid',[op.resourceId,JSON.stringify(evidence)]);return true;
     },false);},
     async publish(claim,publication){return local(claim,async(tx,op)=>{
       const expected=op.preparedArtifact as ArtifactPrepared|null;
       if(!expected||expected.objectKey!==publication.objectKey||expected.contentHash!==publication.contentHash||expected.byteLength!==publication.byteLength)throw new Error('ARTIFACT_OUTPUT_CONFLICT');
-      const evidence=publication.scanEvidence.final,age=Date.now()-Date.parse(evidence.scannedAt);
-      if(evidence.verdict!=='clean'||evidence.contentHash!==publication.contentHash||evidence.byteLength!==publication.byteLength||!Number.isFinite(age)||age< -5000||age>60000)throw new Error('ARTIFACT_SCAN_BINDING_INVALID');
+      verifyFileInspection(publication.scanEvidence.final,publication,Date.now(),inspectionPolicy);
       const asset=(await tx.query(`UPDATE records_file_assets SET state='ready',"publishedKey"=$2,"publishedHash"=$3,"mimeType"=$4,"byteLength"=$5,"scanEvidence"=$6::jsonb,version=version+1 WHERE id=$1::uuid AND state IN ('processing','quarantine') RETURNING version`,[op.resourceId,publication.objectKey,publication.contentHash,publication.mimeType,publication.byteLength,JSON.stringify(publication.scanEvidence)])).rows[0];
       if(!asset)throw new Error('ARTIFACT_ASSET_STATE_CHANGED');
       changed((await tx.query('UPDATE record_operations SET state=\'completed\',"leaseOwner"=NULL,"leaseUntil"=NULL,"errorCode"=NULL,"updatedAt"=clock_timestamp() WHERE '+fenced,params(claim))).rowCount);

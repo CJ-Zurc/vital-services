@@ -1,6 +1,6 @@
 import { requireScope, type Actor } from "../../contracts/actor.js";
 import { ArtifactError, detectRecordsMime, sha256, validateUpload } from "../records/upload-validation.js";
-import type { RecordsScanner, ScanEvidence } from "../records/scanner.js";
+import { verifyFileInspection, type FileInspector, type FileInspectionPolicy, type FileInspectionEvidence } from "../records/inspection.js";
 import type { RecordsStorage } from "../records/storage.js";
 import { PROFILE_QR_LIMIT, profileQrDescriptor, qrDenied, qrDto, type QrAsset, type QrCommand } from "./profile-qr-contracts.js";
 import type { ProfileQrRepository } from "./profile-qr-repository.js";
@@ -14,17 +14,11 @@ function own(actor: Actor, write = false) {
   if (actor.role !== "doctor") qrDenied(403, "PROFILE_QR_DOCTOR_REQUIRED");
   requireScope(actor, write ? "profile.qr.write" : "profile.qr.read", actor.authId);
 }
-export function verifyQrScan(evidence: ScanEvidence, bytes: Buffer, now: number, historical = false) {
-  const scanned = Date.parse(evidence.scannedAt), database = Date.parse(evidence.databaseDate);
-  if (evidence.verdict !== "clean" || evidence.engine !== "clamav" || !evidence.engineVersion
-    || !Number.isSafeInteger(evidence.databaseVersion) || evidence.databaseVersion < 1
-    || evidence.contentHash !== sha256(bytes) || evidence.byteLength !== bytes.length
-    || !Number.isFinite(scanned) || !Number.isFinite(database) || scanned > now + 300000
-    || database > scanned + 300000 || scanned - database > 86400000 || (!historical && now - scanned > 60000)) {
-    throw new ArtifactError("SCANNER_EVIDENCE_INVALID", true);
-  }
+export function verifyQrScan(evidence: FileInspectionEvidence, bytes: Buffer, now: number, historical = false, policy: FileInspectionPolicy = 'clamav') {
+  try { verifyFileInspection(evidence, { contentHash:sha256(bytes), byteLength:bytes.length }, now, policy, historical, 300000); }
+  catch { throw new ArtifactError('SCANNER_EVIDENCE_INVALID', true); }
 }
-export function createProfileQrModule(repository: ProfileQrRepository, storage: ProfileQrStorage, scanner: RecordsScanner, clock = Date.now) {
+export function createProfileQrModule(repository: ProfileQrRepository, storage: ProfileQrStorage, scanner: FileInspector, clock = Date.now) {
   let active = 0;
   const originalKey = (asset: QrAsset) => storage.key("quarantine", asset.id, asset.descriptor.sha256, asset.descriptor.mimeType);
   const contentKey = (asset: QrAsset, area: "quarantine" | "final") => {
@@ -42,11 +36,11 @@ export function createProfileQrModule(repository: ProfileQrRepository, storage: 
       const input = await storage.readQuarantine(originalKey(job.asset), { contentHash: descriptor.sha256, byteLength: descriptor.byteLength, mimeType: descriptor.mimeType }, signal);
       assertBytes(input);
       if (sha256(input) !== descriptor.sha256 || input.length !== descriptor.byteLength || detectRecordsMime(input) !== descriptor.mimeType) qrDenied(400, "PROFILE_QR_BYTES_MISMATCH");
-      verifyQrScan(await scanner.scan(input, signal), input, clock());
+      verifyQrScan(await scanner.scan(input, signal), input, clock(), false, scanner.policy);
       const validated = await validateUpload(input, descriptor.mimeType);
       assertBytes(validated.bytes);
       const evidence = await scanner.scan(validated.bytes, signal);
-      verifyQrScan(evidence, validated.bytes, clock());
+      verifyQrScan(evidence, validated.bytes, clock(), false, scanner.policy);
       const content: NonNullable<QrAsset["content"]> = { contentHash: validated.contentHash, byteLength: validated.byteLength, mimeType: descriptor.mimeType, evidence };
       const ready = { ...job.asset, content };
       // The private normalized mirror permits verified byte reads using the existing storage adapter.
@@ -54,7 +48,7 @@ export function createProfileQrModule(repository: ProfileQrRepository, storage: 
       await storage.putQuarantine(contentKey(ready, "quarantine"), validated.bytes, descriptor.mimeType, signal);
       await storage.ensureFinal(contentKey(ready, "final"), validated.bytes, descriptor.mimeType, signal);
       if (!await storage.inspectFinal(contentKey(ready, "final"), content, signal)) throw new ArtifactError("STORAGE_OBJECT_MISSING", true);
-      verifyQrScan(evidence, validated.bytes, clock());
+      verifyQrScan(evidence, validated.bytes, clock(), false, scanner.policy);
       await repository.finish(job, content);
     } catch (error) {
       if (!job) throw error;
@@ -91,7 +85,7 @@ export function createProfileQrModule(repository: ProfileQrRepository, storage: 
       if (!await storage.inspectFinal(contentKey(asset, "final"), content)) qrDenied(503, "PROFILE_QR_STORAGE_UNAVAILABLE");
       const bytes = await storage.readQuarantine(contentKey(asset, "quarantine"), content);
       assertBytes(bytes);
-      verifyQrScan(content.evidence, bytes, clock(), true);
+      verifyQrScan(content.evidence, bytes, clock(), true, scanner.policy);
       if (sha256(bytes) !== content.contentHash || bytes.length !== content.byteLength || detectRecordsMime(bytes) !== content.mimeType) qrDenied(503, "PROFILE_QR_STORAGE_UNAVAILABLE");
       return { id, mimeType: content.mimeType, byteLength: bytes.length, sha256: content.contentHash, base64: bytes.toString("base64") };
     },

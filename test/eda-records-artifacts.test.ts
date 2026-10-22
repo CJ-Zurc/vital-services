@@ -8,6 +8,8 @@ import sharp from "sharp";
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { ArtifactError, MAX_UPLOAD_BYTES, MAX_MULTIPART_BYTES, detectRecordsMime, sha256, validateUpload } from "../src/eda/modules/records/upload-validation.js";
 import { S3RecordsStorage, type RecordsStorage, type StoredContent } from "../src/eda/modules/records/storage.js";
+import { createFileInspector, verifyFileInspection, FILE_INSPECTION_POLICY } from "../src/eda/modules/records/inspection.js";
+import type { RecordsArtifactDependencies } from "../src/eda/modules/records/artifacts.js";
 import { ClamAvScanner, verifyClamAvPolicy, type ClamAvIo, type ScanEvidence, type RecordsScanner } from "../src/eda/modules/records/scanner.js";
 import { createPrescriptionPdfBuffer, createCertificatePdfBuffer, philippineDate, type PrescriptionPdf } from "../src/eda/modules/records/pdf.js";
 import { RecordsArtifactWorker, type ArtifactJob, type ArtifactPrepared, type ArtifactRepository, type ArtifactPublication } from "../src/eda/modules/records/artifacts.js";
@@ -192,7 +194,7 @@ function artifactFixture(input: Buffer) {
     reject: async (_claim, code) => { rejected = code; },
   };
   const scanner: RecordsScanner = { scan: async bytes => { scans.push(Buffer.from(bytes)); return { engine: "clamav", engineVersion: "1.4.3", databaseVersion: 28000, databaseDate: new Date(now).toISOString(), scannedAt: new Date(now).toISOString(), contentHash: sha256(bytes), byteLength: bytes.length, verdict: "clean" }; } };
-  const dependencies = { repository, storage: storageFixture.storage as RecordsStorage, scanner, decryptCanonicalData: async () => ({ kind: "prescription" as const, data: base }) };
+  const dependencies: RecordsArtifactDependencies = { repository, storage: storageFixture.storage as RecordsStorage, scanner, decryptCanonicalData: async () => ({ kind: "prescription" as const, data: base }) };
   const worker = new RecordsArtifactWorker(dependencies, { enabled: true, now: () => now });
   return { ...storageFixture, worker, job, dependencies, scans, upload: () => storageFixture.storage.putQuarantine(job.input!.objectKey, input, "image/png"), published: () => published, retry: () => retry, rejected: () => rejected, failPublication: () => { failPublish = true; }, requeue: () => { available = true; } };
 }
@@ -253,4 +255,38 @@ test("Records artifact scan evidence cannot be reused from expired processing", 
   const f = artifactFixture(await png()); await f.upload();
   const scan = f.dependencies.scanner.scan; f.dependencies.scanner.scan = async bytes => ({ ...await scan(bytes), scannedAt: new Date(now - 61000).toISOString() });
   await f.worker.runOnce(); assert.equal(f.published(), undefined); assert.equal(f.rejected(), "SCAN_EVIDENCE_MISMATCH");
+});
+
+test('Capstone inspection validates real images and PDFs without reading ClamAV configuration',async()=>{
+  assert.equal(FILE_INSPECTION_POLICY,'capstone-validation-only');
+  const inspector=createFileInspector(()=>{throw new Error('ClamAV configuration must not be accessed');},undefined,()=>now);
+  for(const bytes of [await png(),await sharp(await png()).jpeg().toBuffer(),await createPrescriptionPdfBuffer(base)]){
+    const evidence=await inspector.scan(bytes);
+    assert.deepEqual(evidence,{policy:'capstone-validation-only',verdict:'not_scanned',validationVersion:1,validatedAt:new Date(now).toISOString(),contentHash:sha256(bytes),byteLength:bytes.length});
+    assert.equal('engine' in evidence,false);assert.equal('scannedAt' in evidence,false);
+    verifyFileInspection(evidence,{contentHash:sha256(bytes),byteLength:bytes.length},now,'capstone-validation-only');
+    assert.throws(()=>verifyFileInspection(evidence,{contentHash:sha256(bytes),byteLength:bytes.length},now,'clamav'),/SCAN_EVIDENCE_MISMATCH/);
+    // Restoring antivirus does not make already-finalized demo files unreadable.
+    verifyFileInspection(evidence,{contentHash:sha256(bytes),byteLength:bytes.length},now+86400000,'clamav',true);
+    for(const changed of [{...evidence,verdict:'clean'},{...evidence,engine:'clamav'},{...evidence,contentHash:'0'.repeat(64)},{...evidence,byteLength:bytes.length+1}])assert.throws(()=>verifyFileInspection(changed,{contentHash:sha256(bytes),byteLength:bytes.length},now,'capstone-validation-only'),/SCAN_EVIDENCE_MISMATCH/);
+    assert.throws(()=>verifyFileInspection(evidence,{contentHash:sha256(bytes),byteLength:bytes.length},now+60001,'capstone-validation-only'),/SCAN_EVIDENCE_MISMATCH/);
+  }
+  for(const bytes of [Buffer.alloc(0),Buffer.from('not a supported file'),Buffer.from([137,80,78,71,13,10,26,10,1]),Buffer.alloc(MAX_UPLOAD_BYTES+1)])await assert.rejects(inspector.scan(bytes),ArtifactError);
+  await assert.rejects(inspector.scan(await png(),AbortSignal.abort()),/ARTIFACT_LEASE_LOST/);
+  let configured=0;assert.equal(createFileInspector(()=>{configured++;return clamConfig;},'clamav').policy,'clamav');assert.equal(configured,1);
+});
+
+test('Capstone artifact processing publishes validated attachments and both branded signed clinical PDFs without antivirus',{skip:!regularFont||!boldFont},async()=>{
+  for(const kind of ['upload','prescription','medical-certificate'] as const){
+    const f=artifactFixture(await png());f.dependencies.scanner=createFileInspector(()=>{throw new Error('No ClamAV');},'capstone-validation-only',()=>now);
+    if(kind==='upload')await f.upload();else{
+      f.job.kind=kind;f.job.input=undefined;f.dependencies.fonts={regularPath:regularFont!,boldPath:boldFont!};
+      const signature=await png(),signing={templateVersion:'bgh-capstone-v1',signatureBase64:signature.toString('base64'),signatureHash:sha256(signature),s2License:'DEMO-S2',s2ValidFrom:'2026-01-01',s2ValidUntil:'2027-01-01'},retrievalUrl='https://vital.example.test/documents/prescription/'+randomUUID();
+      f.dependencies.decryptCanonicalData=async()=>kind==='prescription'?{kind,data:{...base,...signing,lines:base.lines.map(line=>({...line,isControlled:true})),retrievalUrl}}:{kind,data:{...signing,accessCode:'MC-DEMO',patientName:'Synthetic Patient',doctorName:'Synthetic Doctor',doctorLicense:'DEMO-PRC',issuedAt:base.issuedAt,purpose:'Capstone demonstration',diagnosis:'Synthetic finding'}};
+    }
+    f.failPublication();await f.worker.runOnce();assert.equal(f.published(),undefined);assert.ok(f.job.prepared);const originalHash=f.job.prepared.contentHash;
+    await f.worker.runOnce();const publication=f.published();assert.ok(publication,f.rejected());
+    assert.equal(publication.scanEvidence.final.verdict,'not_scanned');assert.equal('engine' in publication.scanEvidence.final,false);assert.equal(f.scans.length,0);
+    assert.equal(publication.contentHash,originalHash);assert.equal(publication.contentHash,publication.scanEvidence.final.contentHash);assert.ok(f.objects.has(publication.objectKey));
+  }
 });

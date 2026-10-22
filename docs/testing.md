@@ -99,3 +99,51 @@ commit, push or deployment is included. Legacy stream helper unit tests remain;
 obsolete positive browser routing/forwarding tests are replaced with rejection
 coverage. Full Gateway suite: 428 passed. Focused Ruff passes. Container rebuild
 and genuine live browser/SSO acceptance remain pending; no live result is claimed.
+
+## S6 staging investigation (2026-10-22)
+
+After fetching all origins, staging signature upload reproduced HTTP 500 while
+private reads worked. Local fixes cover scanner 503/Retry-After, invalid-image
+400, metadata-only diagnostics, encrypted versions, replay and role/owner isolation
+in the maintained Records suite. Final Services suite: 445 passed / 2 skipped;
+build, ESLint and TypeScript passed. Exact-source review: 5 passed (131 routes).
+Web: 295 passed, build and BFF checks passed. Root configuration: 6 passed.
+
+Live calendar previews, patient monitoring, doctor/rating directories and role
+denials passed. Complete issuance/acknowledgment, timed messaging and reschedule
+lifecycles remain pending: the doctor cannot finish onboarding until signature
+processing is repaired, eligible test appointments were unavailable, and Payment
+composition reports unavailable. Notifications remain intentionally deferred.
+No staging deployment/configuration/database operation was performed.
+
+## Temporary capstone validation-only build (2026-10-22)
+
+Services selects `capstone-validation-only` centrally in `inspection.ts`. ClamAV
+is retained for restoration but is not constructed/contacted by signature,
+attachment/document or payment-QR processing in this build. See
+[policy/evidence and rollback](capstone-file-validation.md). No new .env, public
+API shape, database migration, Gateway or Capstone_BGH change is included.
+Earlier scanner repairs/results above remain historical; current demo writes
+truthfully record `not_scanned` validation evidence rather than clean scan claims.
+
+Maintained test registration for this revision:
+
+| Suite | New coverage |
+|---|---|
+| `test/eda-records.test.ts` | Capstone signature save/preview/replacement/replay without antivirus; Records/signing/artifact runtime creation without scanner paths. |
+| `test/eda-records-artifacts.test.ts` | Selected default policy, real PNG/JPEG/PDF validation, invalid/oversized files, aborted work, evidence binding/freshness/policy checks, restoration/historical reads, branded signed prescription/certificate and attachment publication with commit-failure retry. |
+| `test/eda-records-artifact-repository.test.ts` | Database publication accepts truthful demo evidence only under the selected write policy; antivirus mode rejects it without publication. |
+| `test/eda-profile-qr.test.ts` | Payment QR publication with unavailable antivirus and truthful evidence, historical private reads after restoration, runtime without scanner paths. |
+
+Final full Services suite: **452 passed, 2 isolated-stack tests skipped**. Final
+strengthened capstone inspection/publication recovery rerun: **2 passed**. Services
+build/TypeScript and configured lint passed. Web: **295 passed**, BFF check and
+production build passed. Exact-source route review: **5 passed**, 131 routes;
+no reviewed Web validator/test fingerprints changed. Existing antivirus suites
+remain passing. The root test catalog is intentionally untouched by this
+VITAL-only revision; this table records the maintained coverage instead.
+
+No temporary verification artifacts were added to either repository. No staging
+mutation or live antivirus-disabled acceptance was attempted. After a separately
+authorized deployment, retest signature onboarding and actual issuance/QR/file
+retrieval; unrelated Payment and notification availability gates remain.

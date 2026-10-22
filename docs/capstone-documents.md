@@ -1,5 +1,10 @@
 # Sprint 6 capstone documents
 
+Current capstone build: the [validation-only policy](capstone-file-validation.md)
+replaces antivirus scanning for signatures and file processing. Scanning
+requirements and outage results below describe the earlier ClamAV mode, retained
+for restoration. All other clinical and access checks remain.
+
 This release is for development, testing and presentation. It issues demonstration
 prescriptions, medical certificates and payment acknowledgments. It makes no
 external license, pharmacy, dispensing or tax-invoice verification claim.
@@ -112,3 +117,18 @@ Generated fictional PDF samples were rendered and visually inspected, including
 long Filipino names, multiple medicines/pages, signature, QR and sandbox labeling.
 Docker is unavailable on this host, so actual container migration/readiness and
 authenticated multi-service browser acceptance still require the running stack.
+
+## Signature scanner failure handling (2026-10-22)
+
+Signature uploads still require clean original and normalized image scans. A retryable
+scanner failure returns `503 SIGNATURE_SERVICE_UNAVAILABLE` with Retry-After;
+invalid image bytes return `400 SIGNATURE_INVALID`. Server diagnostics contain
+only an allowlisted code, correlation ID and processing stage. They never include
+image/base64 data, credentials, SQL or raw exception messages. Protected reads and
+immutable prior versions remain unchanged. No migration is required.
+
+Staging upload currently fails on the prior code. Root's configuration generator
+previously omitted settings required by the scanner-policy verifier; its corrected
+default now uses the reviewed daemon policy. Existing mounted files are preserved
+and require administrator review/apply and scanner restart, not a database reset.
+The exact deployed cause remains unconfirmed without container/config access.
