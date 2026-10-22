@@ -15,7 +15,7 @@ const hash = text => createHash('sha256').update(text.replace(/\r\n/g, '\n')).di
 const reviewedHashes = Object.freeze({
   'app/api/doctor/date-blocks/batch/route.ts': 'ab10c50e04e09a6e7b06a4d9b0eb1e9cd28aca592a940bd0462a0c1f9899746b',
   'app/api/doctor/date-blocks/preview/route.ts': 'ab10c50e04e09a6e7b06a4d9b0eb1e9cd28aca592a940bd0462a0c1f9899746b',
-  'tests/eda-appointment-revisions.test.ts': '91adaa73402d33ca72d070661194b4da71a6e73e881082711d445bcd76b4403c',
+  'tests/eda-appointment-revisions.test.ts': '384b39f2d90c401c481e913c0fda2834145967c39baca1bf7ab18471ab826397',
   'lib/eda/notification-inbox.ts': 'c55d34d88fc4109c48043da0d9e02fd1671fda5144deeb7f7a352f114939d3e6',
   'lib/eda/notification-inbox-bff.ts': '13b9aeeed4c2b2f4422642e32b2b3cf5d627d798155fa195af17075b65dfe554',
   'lib/eda/appointment-revisions-paths.ts': '53eea2f02e95178b6d1304e175e5b31761d12401e5cc13573e40cb786134e59c',

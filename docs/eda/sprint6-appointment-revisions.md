@@ -29,3 +29,12 @@ Central contracts through Gateway are `GET /notifications/vital/inbox?limit=20&o
 Core migration `202610210001_s6_appointment_revisions` adds complaint history, actor/reschedule log metadata and a new-write rating range check. Historical feedback is retained. No EHR/Integrations schema change or new environment variable is needed. The existing separate tools image and deployment lock/migration/readiness sequence apply this migration before schema-dependent API/worker/Web startup; a failed migration stops deployment. Rebuilds never reset databases.
 
 Maintained source tests are registered in the workspace catalog. Full-stack Auth/Gateway/Core/broker/payment/video/Records acceptance and genuine multi-connection PostgreSQL concurrency remain live gates when Docker is unavailable. Temporary in-memory PostgreSQL tests verify actual Prisma fresh/upgrade/repeat migrations and SQL; they do not certify the deployed stack.
+
+
+## Local workflow boundary
+
+The browser-facing complaint, rating, calendar and bell APIs are same-origin
+VITAL Web handlers. Their signed private Services calls bypass Gateway; Gateway
+is retained for the distinct Auth, EHR and central Notification service calls.
+Gateway does not need new VITAL BFF entries for these local routes. Existing
+ownership, role, concurrency and financial/clinical rules remain authoritative.
