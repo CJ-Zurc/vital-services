@@ -38,3 +38,7 @@ VITAL Web handlers. Their signed private Services calls bypass Gateway; Gateway
 is retained for the distinct Auth, EHR and central Notification service calls.
 Gateway does not need new VITAL BFF entries for these local routes. Existing
 ownership, role, concurrency and financial/clinical rules remain authoritative.
+
+## Revised patient scheduling policy (2026-10-23)
+
+New patient bookings and reschedule proposals require a published `scheduleSlotId`. Caller date/start/end fields are rejected. Booking may include `doctorId`, which must match the slot; patient rescheduling is bound to the source appointment's doctor and consultation type. The backend resolves full slot duration under the doctor calendar lock, validates publication/type/future/calendar/active reservations, and retains the selected slot on replacements. Existing custom appointments, issued documents and historical durations are not rewritten. Role/combined quotas and committed-command replay remain authoritative. Doctor schedule creation, explicit-time rescheduling and custom follow-ups remain supported. Patient custom 30-minute booking is retired; no migration or Gateway change. Deploy matching Web/Services contracts together.
