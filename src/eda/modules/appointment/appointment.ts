@@ -10,7 +10,7 @@ import { appendSqlOutbox } from "../../infrastructure/outbox.js";
 import { acknowledgementInput, appointmentExpired, rescheduleAllowed, appointmentFactData, dateBlockInput, reasonInput,
   requireOwner, scheduleInput, slotInterval, versionSchema, effectiveCompletionDeadline, type AppointmentRow, type AppointmentCommand,
   type AppointmentOwners } from "./appointment-contracts.js";
-import { complaintSchema, customBookingEnd, emergencyContactSchema, intakeSchema } from "./appointment-intake.js";
+import { complaintSchema, emergencyContactSchema, intakeSchema } from "./appointment-intake.js";
 import { saveBookingContact } from "../profile/profile-booking.js";
 import { upgradeScheduleAvailability } from '../profile/profile-schedule.js';
 import { videoSelection,selectionHash,type VideoSelection } from '../video/contracts.js';
@@ -20,12 +20,17 @@ const selectAppointment = `SELECT a.*, p."authId" AS "patientAuthId", d."authId"
   (SELECT "changedByRole" FROM appointment_logs WHERE "appointmentId"=a.id ORDER BY "changedAt",id LIMIT 1) AS "proposalRole"
   FROM appointments a JOIN vital_patients p ON p."userId"=a."patientId"
   JOIN vital_doctors d ON d."userId"=a."doctorId" LEFT JOIN schedules s ON s.id=a."scheduleSlotId"`;
-const bookingInput = z.object({ doctorId: z.uuid().optional(), scheduleSlotId: z.uuid().optional(), consultationType: z.enum(["virtual","in_person"]),
-  slotDate: scheduleInput.shape.slotDate.optional(), startTime: scheduleInput.shape.startTime.optional(), endTime: scheduleInput.shape.endTime.optional(),
+const bookingInput = z.object({ doctorId: z.uuid().optional(), scheduleSlotId: z.uuid(), consultationType: z.enum(["virtual","in_person"]),
   consentAccepted: z.literal(true), chiefComplaint: complaintSchema, opqrst: intakeSchema, emergencyContact: emergencyContactSchema,
-  ehrPatientId: z.uuid() }).strict().refine(input=>!!input.doctorId||!!input.scheduleSlotId,{message:"A doctor or published schedule is required."});
+  ehrPatientId: z.uuid() }).strict();
 const proposalInput = z.object({ expectedVersion: versionSchema, reason: z.string().trim().min(1).max(2000),
   slotDate: scheduleInput.shape.slotDate, startTime: scheduleInput.shape.startTime, endTime: scheduleInput.shape.endTime }).strict();
+const patientProposalInput = z.object({ expectedVersion: versionSchema, reason: z.string().trim().min(1).max(2000), scheduleSlotId: z.uuid() }).strict();
+async function publishedSlot(tx: PoolClient, id: string, doctorId: string, consultationType: string) {
+  const slot=(await tx.query('SELECT * FROM schedules WHERE id=$1 AND "doctorId"=$2 AND "isPublished"=true FOR UPDATE',[id,doctorId])).rows[0];
+  if(!slot||![consultationType,"both"].includes(slot.consultationType))fail(409,"SCHEDULE_UNAVAILABLE");
+  return slotInterval(slot.slotDate.toISOString().slice(0,10),slot.startTime.slice(0,5),slot.endTime.slice(0,5));
+}
 const preparedInput = z.object({ workflowId: z.uuid(), appointmentId: z.uuid(), expectedVersion: versionSchema,
   kind: z.enum(["approve","follow-up"]),consultationType:z.enum(["virtual","in_person"]).optional(),confirmConflicts:z.boolean().optional(),
   ...videoSelection.shape,
@@ -242,11 +247,8 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       const doctorId=input.doctorId??selectedSlot.doctorId;
       const doctor=(await tx.query('SELECT d.* FROM vital_doctors d JOIN vital_users u ON u.id=d."userId" AND u."authId"=d."authId" WHERE d."userId"=$1',[doctorId])).rows[0];
       if(!doctor||!doctor.isDoctorOnboardingComplete||!doctor.specialty?.trim()||![input.consultationType,"both"].includes(doctor.availabilityType))fail(409,"DOCTOR_UNAVAILABLE");await calendarLock(tx,doctor.userId);
-      let scheduleSlotId=input.scheduleSlotId??null;let range:{startsAt:Date;endsAt:Date};
-      if(scheduleSlotId){const slot=(await tx.query('SELECT * FROM schedules WHERE id=$1 AND "doctorId"=$2 AND "isPublished"=true FOR UPDATE',[scheduleSlotId,doctorId])).rows[0];
-        if(!slot||![input.consultationType,"both"].includes(slot.consultationType))fail(409,"SCHEDULE_UNAVAILABLE");range=slotInterval(slot.slotDate.toISOString().slice(0,10),slot.startTime.slice(0,5),slot.endTime.slice(0,5));}
-      else{if(!input.slotDate||!input.startTime)fail(400,"SCHEDULE_REQUIRED");const calculatedEnd=customBookingEnd(input.startTime);
-        if(input.endTime!==undefined&&input.endTime!==calculatedEnd)fail(400,"CUSTOM_DURATION_INVALID");range=slotInterval(input.slotDate,input.startTime,calculatedEnd);}
+      const scheduleSlotId=input.scheduleSlotId;
+      const range=await publishedSlot(tx,scheduleSlotId,doctorId,input.consultationType);
       if(range.startsAt.getTime()<=clock())fail(400,"SLOT_IN_PAST");await assertCalendarAvailable(tx,doctorId,range.startsAt,range.endsAt);
       const duplicate=await tx.query(`SELECT id FROM appointments WHERE "patientId"=$1 AND "doctorId"=$2 AND "scheduledAt"=$3 AND status IN ('pending','approved','confirmed') LIMIT 1`,[patient.userId,doctorId,range.startsAt]);if(duplicate.rows.length)fail(409,"APPOINTMENT_REQUEST_EXISTS");
       const id=randomUUID();await tx.query(`INSERT INTO appointments (id,"patientId","doctorId","scheduleSlotId","consultationType",status,"scheduledAt","proposedEndAt","billingLineageId","createdAt","updatedAt")
@@ -259,12 +261,13 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
     async reject(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=reasonInput.parse(body);return mutate(actor,"reject",id,meta,input,async tx=>{
       await membership(tx,actor,"doctor");const row=await lockAppointment(tx,id);appointmentOwn(actor,row);expected(row,input.expectedVersion);await noTransition(tx,row);
       if(row.status!=="pending"||appointmentExpired(row,clock()))fail(409,"APPOINTMENT_REJECT_INVALID");await tx.query('UPDATE appointments SET "rejectionReason"=$2 WHERE id=$1',[id,input.reason]);await appointmentTransition(tx,row,"rejected",actor,meta.operationId,actor.correlationId,input.reason);if(row.sourceAppointmentId)await rescheduleNotification(tx,row,actor,meta.operationId,"appointment.reschedule_declined",row.patientAuthId,row.sourceAppointmentId);return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
-    async propose(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=proposalInput.parse(body);return mutate(actor,"reschedule",id,meta,input,async tx=>{
+    async propose(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=(actor.role==="patient"?patientProposalInput:proposalInput).parse(body);return mutate(actor,"reschedule",id,meta,input,async tx=>{
       const row=await lockAppointment(tx,id);appointmentOwn(actor,row);expected(row,input.expectedVersion);await noTransition(tx,row);await noProposal(tx,row);
       if(!["approved","confirmed"].includes(row.status)||appointmentExpired(row,clock()))fail(409,"RESCHEDULE_INVALID");if(!rescheduleAllowed(row,actor.role as "patient"|"doctor"))fail(409,"RESCHEDULE_LIMIT_REACHED");
-      const range=slotInterval(input.slotDate,input.startTime,input.endTime);if(range.startsAt.getTime()<=clock())fail(400,"SLOT_IN_PAST");await assertCalendarAvailable(tx,row.doctorId,range.startsAt,range.endsAt,[row.id]);
-      const next=randomUUID();await tx.query(`INSERT INTO appointments (id,"patientId","doctorId","sourceAppointmentId","consultationType",status,"scheduledAt","proposedEndAt","billingLineageId","associationVersion","patientRescheduleCount","doctorRescheduleCount","createdAt","updatedAt")
-        VALUES($1,$2,$3,$4,$5::"ConsultationType",$6::"AppointmentStatus",$7,$8,$9,$10,$11,$12,NOW(),NOW())`,[next,row.patientId,row.doctorId,row.id,row.consultationType,actor.role==="doctor"?"pending_patient_confirmation":"pending",range.startsAt,range.endsAt,row.billingLineageId,row.associationVersion,row.patientRescheduleCount,row.doctorRescheduleCount]);
+      const scheduleSlotId="scheduleSlotId" in input?input.scheduleSlotId:null;
+      const range="scheduleSlotId" in input?await publishedSlot(tx,input.scheduleSlotId,row.doctorId,row.consultationType):slotInterval(input.slotDate,input.startTime,input.endTime);if(range.startsAt.getTime()<=clock())fail(400,"SLOT_IN_PAST");await assertCalendarAvailable(tx,row.doctorId,range.startsAt,range.endsAt,[row.id]);
+      const next=randomUUID();await tx.query(`INSERT INTO appointments (id,"patientId","doctorId","sourceAppointmentId","consultationType",status,"scheduledAt","proposedEndAt","billingLineageId","associationVersion","patientRescheduleCount","doctorRescheduleCount","scheduleSlotId","createdAt","updatedAt")
+        VALUES($1,$2,$3,$4,$5::"ConsultationType",$6::"AppointmentStatus",$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())`,[next,row.patientId,row.doctorId,row.id,row.consultationType,actor.role==="doctor"?"pending_patient_confirmation":"pending",range.startsAt,range.endsAt,row.billingLineageId,row.associationVersion,row.patientRescheduleCount,row.doctorRescheduleCount,scheduleSlotId]);
       await tx.query('INSERT INTO pre_consultations (id,"appointmentId","chiefComplaint",opqrst,"isSubmitted","submittedAt") SELECT $1,$2,"chiefComplaint",opqrst,"isSubmitted","submittedAt" FROM pre_consultations WHERE "appointmentId"=$3',[randomUUID(),next,row.id]);
       const proposal=await readAppointment(tx,next);await appointmentTransition(tx,proposal,proposal.status,actor,meta.operationId,actor.correlationId,input.reason);await rescheduleNotification(tx,proposal,actor,meta.operationId,"appointment.reschedule_proposed",actor.role==="doctor"?proposal.patientAuthId:proposal.doctorAuthId);return{id:next,version:proposal.version,status:proposal.status,operationStatus:"completed"};});},
     async decline(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=reasonInput.parse(body);return mutate(actor,"decline-reschedule",id,meta,input,async tx=>{
