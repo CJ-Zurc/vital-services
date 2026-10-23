@@ -147,3 +147,7 @@ No temporary verification artifacts were added to either repository. No staging
 mutation or live antivirus-disabled acceptance was attempted. After a separately
 authorized deployment, retest signature onboarding and actual issuance/QR/file
 retrieval; unrelated Payment and notification availability gates remain.
+
+## October 23 paired Web acceptance repairs
+
+No Services runtime/schema change. Reviewed hashes were updated for the Web serializer, payment client, Records BFF and maintained payment/Records tests after reproducing staging defects. Exact-source contract suite: 5 passed; Web full suite: 302 passed, BFF check and production build passed. Earlier Services full-suite result is historical (452 passed, 2 isolated-stack skipped), not newly executed live acceptance. Deliver the reviewed matching Web revision through the existing compatibility process; no checks weakened. Live sandbox payment/four document issuances passed, but media download is truncated and normal completion-dependent workflows remain pending. Detailed sanitized evidence: `../../output/s6-payment-document-verification-2026-10-23.md`.
