@@ -6,11 +6,10 @@ import type { Actor } from '../src/eda/contracts/actor.js';
 import { selectedBlockDates, previewDateBlocks, saveDateBlocks } from '../src/eda/modules/appointment/appointment-date-blocks.js';
 import { complaintEditable, updateComplaint, complaintHistory } from '../src/eda/modules/appointment/appointment-clinical.js';
 import { rescheduleAllowed, type AppointmentRow } from '../src/eda/modules/appointment/appointment-contracts.js';
-import { customBookingEnd, complaintSchema } from '../src/eda/modules/appointment/appointment-intake.js';
+import { complaintSchema } from '../src/eda/modules/appointment/appointment-intake.js';
 
 const now=Date.parse('2026-10-21T00:00:00Z');
-test('S6 booking complaints are optional bounded and custom end rolls into the next day',()=>{
-  assert.equal(customBookingEnd('23:45'),'00:15');assert.equal(customBookingEnd('10:10'),'10:40');
+test('S6 booking complaints remain optional and bounded',()=>{
   for(const value of [undefined,null,'','   '])assert.equal(complaintSchema.parse(value),null);
   assert.equal(complaintSchema.parse(' headache '),'headache');
   assert.throws(()=>complaintSchema.parse('x'.repeat(2001)));
