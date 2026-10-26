@@ -5,8 +5,8 @@ src/eda/generated/
 .eda-secrets/
 .env
 .env.*
-!.env.eda.example
-!.env.docker.example
+!.env.example
+!.env.*.example
 coverage/
 .artifacts/
 *.log

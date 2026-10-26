@@ -36,7 +36,7 @@ try {
             ...(role === 'patient' ? { patient: { create: { authId: account.authId, ehrPatientId: account.ehrPatientId!,
               isRecordAvailable: true, ehrRecordOrigin: 'preexisting' } } } : {}),
             ...(role === 'doctor' ? { doctor: { create: { authId: account.authId,
-              departmentExternalId: account.departmentId!, departmentName: account.departmentName! } } } : {}),
+              departmentExternalId: account.specialtyId!, departmentName: account.specialtyName!, specialty: account.specialtyName! } } } : {}),
             ...(role === 'admin' ? { admin: { create: { authId: account.authId } } } : {}),
           } });
           changed = true;
@@ -44,7 +44,7 @@ try {
           await tx.vitalPatient.update({ where: { authId: account.authId }, data: { ehrPatientId: account.ehrPatientId!, isRecordAvailable: true, ehrRecordOrigin: 'preexisting' } });
           changed = true;
         } else if (role === 'doctor' && !baselineLinksMatch(account, user)) {
-          await tx.vitalDoctor.update({ where: { authId: account.authId }, data: { departmentExternalId: account.departmentId!, departmentName: account.departmentName! } });
+          await tx.vitalDoctor.update({ where: { authId: account.authId }, data: { departmentExternalId: account.specialtyId!, departmentName: account.specialtyName!, specialty: account.specialtyName! } });
           changed = true;
         }
         if (changed) {
@@ -52,13 +52,26 @@ try {
           const source = await tx.vitalUser.findUniqueOrThrow({ where: { authId: account.authId } });
           await recordProfileEffects(tx, { authId: account.authId, role: role as 'patient' | 'doctor' | 'admin', serviceId: 'vital-web',
             scopes: ['profile.materialize'], resource: account.authId, correlationId: randomUUID(), isSuperAdmin: false }, source,
-            'materialize', { doctorMirror: role === 'doctor', departmentExternalId: account.departmentId, departmentName: account.departmentName });
+            'materialize', { doctorMirror: role === 'doctor', departmentExternalId: account.specialtyId, departmentName: account.specialtyName });
         }
         user = await tx.vitalUser.findUniqueOrThrow({ where: { authId: account.authId }, include: { patient: true, doctor: true, admin: true } });
       }
       if (!baselineLinksMatch(account, user)) {
         throw new Error('BASELINE_LINK_VERIFICATION_FAILED');
       }
+    }, { isolationLevel: 'Serializable' });
+  }
+  const specialties = new Map(manifest.catalog.filter(row => row.category === 'specialty').map(row => [row.id, row.name]));
+  for (const doctor of await db.vitalDoctor.findMany()) {
+    const canonical = doctor.departmentExternalId ? specialties.get(doctor.departmentExternalId) : undefined;
+    if (!canonical || (doctor.departmentName === canonical && doctor.specialty === canonical)) continue;
+    if (verify) throw new Error('BASELINE_SPECIALTY_LABEL_MISMATCH');
+    await db.$transaction(async tx => {
+      await tx.vitalDoctor.update({ where: { authId: doctor.authId }, data: { departmentName: canonical, specialty: canonical } });
+      const user = await tx.vitalUser.update({ where: { authId: doctor.authId }, data: { version: { increment: 1 } } });
+      await recordProfileEffects(tx, { authId: doctor.authId, role: 'doctor', serviceId: 'vital-web',
+        scopes: ['profile.materialize'], resource: doctor.authId, correlationId: randomUUID(), isSuperAdmin: false }, user,
+        'materialize', { doctorMirror: true, departmentExternalId: doctor.departmentExternalId, departmentName: canonical });
     }, { isolationLevel: 'Serializable' });
   }
   console.log(JSON.stringify({ success: true, mode: verify ? 'verify' : 'seed', identities: manifest.accounts.filter(a => a.systems.vital).length }));
