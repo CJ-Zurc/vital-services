@@ -26,7 +26,7 @@ if (mode === 'api' || mode === 'worker') {
   }
   if (mode === 'worker') environment.VITAL_RABBITMQ_URL = broker('runtime', 'vital');
   commands = [[`dist/entrypoints/${mode}.js`]];
-} else if (['migrate', 'seed', 'seed-verify'].includes(mode)) {
+} else if (['migrate', 'seed', 'seed-verify', 'catalog-snapshot', 'catalog-restore'].includes(mode)) {
   for (const domain of ['core', 'integrations']) {
     const url = new URL(database(domain, 'migrator'));
     if (environment.VITAL_EDA_PRIVATE_HTTP !== 'true') {
@@ -36,6 +36,11 @@ if (mode === 'api' || mode === 'worker') {
     environment[`VITAL_${domain.toUpperCase()}_MIGRATION_URL`] = url.href;
   }
   if (mode === 'migrate') commands = ['core', 'integrations'].map(domain => ['node_modules/prisma/build/index.js', 'migrate', 'deploy', '--config', `prisma/${domain}.config.ts`]);
+  else if (mode.startsWith('catalog-')) {
+    environment.VITAL_BASELINE_SEED = 'true';
+    environment.VITAL_CATALOG_RECOVERY_MODE = mode === 'catalog-snapshot' ? 'snapshot' : 'restore';
+    commands = [['dist/entrypoints/catalog-recovery.js']];
+  }
   else { environment.VITAL_BASELINE_SEED = 'true'; environment.VITAL_BASELINE_VERIFY = String(mode === 'seed-verify'); commands = [['dist/entrypoints/seed.js']]; }
 } else if (mode === 'provision') {
   if (suffix) throw new Error('Test broker topology belongs to the test harness, not the runtime provisioner.');
@@ -63,7 +68,7 @@ if (mode === 'api' || mode === 'worker') {
     environment.EDA_TEST_CORE_MIGRATOR_URL = database('core', 'migrator');
   }
   commands = [['--import', 'tsx', '--test', 'test/eda-integration.test.ts']];
-} else throw new Error('Expected api, worker, migrate, seed, seed-verify, provision or test mode.');
+} else throw new Error('Expected api, worker, migrate, seed, seed-verify, catalog-snapshot, catalog-restore, provision or test mode.');
 
 // Keep PID 1 signal propagation and never print credential-bearing environment.
 for (const args of commands) {

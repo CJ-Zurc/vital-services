@@ -17,3 +17,4 @@ describe implemented interfaces; source tests do not certify a deployed workflow
 
 
 - [S6 appointment revisions](eda/sprint6-appointment-revisions.md): ratings, complaint history, calendar review, quotas and VITAL inbox contracts.
+See [department and specialty contracts](department_catalog.md).
