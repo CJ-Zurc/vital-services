@@ -1,5 +1,7 @@
 // Dedicated synthetic keys for isolated lifecycle/code issuance tests only.
-import '../fixtures/appointment-access.js';
+process.env.VITAL_APPOINTMENT_ACCESS_KEYS=JSON.stringify({1:Buffer.alloc(32,17).toString('base64')});
+process.env.VITAL_APPOINTMENT_ACCESS_ACTIVE_KEY_VERSION='1';
+process.env.VITAL_APPOINTMENT_ACCESS_DIGEST_KEY=Buffer.alloc(32,19).toString('base64');
 import assert from "node:assert/strict";
 import { randomUUID, generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
