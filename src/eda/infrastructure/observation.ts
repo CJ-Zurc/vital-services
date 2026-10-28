@@ -5,8 +5,10 @@ function emit(record: Record<string, unknown>) {
   try { console.log(JSON.stringify(record)); } catch { /* Telemetry never changes domain outcomes. */ }
 }
 
-export function observeDeliveryOutcome(destination: 'audit' | 'notification', status: 'accepted' | 'retry_pending' | 'blocked') {
-  emit({ event_type: 'delivery_outcome', destination, status });
+export function observeDeliveryOutcome(destination: 'audit' | 'notification', status: 'accepted' | 'retry_pending' | 'blocked',
+  failure?: { reason: 'configuration' | 'transport' | 'http_rejected' | 'receipt' | 'storage'; http_status?: number }) {
+  emit({ event_type: 'delivery_outcome', destination, status, ...(failure ? { failure_reason: failure.reason,
+    ...(failure.http_status === undefined ? {} : { http_status: failure.http_status }) } : {}) });
 }
 
 /** No URLs, query strings, bodies, or caller-supplied identity enter telemetry. */

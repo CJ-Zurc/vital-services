@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { observeDelivery, observeRequest, observeDeliveryOutcome } from '../src/eda/infrastructure/observation.js';
+import { deliverPending } from '../src/eda/modules/platform-delivery/delivery.js';
 
 test('delivery observation emits explicit zeros without leaking stored payloads', async () => {
   const lines: string[] = [];
@@ -43,4 +44,20 @@ test('delivery outcome observation contains only destination and delivery state'
   try { observeDeliveryOutcome('audit', 'blocked'); }
   finally { console.log = previous; }
   assert.deepEqual(JSON.parse(lines[0]), { event_type: 'delivery_outcome', destination: 'audit', status: 'blocked' });
+});
+
+test('delivery failure observation identifies HTTP rejection without content', async () => {
+  const previous = console.log; const lines: string[] = [];
+  console.log = value => { lines.push(String(value)); };
+  let queries = 0;
+  const pool = { query: async () => ++queries === 1 ? { rows: [{ id: 'private-id', destination: 'audit',
+    correlationId: 'private-correlation', payload: { sensitive: 'private-content' }, attempts: 0 }] } : { rows: [], rowCount: 1 } };
+  try {
+    await deliverPending(pool as never, { audit: { baseUrl: 'https://example.invalid', key: 'private-key' },
+      notification: { baseUrl: 'https://example.invalid', key: 'private-key' } },
+    (async () => new Response('private-response', { status: 422 })) as typeof fetch);
+  } finally { console.log = previous; }
+  assert.deepEqual(JSON.parse(lines[0]), { event_type: 'delivery_outcome', destination: 'audit',
+    status: 'retry_pending', failure_reason: 'http_rejected', http_status: 422 });
+  assert.ok(!lines[0].includes('private'));
 });
