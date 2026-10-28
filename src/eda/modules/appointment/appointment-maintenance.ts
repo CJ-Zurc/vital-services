@@ -54,7 +54,7 @@ export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,
         const quote=(await tx.query('SELECT "billingLineageId" FROM appointment_billing_quotes WHERE "billingLineageId"=$1',[row.billingLineageId])).rows[0];
         const projection=kind==='complete'?(await tx.query('SELECT "sourceVersion" FROM appointment_payment_projections WHERE "appointmentId"=$1',[row.id])).rows[0]:null;
         if(quote)await tx.query(`INSERT INTO appointment_billing_intents (id,"appointmentId","billingLineageId","appointmentVersion","associationVersion","actorAuthId","operationId","requestHash",kind,state,"expiresAt","committedAt","ownerLogId","expectedPaymentVersion","createdAt")
-          VALUES($1,$2,$3,$4,$5,$6,$6,$7,$8,'committed',$9,$9,$10,$11,NOW())`,[randomUUID(),row.id,row.billingLineageId,row.version,row.associationVersion,operationId,requestHash("MAINTENANCE",kind,{id:row.id,version:row.version}),kind,committedAt,logId,projection?.sourceVersion??null]);
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'committed',$10,$10,$11,$12,NOW())`,[randomUUID(),row.id,row.billingLineageId,row.version,row.associationVersion,operationId,operationId,requestHash("MAINTENANCE",kind,{id:row.id,version:row.version}),kind,committedAt,logId,projection?.sourceVersion??null]);
         processed++;
       }await tx.query("COMMIT");
     }catch(error){await tx.query("ROLLBACK");if(!(error instanceof DomainError))throw error;}finally{tx.release();}}
