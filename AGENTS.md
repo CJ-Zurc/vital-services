@@ -31,3 +31,7 @@ Local skills:
   VITAL Services containers.
 - Use `.agents/skills/git-commits/SKILL.md` when asked to draft or execute a
   commit for this repo.
+
+## VITAL intelligence
+
+This repository owns VITAL-only NLP, booking guidance and symptom analytics. See `docs/intelligence.md`. Specialty recommendation operations are retired. Patient normalization and synthetic staff preview are separately gated; appointment privacy/code controls are independent of AI flags. AI data lives in Core, Python has no DB credentials, and original clinical text must not enter logs or job messages. Do not import the `vital-ai` snapshot at runtime or alter AIMS/EHR analytics.

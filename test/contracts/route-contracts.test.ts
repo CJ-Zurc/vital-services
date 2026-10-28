@@ -47,7 +47,7 @@ function get(path: string) {
 function method(path: string, verb = 'GET') { return get(path).methods.find((row: any) => row.method === verb); }
 
 test('route contract review maps every current Web route and exported method without claiming runtime parity', () => {
-  assert.equal(current.length, 131, 'A changed route inventory requires explicit source review.');
+  assert.equal(current.length, 158, 'A changed route inventory requires explicit source review.');
   for (const route of current) {
     const result = get(route.path);
     assert.equal(result.reviewed, true, route.path + ': ' + JSON.stringify(result.gates));
@@ -161,6 +161,26 @@ test('route contract review hashes source validators and test evidence without i
   assert.match(sending.callerAndTestEvidence.scope, /HTTP method.*not inferred/);
   const route = current.find(row => row.path === '/api/doctor/google-meet/callback')!;
   assert.deepEqual(review(route), review(route), 'Static output must be deterministic, without timestamps or live calls.');
+});
+
+test('AI and appointment-code routes retain explicit owners, roles and dispatch',()=>{
+  const intake=method('/api/patient/intakes','PATCH');
+  assert.equal(intake.family,'intelligence');assert.equal(intake.requiredRole,'patient');
+  assert.equal(intake.dispatch.symbol,'targetIntelligence');
+  assert.equal(method('/api/doctor/ai/sandbox/analyze','POST').requiredRole,'doctor');
+  assert.equal(method('/api/admin/analytics/clusters/label','POST').requiredRole,'admin');
+  assert.equal(method('/api/doctor/appointments/[appointmentId]/intake-brief','POST').dispatch.symbol,'forward');
+  for(const [path,verb,role] of [
+    ['/api/doctor/appointments/[appointmentId]/access/redeem','POST','doctor'],
+    ['/api/patient/appointments/[appointmentId]/access/code','GET','patient'],
+    ['/api/patient/appointments/[appointmentId]/access/reissue','POST','patient'],
+    ['/api/patient/appointments/[appointmentId]/access/withdraw','POST','patient']]){
+    const row=method(path!,verb!);assert.equal(row.family,'appointment');assert.equal(row.requiredRole,role);
+    assert.equal(row.dispatch.symbol,'targetAppointment');assert.equal(row.dispatch.frontDoor.targetModeAccepted,true);
+  }
+  const route=current.find(r=>r.path==='/api/patient/intakes/analyze')!;
+  const unexpected=review({...route,methods:['DELETE']});assert.equal(unexpected.reviewed,false);
+  assert.ok(unexpected.gates.some((g:any)=>g.code==='ROUTE_UNREVIEWED'));
 });
 
 test('route contract review gates unknown missing changed and mismatched route evidence', () => {

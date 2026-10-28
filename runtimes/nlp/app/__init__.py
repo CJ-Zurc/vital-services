@@ -1,0 +1,1 @@
+"""VITAL AI analytics service."""

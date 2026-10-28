@@ -1,8 +1,14 @@
+import { isDeepStrictEqual } from 'node:util';
+import { appointmentPayloadCrypto } from './access-crypto.js';
+import { restrictedBrief } from './appointment-summary.js';
+import type { IntakePayload,Concept } from '../intelligence/contracts.js';
+import { knownReviewIdentities,appointmentAccessState } from './appointment-access.js';
+import { reviewIntake,reviewText } from './review-sanitizer.js';
 import type { Pool } from 'pg';
 import { readDoctorDashboard } from './doctor-dashboard.js';
 import { z } from 'zod';
 import { DomainError, requireScope, type Actor } from '../../contracts/actor.js';
-import { membership } from './appointment.js';
+import { membership,readAppointment } from './appointment.js';
 import { dateOnly, slotInterval, type AppointmentRow } from './appointment-contracts.js';
 import type { PaymentStore } from '../payment/payment-store.js';
 import type { VideoRuntime } from '../video/runtime.js';
@@ -29,7 +35,7 @@ export function serializeReadSlot(row:SlotRow, now=Date.now(), publicView=false)
   const bookings=appointments.filter(a=>['approved','confirmed'].includes(a.status));
   const pending=appointments.filter(a=>a.status==='pending');
   const isExpired=slotInterval(slotDate,startTime,endTime).endsAt.getTime()<=now;
-  const item=(a:SlotBooking)=>({id:a.id,status:a.status,consultationType:a.consultationType,patientId:publicView?null:a.patientId});
+  const item=(a:SlotBooking)=>({id:a.id,status:a.status,consultationType:a.consultationType,patientId:null});
   const booked=(row.bookedCount??bookings.length)>0,hasPending=(row.pendingCount??pending.length)>0;
   return {id:row.id,version:row.version,slotDate,startTime,endTime,endsNextDay:endTime<=startTime,consultationType:row.consultationType,
     consultationTypeLabel:label(row.consultationType),isPublished:row.isPublished,isExpired,hasPendingRequest:hasPending,
@@ -51,7 +57,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
     const query=paging.parse(input),page=prepareReadPage(actor,'appointments:'+id+':history',{},query,clock);
     const result=await readCollectionPage<LogRow>(pool,page,{sql:'SELECT id,"fromStatus","toStatus","changedByRole",note,"changedAt" FROM appointment_logs WHERE "appointmentId"=$1',
       values:[id],order:[{key:'changedAt',direction:'ASC',cast:'timestamp'},{key:'id',direction:'ASC',cast:'text'}]});
-    if(check)await authorizeItem(actor,id);return result;
+    if(check)await authorizeItem(actor,id);if(actor.role==='doctor'&&!(await appointmentAccessState(pool,await readAppointment(pool,id))).identityUnlocked)return{...result,items:result.items.map(l=>({...l,note:null}))};return result;
   }
   async function relatedPage(actor:Actor,row:{id:string;sourceAppointmentId:string|null;patientId:string;doctorId:string},input:unknown={}) {
     const query=paging.parse(input),page=prepareReadPage(actor,'appointments:'+row.id+':relationships',{patientId:row.patientId,doctorId:row.doctorId},query,clock);
@@ -147,18 +153,25 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
       }
       const schedule=(r:CalendarFields)=>r.slotDate?{slotDate:r.slotDate,startTime:r.startTime!.slice(0,5),endTime:r.endTime!.slice(0,5)}:null;
       const relation=(r:RelatedRow)=>({id:r.id,status:r.status,scheduledAt:r.scheduledAt,proposedEndAt:r.proposedEndAt,updatedAt:r.updatedAt,cancellationReason:r.cancellationReason,scheduleSlot:schedule(r),statusLogs:r.statusLogs});
-      result.push({id:row.id,version:row.version,patientId:row.patientId,doctorId:row.doctorId,patientAuthId:row.patientAuthId,doctorAuthId:row.doctorAuthId,
+      const access=await appointmentAccessState(pool,row,page.at);
+      const knownIdentities=await knownReviewIdentities(pool,row.id);
+      const restricted=actor.role==='doctor'&&!access.identityUnlocked;
+      const noIntake=restricted&&['locked','historical_only'].includes(access.state);
+      const stored=(await pool.query('SELECT summary FROM appointment_intake_briefs WHERE "appointmentId"=$1',[row.id])).rows[0];
+      const brief=stored?appointmentPayloadCrypto().decrypt(stored.summary,'appointment-brief:'+row.id) as {brief:string;payload:IntakePayload;concepts:Concept[]}:null;
+      const summary=noIntake?null:brief?(restricted?restrictedBrief(brief.payload,brief.concepts,knownIdentities):brief.brief):null;
+      result.push({access,id:row.id,version:row.version,patientId:restricted?null:row.patientId,doctorId:row.doctorId,patientAuthId:restricted?null:row.patientAuthId,doctorAuthId:row.doctorAuthId,
         specialty:row.specialty,status:row.status,consultationType:row.consultationType,scheduleSlotId:row.scheduleSlotId,
         scheduleSlot:schedule(row),sourceAppointmentId:row.sourceAppointmentId,appointmentKind:row.appointmentKind,followUpOfAppointmentId:row.followUpOfAppointmentId,
-        patientRescheduleCount:row.patientRescheduleCount,doctorRescheduleCount:row.doctorRescheduleCount,cancellationReason:row.cancellationReason,rejectionReason:row.rejectionReason,
-        ehrCaseId:row.ehrCaseId,scheduledAt:row.scheduledAt,proposedEndAt:row.proposedEndAt,createdAt:row.createdAt,updatedAt:row.updatedAt,
+        patientRescheduleCount:row.patientRescheduleCount,doctorRescheduleCount:row.doctorRescheduleCount,cancellationReason:restricted?reviewText(row.cancellationReason,knownIdentities).text:row.cancellationReason,rejectionReason:restricted?reviewText(row.rejectionReason,knownIdentities).text:row.rejectionReason,
+        ehrCaseId:restricted?null:row.ehrCaseId,scheduledAt:row.scheduledAt,proposedEndAt:row.proposedEndAt,createdAt:row.createdAt,updatedAt:row.updatedAt,
         doctorConfirmedAt:row.doctorConfirmedAt,patientConfirmedAt:row.patientConfirmedAt,completionDeadlineAt:row.completionDeadlineAt,autoCompletedAt:row.autoCompletedAt,paperworkLockedAt:row.paperworkLockedAt,
         rating:actor.role==='patient'&&row.status==='completed'&&row.ownRating!=null&&row.ownRating>=1&&row.ownRating<=5?{rating:row.ownRating,submittedAt:row.ratingSubmittedAt}:null,
         canRate:actor.role==='patient'&&row.status==='completed'&&row.ownRating==null&&row.ratingPaymentEligible===true,
-        preConsultation:{chiefComplaint:row.chiefComplaint??null,opqrst:row.opqrst??null},statusLogs:logs,
-        sourceAppointment:related.find(r=>r.id===row.sourceAppointmentId)?relation(related.find(r=>r.id===row.sourceAppointmentId)!):null,
-        rescheduleProposals:related.filter(r=>r.sourceAppointmentId===row.id).map(relation),followUpAppointments:related.filter(r=>r.followUpOfAppointmentId===row.id).map(r=>({id:r.id,status:r.status})),
-        payment:financial?{status:financial.status,amount:financial.amount,checkoutUrl:financial.checkoutUrl,paidAt:financial.paidAt,refundEligible:financial.refundEligible}:null,
+        preConsultation:{summary,privacyWithheld:restricted&&(reviewText(row.chiefComplaint,knownIdentities).withheld||!isDeepStrictEqual(reviewIntake(row.opqrst,knownIdentities),row.opqrst)),chiefComplaint:noIntake?null:restricted?reviewText(row.chiefComplaint,knownIdentities).text:row.chiefComplaint??null,opqrst:noIntake?null:restricted?reviewIntake(row.opqrst,knownIdentities):row.opqrst??null},statusLogs:restricted?logs.map(l=>({...l,note:null})):logs,
+        sourceAppointment:restricted?null:related.find(r=>r.id===row.sourceAppointmentId)?relation(related.find(r=>r.id===row.sourceAppointmentId)!):null,
+        rescheduleProposals:restricted?[]:related.filter(r=>r.sourceAppointmentId===row.id).map(relation),followUpAppointments:restricted?[]:related.filter(r=>r.followUpOfAppointmentId===row.id).map(r=>({id:r.id,status:r.status})),
+        payment:financial?{status:financial.status,amount:financial.amount,checkoutUrl:restricted?null:financial.checkoutUrl,paidAt:financial.paidAt,refundEligible:financial.refundEligible}:null,
         consultation:row.sessionStartedAt||row.sessionEndedAt||video?{meetingProvider:video?.meetingProvider??null,meetingUrl:video?.meetingUrl??null,normalizedMeetingUrl:video?.normalizedMeetingUrl??null,
           meetingValidationStatus:video?.meetingValidationStatus??null,sessionStartedAt:row.sessionStartedAt??null,sessionEndedAt:row.sessionEndedAt??null}:null});
     }
@@ -181,7 +194,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
     history:(actor:Actor,id:string,input:unknown={})=>historyPage(actor,id,input),
     async relationships(actor:Actor,id:string,input:unknown={}){
       const row=await authorizeItem(actor,id),source=(await pool.query<{sourceAppointmentId:string|null}>('SELECT "sourceAppointmentId" FROM appointments WHERE id=$1',[id])).rows[0]!;
-      const result=await relatedPage(actor,{...row,...source},input);await authorizeItem(actor,id);return result;
+      const result=await relatedPage(actor,{...row,...source},input);await authorizeItem(actor,id);if(actor.role==='doctor'&&!(await appointmentAccessState(pool,await readAppointment(pool,id))).identityUnlocked)return{...result,items:[]};return result;
     },
     async dashboard(actor:Actor){requireScope(actor,'appointments.dashboard.read',actor.authId);const doctor=await membership(pool,actor);
       if(actor.role!=='doctor')unavailable('DASHBOARD_RECORDS_NOTIFICATIONS');
@@ -189,11 +202,11 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
     availability:(actor:Actor,id:string,input:unknown={})=>availability(actor,id,input),
     async discovery(actor:Actor,input:unknown={}){
       requireScope(actor,'appointments.discovery.read',actor.authId);await membership(pool,actor,'patient');
-      const f=z.object({specialty:z.string().trim().max(160).optional(),consultationType:z.enum(['virtual','in_person']).optional(),availableDate:dateOnly.optional(),...readPageInput}).strict().parse(input);
-      const revision=await discoveryRevision(),page=prepareReadPage(actor,'doctor-discovery',{specialty:f.specialty??null,consultationType:f.consultationType??null,availableDate:f.availableDate??null},f,clock);
-      const doctors=await readCollectionPage<{id:string;specialty:string|null}>(pool,page,{sql:`SELECT d."userId" AS id,d.specialty,$3::text AS "discoveryRevision" FROM vital_doctors d JOIN vital_users u ON u.id=d."userId" AND u."authId"=d."authId"
+      const f=z.object({specialty:z.string().trim().max(160).optional(),consultationType:z.enum(['virtual','in_person']).optional(),availableDate:dateOnly.optional(),departments:z.string().max(120).optional().transform(v=>v?z.array(z.uuid()).max(3).parse(v.split(',')):[]),availabilityFirst:z.enum(['true','false']).optional(),...readPageInput}).strict().parse(input);
+      const revision=await discoveryRevision(),page=prepareReadPage(actor,'doctor-discovery',{specialty:f.specialty??null,consultationType:f.consultationType??null,availableDate:f.availableDate??null,departments:f.departments,availabilityFirst:f.availabilityFirst??'false'},f,clock);
+      const doctors=await readCollectionPage<{id:string;specialty:string|null;departmentExternalId:string|null}>(pool,page,{sql:`SELECT d."userId" AS id,d.specialty,d.department_external_id AS "departmentExternalId",$3::text AS "discoveryRevision" FROM vital_doctors d JOIN vital_users u ON u.id=d."userId" AND u."authId"=d."authId"
         WHERE d."isDoctorOnboardingComplete"=true AND u.role='doctor' AND ($1::text IS NULL OR d.specialty ILIKE '%'||$1||'%')
-        AND ($2::text IS NULL OR d."availabilityType"::text IN ($2,'both'))`,values:[f.specialty??null,f.consultationType??null,revision],
+        AND ($2::text IS NULL OR d."availabilityType"::text IN ($2,'both')) AND (cardinality($4::text[])=0 OR d.department_external_id=ANY($4::text[]))`,values:[f.specialty??null,f.consultationType??null,revision,f.departments],
         order:[{key:'specialty',direction:'ASC',cast:'text'},{key:'id',direction:'ASC',cast:'text'}]});
       const results=[];
       for(const d of doctors.items){
@@ -202,14 +215,14 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
           JOIN appointments a ON a.id=f."appointmentId" WHERE COALESCE(f."doctorId",a."doctorId")=$1 AND a.status='completed' AND f."starRating" BETWEEN 1 AND 5`,[d.id])).rows[0]!;
         const earliest=(await pool.query<SlotRow>(`SELECT s.id,s.version,s."slotDate"::text,s."startTime"::text,s."endTime"::text,s."consultationType",s."isPublished",'[]'::jsonb AS appointments
           FROM schedules s WHERE s."doctorId"=$1 AND s."isPublished" AND ($2::date IS NULL OR s."slotDate"=$2::date)
-          AND ($3::text IS NULL OR s."consultationType"::text IN ($3,'both'))
+          AND ($3::text IS NULL OR s."consultationType"::text IN ($3,'both')) AND ($5::boolean=false OR ((s."slotDate"+s."startTime") AT TIME ZONE 'Asia/Manila'>$4::timestamptz AND ($2::date IS NOT NULL OR s."slotDate"<=($4::timestamptz AT TIME ZONE 'Asia/Manila')::date+30)))
           AND (s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila'>$4::timestamptz
           AND NOT EXISTS(SELECT 1 FROM appointments a WHERE a."scheduleSlotId"=s.id AND a.status IN ('approved','confirmed'))
           AND NOT EXISTS(SELECT 1 FROM doctor_date_blocks b WHERE b.doctor_id=$1 AND s."slotDate" BETWEEN b.start_date AND b.end_date
             AND (b.weekday IS NULL OR b.weekday=EXTRACT(DOW FROM s."slotDate"))) ORDER BY s."slotDate",s."startTime",s.id LIMIT 1`,
-          [d.id,f.availableDate??null,f.consultationType??null,new Date(page.at)])).rows[0];
+          [d.id,f.availableDate??null,f.consultationType??null,new Date(page.at),f.availabilityFirst==='true'])).rows[0];
         const first=earliest?serializeReadSlot(earliest,page.at,true):null;
-        results.push({...doctor,starRating:summary.average===null?0:Number(summary.average),reviewCount:z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).parse(summary.count),
+        results.push({...doctor,...(f.departments.length?{departmentExternalId:d.departmentExternalId}:{}),starRating:summary.average===null?0:Number(summary.average),reviewCount:z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).parse(summary.count),
           earliestSlot:first?{id:first.id,date:first.slotDate,startTime:first.startTime,endTime:first.endTime,endsNextDay:first.endsNextDay,consultationType:first.consultationType,consultationTypeLabel:first.consultationTypeLabel}:null});
       }
       if(await discoveryRevision()!==revision)throw new DomainError(409,'APPOINTMENT_READ_SNAPSHOT_CHANGED','Discovery changed during composition.');
@@ -223,9 +236,9 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
       const result=await blocksPage(actor,member.userId,input);await membership(pool,actor,'doctor');return {blocks:result.items.map(({id,version,startDate,endDate,weekday})=>({id,version,startDate,endDate,weekday})),meta:result.meta};},
     async bookings(actor:Actor,id:string,input:unknown={}){requireScope(actor,'appointments.schedule.read',id);const member=await membership(pool,actor,'doctor');
       const query=paging.parse(input),page=prepareReadPage(actor,'schedules:'+id+':bookings',{},query,clock);
-      const result=await readCollectionPage<SlotBooking>(pool,page,{sql:`SELECT a.id,a.status,a."consultationType",a."patientId" FROM schedules s JOIN appointments a ON a."scheduleSlotId"=s.id
+      const result=await readCollectionPage<SlotBooking>(pool,page,{sql:`SELECT a.id,a.status,a."consultationType",NULL::text AS "patientId" FROM schedules s JOIN appointments a ON a."scheduleSlotId"=s.id
         WHERE s.id=$1 AND s."doctorId"=$2 AND a.status::text=ANY($3::text[])`,values:[z.uuid().parse(id),member.userId,active],order:[{key:'id',direction:'ASC',cast:'text'}]});
-      await membership(pool,actor,'doctor');return result;},
+      await membership(pool,actor,'doctor');return{...result,items:result.items.map(item=>({...item,patientId:null}))};},
   };
   async function discoveryRevision(){
     return(await pool.query<{revision:string}>(`SELECT md5(jsonb_build_array(

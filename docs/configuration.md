@@ -1,4 +1,8 @@
+> **2026-10-28 superseding scope:** Specialty recommendation endpoints are retired (410). The 19-specialty TRACE lookup remains for manual selection. Booking is doctor/slot first, with NLP confirmation in final review. Appointment identity and record access require the separate six-digit-code policy, independently of AI flags. Deploy paired Web/Services contracts and provision dedicated access keys before cutover. See [the current implementation brief](vital-ai-implementation.md).
+
 # VITAL configuration
+
+The AI booking catalog is packaged at `assets/ai/department-catalog.json`, relative to the Services working directory (`/app` in containers). An environment-specific replacement can pin reviewed TRACE UUIDs at that same path; pins must still match active TRACE records and accepted aliases. No live UUIDs are shipped. See [department mapping](department-mapping.md).
 
 The root files are `.env.vital_infra`, `.env.vital_eda_api`,
 `.env.vital_eda_worker`, `.env.vital_eda_web` and `.env.vital_eda_tools`.
@@ -20,3 +24,7 @@ retention deletion disabled. Preserve configured Google client credentials in th
 backend owner without enabling provider activity. Auth Google login is separate.
 Use service-owned feature flags consistently across Web/API/worker. Never disable
 OTP or enable shared sandbox bypasses for normal staging.
+
+## VITAL intelligence prototype
+
+[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.

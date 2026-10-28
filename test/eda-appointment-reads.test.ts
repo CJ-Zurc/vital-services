@@ -1,3 +1,4 @@
+import { accessFixtureSql } from './fixtures/appointment-access.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -13,6 +14,7 @@ function fixture(){
     scheduledAt:new Date('2026-10-16T01:00:00Z'),proposedEndAt:new Date('2026-10-16T02:00:00Z'),billingLineageId:randomUUID(),associationVersion:1,sourceAppointmentId:null};
   const calls:{sql:string;args:unknown[]}[]=[];let revoked=false;
   const query=async(sql:string,args:unknown[]=[])=>{calls.push({sql,args});
+    const privacy=accessFixtureSql(sql,args,row);if(privacy)return privacy;
     if(/^(BEGIN|COMMIT|ROLLBACK)/.test(sql))return{rows:[]};
     if(sql.includes(' AS revision')&&sql.includes('COUNT(*)'))return{rows:[{revision:'fixture',total:sql.includes('SELECT a.*,p.')?'1':'0'}]};
     if(sql.includes('SELECT md5(jsonb_build_array'))return{rows:[{revision:'a'.repeat(32)}]};
@@ -37,7 +39,7 @@ test('appointment reads enforce exact request scope resource role and current me
 });
 test('appointment pending requests bind owning doctor and pending status without mutations',async()=>{
   const f=fixture(),result=await f.reads.listRequests(f.actor);
-  assert.equal(result.requests[0]?.id,f.row.id);assert.equal(result.requests[0]?.patientAuthId,f.row.patientAuthId);
+  assert.equal(result.requests[0]?.id,f.row.id);assert.equal(result.requests[0]?.patientAuthId,null);
   const query=f.calls.find(c=>c.sql.startsWith('SELECT r.*')&&c.sql.includes('SELECT a.*,p.'))!;
   assert.equal(query.args[0],f.row.doctorId);assert.equal(query.args[1],'pending');assert.match(query.sql,/createdAt" DESC/);
   assert.equal(result.requests[0]?.payment,null);assert.equal(result.requests[0]?.consultation,null);

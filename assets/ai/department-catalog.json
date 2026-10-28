@@ -1,0 +1,29 @@
+{
+  "version": "vital-departments-v2",
+  "bodhiSourceCommit": "daca31c2a5a28876a0140135015518a44eb2d37d",
+  "departments": [
+    {"key":"internal-medicine","name":"Internal Medicine","aliases":["Internal Medicine Department"],"bodhiSpecialties":[{"id":"44","name":"Internal medicine specialist"}],"traceDepartmentId":null},
+    {"key":"pediatrics","name":"Pediatrics","aliases":["Paediatrics","Pediatrics Department","TRACE Pediatrics"],"bodhiSpecialties":[{"id":"9","name":"Paediatrician"}],"traceDepartmentId":null},
+    {"key":"cardiology","name":"Cardiology","aliases":["Cardiology Department","TRACE Cardiology"],"bodhiSpecialties":[{"id":"1","name":"Cardiologist"}],"traceDepartmentId":null},
+    {"key":"otolaryngology-ent","name":"Otolaryngology (ENT)","aliases":["ENT","ENT Department","Otolaryngology","Otolaryngology Department","Otorhinolaryngology"],"bodhiSpecialties":[{"id":"4","name":"ENT"}],"traceDepartmentId":null},
+    {"key":"ophthalmology","name":"Ophthalmology","aliases":["Opthalmology","Ophthalmology Department"],"bodhiSpecialties":[{"id":"13","name":"Ophthalmologist"}],"traceDepartmentId":null},
+    {"key":"gastroenterology","name":"Gastroenterology","aliases":["Gastroentrology","Gastroenterology Department"],"bodhiSpecialties":[{"id":"5","name":"Gastroenterologist"}],"traceDepartmentId":null},
+    {"key":"pulmonology","name":"Pulmonology","aliases":["Pulmonology Department"],"bodhiSpecialties":[{"id":"21","name":"Pulmonologist"},{"id":"30","name":"Chest Physician"}],"traceDepartmentId":null},
+    {"key":"nephrology","name":"Nephrology","aliases":["Nephrologoy","Nephrology Department"],"bodhiSpecialties":[{"id":"11","name":"Nephrologist"}],"traceDepartmentId":null},
+    {"key":"urology","name":"Urology","aliases":["Urology Department"],"bodhiSpecialties":[{"id":"12","name":"Urologist"}],"traceDepartmentId":null},
+    {"key":"endocrinology","name":"Endocrinology","aliases":["Endocrinology Department"],"bodhiSpecialties":[{"id":"15","name":"Endocrinologist"},{"id":"31","name":"Diabetologist"}],"traceDepartmentId":null},
+    {"key":"rheumatology","name":"Rheumatology","aliases":["Rheumatology Department"],"bodhiSpecialties":[{"id":"18","name":"Rheumatologist"}],"traceDepartmentId":null},
+    {"key":"neurology","name":"Neurology","aliases":["Neurology Department"],"bodhiSpecialties":[{"id":"10","name":"Neurologist"}],"traceDepartmentId":null},
+    {"key":"psychiatry","name":"Psychiatry","aliases":["Psychiatry Department"],"bodhiSpecialties":[{"id":"16","name":"Psychiatrist"}],"traceDepartmentId":null},
+    {"key":"allergy-immunology","name":"Allergy and Immunology","aliases":["Allergy and Immunology Department"],"bodhiSpecialties":[{"id":"32","name":"Immunologist"},{"id":"42","name":"Allergy specialist"}],"traceDepartmentId":null},
+    {"key":"obstetrics-gynecology","name":"Obstetrics and Gynecology","aliases":["Obesterics and Gynecology","Obstetrics and Gynecology Department","OB-GYN","OB/GYN"],"bodhiSpecialties":[{"id":"7","name":"Gynaecologist"},{"id":"40","name":"Obstetrician"}],"traceDepartmentId":null},
+    {"key":"orthopedics","name":"Orthopedics","aliases":["Orthopedics Department","Orthopaedics"],"bodhiSpecialties":[{"id":"8","name":"Orthopedic"}],"traceDepartmentId":null},
+    {"key":"oncology","name":"Oncology","aliases":["Oncology Department"],"bodhiSpecialties":[{"id":"14","name":"Oncologist"}],"traceDepartmentId":null},
+    {"key":"hematology","name":"Hematology","aliases":["Hematology Department","Haematology"],"bodhiSpecialties":[{"id":"43","name":"Clinical haematologist"}],"traceDepartmentId":null},
+    {"key":"dentistry","name":"Dentistry","aliases":["Dentistry Department","Dental","Dental Department"],"bodhiSpecialties":[{"id":"2","name":"Dentist"}],"traceDepartmentId":null}
+  ],
+  "excludedSources": [
+    {"id":"6","name":"General Physician","status":"pending_review","reason":"Not equivalent to Internal Medicine or TRACE General Medicine without a reviewed hospital mapping."},
+    {"id":"39","name":"Pediatric Nephrologist","status":"unsupported_subspecialty","reason":"Cannot qualify ordinary Pediatrics or adult Nephrology."}
+  ]
+}

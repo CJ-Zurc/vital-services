@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { ensureAppointmentAccess } from '../../src/eda/modules/appointment/appointment-access.js';
+import { readAppointment } from '../../src/eda/modules/appointment/appointment.js';
 import { randomUUID } from 'node:crypto';
 import type { TestContext } from 'node:test';
 import { previewDateBlocks,saveDateBlocks } from '../../src/eda/modules/appointment/appointment-date-blocks.js';
@@ -12,8 +14,12 @@ import { fixture, type Context } from './payment-live.js';
 export async function remainingOwnersLiveScenarios(t: TestContext, context: Context) {
   await t.test('S6 PostgreSQL complaint concurrency and atomic calendar reviews preserve private history',()=>fixture(context,async f=>{
     const owner=createAppointmentExtras(context.core,{}),meta=()=>({operationId:randomUUID(),requestHash:'a'.repeat(64)});
-    const actor={...f.actor,authId:f.doctorAuthId,role:'doctor' as const,scopes:['appointments.intake.read','appointments.intake.write']};
-    await context.core.query('UPDATE appointments SET status=\'pending\',"scheduledAt"=\'2099-11-01T01:00:00\',"proposedEndAt"=\'2099-11-01T01:30:00\' WHERE id=$1',[f.appointmentId]);
+    const actor={...f.actor,authId:f.doctorAuthId,role:'doctor' as const,resource:f.appointmentId,scopes:['appointments.intake.read','appointments.intake.write']};
+    await context.core.query('UPDATE appointments SET status=\'confirmed\',"scheduledAt"=\'2099-11-01T01:00:00\',"proposedEndAt"=\'2099-11-01T01:30:00\' WHERE id=$1',[f.appointmentId]);
+    // Explicit already-unlocked episode fixture, not an authorization bypass.
+    await ensureAppointmentAccess(context.core,await readAppointment(context.core,f.appointmentId));
+    await context.core.query(`UPDATE appointment_access SET "grantedAt"=NOW(),"grantUntil"=NOW()+INTERVAL '1 hour' WHERE "appointmentId"=$1`,[f.appointmentId]);
+    await context.core.query(`INSERT INTO consent_records(id,"patientId","appointmentId","consentType",accepted) VALUES($1,$2,$3,'medical_record',true)`,[randomUUID(),f.patientId,f.appointmentId]);
     try {
       const attempts=await Promise.allSettled([owner.correctComplaint(actor,f.appointmentId,meta(),{expectedVersion:0,chiefComplaint:'Fictional correction A'}),owner.correctComplaint(actor,f.appointmentId,meta(),{expectedVersion:0,chiefComplaint:'Fictional correction B'})]);
       assert.equal(attempts.filter(result=>result.status==='fulfilled').length,1);
@@ -27,8 +33,9 @@ export async function remainingOwnersLiveScenarios(t: TestContext, context: Cont
       const command=meta(),input={selection,previewHash:review.previewHash};
       const [saved,retry]=await Promise.all([saveDateBlocks(context.core,calendar,command,input,Date.now()),saveDateBlocks(context.core,calendar,command,input,Date.now())]);
       assert.deepEqual(saved,retry);assert.equal(saved.createdDateCount,2);
-      assert.equal((await context.core.query('SELECT status FROM appointments WHERE id=$1',[f.appointmentId])).rows[0].status,'pending');
+      assert.equal((await context.core.query('SELECT status FROM appointments WHERE id=$1',[f.appointmentId])).rows[0].status,'confirmed');
     }finally{
+      await context.core.query('DELETE FROM consent_records WHERE "appointmentId"=$1',[f.appointmentId]);
       await context.core.query('DELETE FROM chief_complaint_history WHERE "appointmentId"=$1',[f.appointmentId]);
       await context.core.query('DELETE FROM pre_consultations WHERE "appointmentId"=$1',[f.appointmentId]);
       await context.core.query('DELETE FROM doctor_date_blocks WHERE doctor_id=$1',[f.doctorId]);
@@ -78,16 +85,14 @@ export async function remainingOwnersLiveScenarios(t: TestContext, context: Cont
       await assert.rejects(owner.feedback(actor, f.appointmentId, meta, { ...input, rating: 1 }), { code: 'COMMAND_REPLAY_CONFLICT' });
     } finally { await context.core.query('DELETE FROM feedback WHERE "appointmentId"=$1', [f.appointmentId]); }
   }));
-  await t.test('EDA remaining owners PostgreSQL intake denies unrelated doctors and preserves provenance', () => fixture(context, async f => {
+  await t.test('EDA remaining owners PostgreSQL patient-wide intake remains retired', () => fixture(context, async f => {
     const submittedAt = new Date('2026-10-01T01:02:03.000Z'), intakeId = randomUUID();
     await context.core.query(`INSERT INTO pre_consultations (id,"appointmentId","chiefComplaint",opqrst,"submittedAt") VALUES ($1,$2,$3,'null'::jsonb,$4)`, [intakeId, f.appointmentId, 'Fixture intake', submittedAt]);
     try {
       const owner = createAppointmentExtras(context.core, {});
       const actor = { ...f.actor, authId: f.doctorAuthId, role: 'doctor' as const, resource: f.patientId, scopes: ['appointments.intake.read'] };
-      const result = await owner.intakes(actor, f.patientId, {});
-      assert.equal(result.items[0].submittedAt.toISOString(), submittedAt.toISOString());
-      assert.equal(result.items[0].appointmentId, f.appointmentId);
-      await assert.rejects(owner.intakes({ ...actor, authId: randomUUID() }, f.patientId, {}), { code: 'APPOINTMENT_MEMBERSHIP_REVOKED' });
+      await assert.rejects(owner.intakes(actor,f.patientId,{}),{code:'APPOINTMENT_INTAKE_HISTORY_RETIRED'});
+      await assert.rejects(owner.intakes({ ...actor, authId: randomUUID() }, f.patientId, {}), { code: 'APPOINTMENT_INTAKE_HISTORY_RETIRED' });
       await assert.rejects(owner.intakes({ ...actor, resource: randomUUID() }, f.patientId, {}), { code: 'ACTOR_SCOPE_DENIED' });
     } finally { await context.core.query('DELETE FROM pre_consultations WHERE id=$1 AND "appointmentId"=$2', [intakeId, f.appointmentId]); }
   }));

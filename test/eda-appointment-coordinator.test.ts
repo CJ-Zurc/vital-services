@@ -1,3 +1,4 @@
+import { accessFixtureSql } from './fixtures/appointment-access.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -23,6 +24,7 @@ function fixture(initiator:'doctor'|'patient'='doctor',queued=true){
   const calls={prepare:0,abort:0,finalize:0};const queries:string[]=[];
   const tx={async query(sql:string,args:unknown[]=[]):Promise<{rows:any[];rowCount:number}>{
     queries.push(sql);
+    const privacy=accessFixtureSql(sql,args,state.rows.get(String(args[0])));if(privacy)return privacy;
     if(sql==='SELECT pg_notify($1,$2)::text'){assert.equal(args[0],'vital_appointment_events');assert.equal(JSON.parse(String(args[1])).kind,'eligibility');return{rows:[],rowCount:1};}
     if(sql==='BEGIN'){previous=structuredClone(state);return{rows:[],rowCount:0};}if(sql==='ROLLBACK'){state=previous;return{rows:[],rowCount:0};}if(sql==='COMMIT'||sql.includes('pg_advisory_xact_lock'))return{rows:[],rowCount:0};
     if(failSql&&sql.includes(failSql)){failSql=null;throw new Error('TEST_CORE_CRASH');}

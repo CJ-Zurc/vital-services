@@ -1,3 +1,4 @@
+import { requireLiveAppointmentAccess } from '../appointment/appointment-access.js';
 import type { Pool,PoolClient } from "pg";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
@@ -26,7 +27,7 @@ export function createRecordsFiles(pool:Pool,config:RecordsConfig,storage:Record
     if(actor.role!=='doctor')recordsDenied(403,'RECORDS_DOCTOR_DENIED');
     const historical=(await db.query<{appointmentId:string}>(`SELECT s."appointmentId" FROM records_snapshot_assets r JOIN records_snapshots s ON s.id=r."snapshotId" JOIN records_episode_grants g ON g."appointmentId"=s."appointmentId"
       WHERE r."assetId"=$1::uuid AND s."patientId"=$2 AND s."doctorId"=$3 AND g."patientId"=s."patientId" AND g."doctorId"=s."doctorId"
-      AND s.id=COALESCE(g."frozenSnapshotId",g."snapshotId") ORDER BY s."capturedAt" DESC LIMIT 100`,[asset.id,asset.patientId,member.userId])).rows;
+      AND s.id=COALESCE(g."frozenSnapshotId",g."snapshotId") AND (EXISTS(SELECT 1 FROM records_documents doc WHERE doc."assetId"=r."assetId" AND doc."appointmentId"=s."appointmentId") OR EXISTS(SELECT 1 FROM records_file_assets fa WHERE fa.id=r."assetId" AND fa."appointmentId"=s."appointmentId")) ORDER BY s."capturedAt" DESC LIMIT 100`,[asset.id,asset.patientId,member.userId])).rows;
     for(const episode of historical)try{await medicalConsent(db,asset.patientId,episode.appointmentId);return;}catch(error){if(!(error instanceof Error&&'code'in error&&error.code==='RECORDS_MEDICAL_CONSENT_REQUIRED'))throw error;}
     const active=(await db.query<{id:string}>(`SELECT a.id FROM appointments a JOIN records_episode_grants g ON g."appointmentId"=a.id AND g."patientId"=a."patientId" AND g."doctorId"=a."doctorId" AND g."associationVersion"=a."associationVersion"
       WHERE a."patientId"=$1 AND a."doctorId"=$2 AND a.status='confirmed' AND g.status='live' ORDER BY a."doctorId",a."scheduledAt" DESC LIMIT 20`,[asset.patientId,member.userId])).rows;
@@ -34,7 +35,7 @@ export function createRecordsFiles(pool:Pool,config:RecordsConfig,storage:Record
       if(row.patientId!==asset.patientId||row.doctorId!==member.userId)recordsDenied(403,'RECORDS_DOCTOR_DENIED');
       const grant=(await db.query(`SELECT "appointmentId" FROM records_episode_grants WHERE "appointmentId"=$1 AND "patientId"=$2 AND "doctorId"=$3 AND "associationVersion"=$4 AND status='live'`,[row.id,row.patientId,row.doctorId,row.associationVersion])).rows[0];
       if(!grant)recordsDenied(403,'RECORDS_EPISODE_ACCESS_DENIED');
-      await medicalConsent(db,row.patientId,row.id);assertPaperwork(row,clock());await assertRecordsIdle(db,row);await currentPaid(db,row,config.financial);return;}catch(error){if(error instanceof Error&&'status'in error&&[403,409].includes(Number(error.status)))continue;throw error;}}
+      await requireLiveAppointmentAccess(db,row,clock());await medicalConsent(db,row.patientId,row.id);assertPaperwork(row,clock());await assertRecordsIdle(db,row);await currentPaid(db,row,config.financial);return;}catch(error){if(error instanceof Error&&'status'in error&&[403,409].includes(Number(error.status)))continue;throw error;}}
     recordsDenied(403,'RECORDS_FILE_ACCESS_DENIED');
   }
   return{
@@ -90,6 +91,12 @@ export function createRecordsFiles(pool:Pool,config:RecordsConfig,storage:Record
         return{assetId:asset.id};
       });
       const tx=await pool.connect();let asset:RecordsAssetRow;try{await tx.query('BEGIN');asset=await readAsset(tx,id);await authorize(tx,actor,asset,false);if(asset.state!=='ready'||!asset.publishedKey)recordsDenied(409,'RECORDS_FILE_NOT_READY');await tx.query('COMMIT');}catch(error){await tx.query('ROLLBACK');throw error;}finally{tx.release();}
+      if(actor.role==='doctor'){
+        if(!storage.readFinal)recordsDenied(503,'RECORDS_FILE_PROXY_UNAVAILABLE');
+        const bytes=await storage.readFinal(asset.publishedKey!,{contentHash:asset.contentHash!,byteLength:Number(asset.byteLength),mimeType:asset.mimeType as RecordsMime});
+        const check=await pool.connect();try{await check.query('BEGIN');await authorize(check,actor,asset,false);await check.query('COMMIT');}catch(e){await check.query('ROLLBACK');throw e;}finally{check.release();}
+        return{contentBase64:bytes.toString('base64'),mimeType:asset.mimeType};
+      }
       return{url:await storage.signedLink(asset.publishedKey!),expiresIn:300};
     },
   };

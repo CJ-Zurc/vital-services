@@ -1,5 +1,7 @@
 import { observeRequest } from '../infrastructure/observation.js';
 import express, { type ErrorRequestHandler, type RequestHandler } from "express";
+import { createIntelligenceRouter } from './intelligence-router.js';
+import type { IntelligenceModule } from '../modules/intelligence/module.js';
 import type { TLSSocket } from "node:tls";
 import jwt from "jsonwebtoken";
 import { z, ZodError } from "zod";
@@ -30,7 +32,7 @@ import { createPortalIntegrationsRouter, portalIntegrationDelegation } from './p
 import type { PortalIntegrations } from '../modules/portal-integrations/portal-integrations.js';
 import { createAppointmentCommandPreparationRouter, type AppointmentCommandPreparationRuntime } from './appointment-command-preparation-router.js';
 
-export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig, profileWrites = false, syncStatuses?: ProfileSyncStatuses, payment?: PaymentModule, appointment?: AppointmentRuntime, records?: RecordsRuntime,video?:VideoRuntime,messaging?:MessagingRuntime,streams?:StreamOwners,completion?:CompletionReads,profileQr?:ProfileQrModule,appointmentExtras?:AppointmentExtras,portal?:PortalIntegrations,commandPreparations?:AppointmentCommandPreparationRuntime) {
+export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig, profileWrites = false, syncStatuses?: ProfileSyncStatuses, payment?: PaymentModule, appointment?: AppointmentRuntime, records?: RecordsRuntime,video?:VideoRuntime,messaging?:MessagingRuntime,streams?:StreamOwners,completion?:CompletionReads,profileQr?:ProfileQrModule,appointmentExtras?:AppointmentExtras,portal?:PortalIntegrations,commandPreparations?:AppointmentCommandPreparationRuntime,intelligence?:IntelligenceModule) {
   const app = express();
   app.use(observeRequest);
   app.disable("x-powered-by");
@@ -76,6 +78,7 @@ export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig,
     } catch (error) { next(error); }
   };
   app.use("/internal/v1", delegation);
+  app.use('/internal/v1/ai',createIntelligenceRouter(intelligence));
   app.use('/internal/v1', createStreamRouter(streams));
   app.use('/internal/v1/completion', createCompletionRouter(completion));
   app.use('/internal/v1/portal-integrations', createPortalIntegrationsRouter(portal));
