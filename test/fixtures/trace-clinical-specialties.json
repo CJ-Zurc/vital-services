@@ -1,0 +1,25 @@
+{
+  "source": "TRACE_Backend/app/modules/department/catalog.py",
+  "stagingCommit": "fccd4e60cb4fbb3fb6cd8cce6d9e334b257879f4",
+  "names": [
+    "Internal Medicine",
+    "Pediatrics",
+    "Cardiology",
+    "Otolaryngology (ENT)",
+    "Ophthalmology",
+    "Gastroenterology",
+    "Pulmonology",
+    "Nephrology",
+    "Urology",
+    "Endocrinology",
+    "Rheumatology",
+    "Neurology",
+    "Psychiatry",
+    "Allergy and Immunology",
+    "Obstetrics and Gynecology",
+    "Orthopedics",
+    "Oncology",
+    "Hematology",
+    "Dentistry"
+  ]
+}

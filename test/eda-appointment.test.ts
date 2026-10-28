@@ -1,3 +1,4 @@
+import { accessFixtureSql } from './fixtures/appointment-access.js';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -27,6 +28,7 @@ function fixture(){
   const calls:string[]=[];const effects:string[]=[];
   const tx={async query(sql:string,args:unknown[]=[]):Promise<{rows:any[];rowCount:number}>{
     calls.push(sql);
+    const privacy=accessFixtureSql(sql,args,state.row);if(privacy)return privacy;
     if(sql==='SELECT pg_notify($1,$2)::text') { assert.equal(args[0],'vital_appointment_events'); const hint=JSON.parse(String(args[1])); assert.deepEqual(Object.keys(hint).sort(),['appointmentId','kind']); assert.equal(hint.kind,'eligibility'); return{rows:[],rowCount:1}; }
     if(sql==="BEGIN"){previous=structuredClone(state);return{rows:[],rowCount:0};}
     if(sql==="ROLLBACK"){state=previous;return{rows:[],rowCount:0};}
@@ -295,7 +297,7 @@ for(const scenario of ['unpublished','other doctor','incompatible','past','block
 });
 
 function bookingFixture(f:ReturnType<typeof fixture>) {return {
- scheduleSlotId:f.scheduleSlotId,doctorId:f.slot.doctorId,consultationType:'virtual',ehrPatientId:f.patientId,consentAccepted:true,chiefComplaint:null,
+ scheduleSlotId:f.scheduleSlotId,doctorId:f.slot.doctorId,consultationType:'virtual',ehrPatientId:f.patientId,consentVersion:'appointment-sharing-v1',consentAccepted:true,chiefComplaint:null,
  emergencyContact:{fullName:'Test Contact',relationship:'Sibling',phoneNumber:'09123456789'},
  opqrst:{version:1,symptomStartedAt:null,symptomStartedApprox:'Fictional test',onsetType:'UNKNOWN',aggravatingFactors:'',relievingFactors:'',symptomQuality:['Aching'],symptomQualityOther:null,symptomLocation:{kind:'GENERALIZED',partId:null,label:'Whole body / Generalized'},radiates:'NO',radiationLocation:null,severity:1,timingPattern:'UNKNOWN',episodeDurationValue:null,episodeDurationUnit:null,progression:'UNKNOWN',associatedSymptoms:'',additionalNotes:''}
 };}

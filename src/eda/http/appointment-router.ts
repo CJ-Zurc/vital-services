@@ -31,6 +31,9 @@ export function createAppointmentRouters(runtime?:AppointmentRuntime){
   appointments.post('/workflows/:id/external-start',handle((actor,id,meta,input)=>runtime!.module.startExternal(actor,id,command(meta),input)));
   appointments.get('/operations/:id',handle((actor,id)=>runtime!.saga.status(actor,id)));
   appointments.post('/operations/:id/resume',handle((actor,id,meta,input)=>runtime!.resume(actor,id,command(meta),input)));
+  appointments.get('/:id/access',handle((actor,id)=>runtime!.module.access.execute(actor,id,'read')));
+  appointments.get('/:id/access/code',handle((actor,id)=>runtime!.module.access.execute(actor,id,'code')));
+  for(const action of ['redeem','reissue','withdraw'] as const)appointments.post('/:id/access/'+action,handle((actor,id,meta,input)=>runtime!.module.access.execute(actor,id,action,input,command(meta))));
   appointments.get('/:id/history',handle((actor,id,_meta,input)=>runtime!.reads.history(actor,id,input)));
   appointments.get('/:id/relationships',handle((actor,id,_meta,input)=>runtime!.reads.relationships(actor,id,input)));
   appointments.get('/:id',handle((actor,id)=>runtime!.module.read(actor,id)));

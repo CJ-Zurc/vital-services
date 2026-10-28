@@ -1,0 +1,2366 @@
+[
+  {
+    "id": "",
+    "name": ""
+  },
+  {
+    "id": "1003722009",
+    "name": "Knee pain"
+  },
+  {
+    "id": "10085004",
+    "name": "Metatarsalgia"
+  },
+  {
+    "id": "102556003",
+    "name": "Pain in upper limb"
+  },
+  {
+    "id": "102570003",
+    "name": "Inguinal pain"
+  },
+  {
+    "id": "102576009",
+    "name": "Edema of foot"
+  },
+  {
+    "id": "102616008",
+    "name": "Painful mouth"
+  },
+  {
+    "id": "102878001",
+    "name": "Recurrent abortions"
+  },
+  {
+    "id": "103260005",
+    "name": "Setting sun sign"
+  },
+  {
+    "id": "103262002",
+    "name": "Staring"
+  },
+  {
+    "id": "103268003",
+    "name": "Rash around the eyes"
+  },
+  {
+    "id": "103276001",
+    "name": "Decreased hearing"
+  },
+  {
+    "id": "103281005",
+    "name": "Aural fullness (blocked sensation in ear)"
+  },
+  {
+    "id": "105597003",
+    "name": "Vision loss"
+  },
+  {
+    "id": "10601006",
+    "name": "Pain in lower limb"
+  },
+  {
+    "id": "1071000119107",
+    "name": "Oral lesions"
+  },
+  {
+    "id": "10867005",
+    "name": "Buffalo hump"
+  },
+  {
+    "id": "109728009",
+    "name": "Defective dental restoration"
+  },
+  {
+    "id": "110290008",
+    "name": "Mouth breathing with nasal obstruction"
+  },
+  {
+    "id": "110302009",
+    "name": "Clenching teeth"
+  },
+  {
+    "id": "11114002",
+    "name": "Painful gums"
+  },
+  {
+    "id": "111516008",
+    "name": "Blurring of visual image"
+  },
+  {
+    "id": "111982005",
+    "name": "Thickened nails"
+  },
+  {
+    "id": "1156331007",
+    "name": "Excessive euphoria"
+  },
+  {
+    "id": "116289008",
+    "name": "Abdominal bloating"
+  },
+  {
+    "id": "11731003",
+    "name": "Webbed neck"
+  },
+  {
+    "id": "1186",
+    "name": "Foreign body sensation in the nose"
+  },
+  {
+    "id": "12063002",
+    "name": "Rectal hemorrhage"
+  },
+  {
+    "id": "12138000",
+    "name": "Large head"
+  },
+  {
+    "id": "12351004",
+    "name": "Crowding of teeth"
+  },
+  {
+    "id": "12584003",
+    "name": "Bone pain"
+  },
+  {
+    "id": "127189005",
+    "name": "Axillary lymphadenopathy"
+  },
+  {
+    "id": "131148009",
+    "name": "Bleeding"
+  },
+  {
+    "id": "13791008",
+    "name": "Asthenia"
+  },
+  {
+    "id": "139394000",
+    "name": "Nocturia"
+  },
+  {
+    "id": "141000119100",
+    "name": "Daytime somnolence"
+  },
+  {
+    "id": "14760008",
+    "name": "Constipation"
+  },
+  {
+    "id": "1578",
+    "name": "Foreign body sensation in the eye"
+  },
+  {
+    "id": "16001004",
+    "name": "Ear pain"
+  },
+  {
+    "id": "160822004",
+    "name": "Relationship problems"
+  },
+  {
+    "id": "161129001",
+    "name": "Learning difficulties"
+  },
+  {
+    "id": "161816004",
+    "name": "Vaginal irritation"
+  },
+  {
+    "id": "161874006",
+    "name": "Heavy sensation in testicles"
+  },
+  {
+    "id": "161882006",
+    "name": "Stiff neck"
+  },
+  {
+    "id": "161891005",
+    "name": "Back pain"
+  },
+  {
+    "id": "162020001",
+    "name": "Difficulty chewing"
+  },
+  {
+    "id": "162031009",
+    "name": "Indigestion"
+  },
+  {
+    "id": "162116003",
+    "name": "Increased frequency of urination"
+  },
+  {
+    "id": "162128006",
+    "name": "Weak urinary stream"
+  },
+  {
+    "id": "162145001",
+    "name": "Vulval pain"
+  },
+  {
+    "id": "162213003",
+    "name": "Excessive crying"
+  },
+  {
+    "id": "162290004",
+    "name": "Dry eyes"
+  },
+  {
+    "id": "162314006",
+    "name": "Harmful thoughts"
+  },
+  {
+    "id": "162400007",
+    "name": "Throat irritation"
+  },
+  {
+    "id": "16331000",
+    "name": "Heartburn"
+  },
+  {
+    "id": "16386004",
+    "name": "Dry skin"
+  },
+  {
+    "id": "166830008",
+    "name": "Cholesterol level raised above normal"
+  },
+  {
+    "id": "166891009",
+    "name": "Low blood glucose level"
+  },
+  {
+    "id": "17173007",
+    "name": "Excessive thirst"
+  },
+  {
+    "id": "17211005",
+    "name": "Winging of scapula"
+  },
+  {
+    "id": "17450006",
+    "name": "Myoclonus"
+  },
+  {
+    "id": "17842005",
+    "name": "Confabulation"
+  },
+  {
+    "id": "18165001",
+    "name": "Jaundice"
+  },
+  {
+    "id": "18265008",
+    "name": "Exophthalmos"
+  },
+  {
+    "id": "18876004",
+    "name": "Pain in finger"
+  },
+  {
+    "id": "18963009",
+    "name": "Mood swings"
+  },
+  {
+    "id": "1908",
+    "name": "Casal necklace"
+  },
+  {
+    "id": "190869004",
+    "name": "Hypocalcemic tetany"
+  },
+  {
+    "id": "192019001",
+    "name": "Craving for salt"
+  },
+  {
+    "id": "193967004",
+    "name": "Swelling of eyelid"
+  },
+  {
+    "id": "195469007",
+    "name": "Anal skin tag"
+  },
+  {
+    "id": "198436008",
+    "name": "Hot flushes"
+  },
+  {
+    "id": "19887002",
+    "name": "Claustrophobia"
+  },
+  {
+    "id": "20090731",
+    "name": "Hand swelling"
+  },
+  {
+    "id": "201114008",
+    "name": "Nail deformity"
+  },
+  {
+    "id": "201281002",
+    "name": "Caf\u00e9 au lait spots"
+  },
+  {
+    "id": "202606004",
+    "name": "Clicking hip"
+  },
+  {
+    "id": "20262006",
+    "name": "Ataxia"
+  },
+  {
+    "id": "20301004",
+    "name": "Dysphasia"
+  },
+  {
+    "id": "204878001",
+    "name": "Undescended testis"
+  },
+  {
+    "id": "20602000",
+    "name": "Apathy"
+  },
+  {
+    "id": "2070002",
+    "name": "Burning sensation in eye"
+  },
+  {
+    "id": "2073000",
+    "name": "Delusions"
+  },
+  {
+    "id": "20897003",
+    "name": "Breast atrophy"
+  },
+  {
+    "id": "214264003",
+    "name": "Lethargy"
+  },
+  {
+    "id": "21522001",
+    "name": "Abdominal pain"
+  },
+  {
+    "id": "22066006",
+    "name": "Squint"
+  },
+  {
+    "id": "221360009",
+    "name": "Spasticity"
+  },
+  {
+    "id": "22220005",
+    "name": "Genuine stress incontinence"
+  },
+  {
+    "id": "22325002",
+    "name": "Abnormal gait"
+  },
+  {
+    "id": "224973000",
+    "name": "Frustrated"
+  },
+  {
+    "id": "225010003",
+    "name": "Feeling worthless"
+  },
+  {
+    "id": "225014007",
+    "name": "Feeling empty"
+  },
+  {
+    "id": "225457007",
+    "name": "Feeling suicidal"
+  },
+  {
+    "id": "225564006",
+    "name": "Nose pain"
+  },
+  {
+    "id": "225584005",
+    "name": "Craving for non food items"
+  },
+  {
+    "id": "225595004",
+    "name": "Painful defecation"
+  },
+  {
+    "id": "225605003",
+    "name": "Injury to nipple"
+  },
+  {
+    "id": "225624000",
+    "name": "Panic attack"
+  },
+  {
+    "id": "225824003",
+    "name": "Victim of physical abuse"
+  },
+  {
+    "id": "228146008",
+    "name": "Personal care impairment"
+  },
+  {
+    "id": "228148009",
+    "name": "Fine motor impairment"
+  },
+  {
+    "id": "228158008",
+    "name": "Walking disability"
+  },
+  {
+    "id": "228365005",
+    "name": "Craving for alcohol"
+  },
+  {
+    "id": "229844004",
+    "name": "Deformity of foot"
+  },
+  {
+    "id": "232209000",
+    "name": "Nasal obstruction"
+  },
+  {
+    "id": "2335",
+    "name": "Hyperlinearity"
+  },
+  {
+    "id": "234168001",
+    "name": "Micturition syncope"
+  },
+  {
+    "id": "235081004",
+    "name": "Large jaw"
+  },
+  {
+    "id": "237130006",
+    "name": "Intermenstrual bleeding"
+  },
+  {
+    "id": "237557003",
+    "name": "Mass of thyroid gland"
+  },
+  {
+    "id": "238108007",
+    "name": "Cachexia"
+  },
+  {
+    "id": "238409008",
+    "name": "Infection of toe web"
+  },
+  {
+    "id": "238951005",
+    "name": "Xanthelasma"
+  },
+  {
+    "id": "239160006",
+    "name": "Wound hematoma"
+  },
+  {
+    "id": "240301009",
+    "name": "Breastfeeding problem in the newborn"
+  },
+  {
+    "id": "24184005",
+    "name": "High blood pressure"
+  },
+  {
+    "id": "24199005",
+    "name": "Feeling agitated"
+  },
+  {
+    "id": "246679005",
+    "name": "Eye discharge"
+  },
+  {
+    "id": "246681007",
+    "name": "Blood in eye"
+  },
+  {
+    "id": "246813002",
+    "name": "Ptosis of eye"
+  },
+  {
+    "id": "246850001",
+    "name": "Absence of tears"
+  },
+  {
+    "id": "246871006",
+    "name": "Bitot spots"
+  },
+  {
+    "id": "246942009",
+    "name": "Limbal corneal ring"
+  },
+  {
+    "id": "247355005",
+    "name": "Flank pain"
+  },
+  {
+    "id": "247373008",
+    "name": "Ankle pain"
+  },
+  {
+    "id": "247398009",
+    "name": "Neuropathic pain"
+  },
+  {
+    "id": "247441003",
+    "name": "Erythema"
+  },
+  {
+    "id": "247470007",
+    "name": "Morbilliform rash"
+  },
+  {
+    "id": "247549004",
+    "name": "Hair breaking"
+  },
+  {
+    "id": "247585004",
+    "name": "Difficulty making decisions"
+  },
+  {
+    "id": "24770006",
+    "name": "Bobbing of the head"
+  },
+  {
+    "id": "247796005",
+    "name": "Lack of pleasure"
+  },
+  {
+    "id": "248208000",
+    "name": "Mask like facies"
+  },
+  {
+    "id": "248311001",
+    "name": "Central obesity"
+  },
+  {
+    "id": "248342006",
+    "name": "Underweight"
+  },
+  {
+    "id": "248491001",
+    "name": "Swelling of knee joint"
+  },
+  {
+    "id": "248513002",
+    "name": "Lisch nodules on iris"
+  },
+  {
+    "id": "248522001",
+    "name": "Vaginal mass"
+  },
+  {
+    "id": "248523006",
+    "name": "Rectal mass"
+  },
+  {
+    "id": "248589007",
+    "name": "Excessive throat clearing"
+  },
+  {
+    "id": "248795006",
+    "name": "Problem achieving orgasm"
+  },
+  {
+    "id": "248819006",
+    "name": "Abnormal nipple"
+  },
+  {
+    "id": "248830009",
+    "name": "Areola abnormal"
+  },
+  {
+    "id": "249262009",
+    "name": "Unable to retract foreskin"
+  },
+  {
+    "id": "249311009",
+    "name": "Large nose"
+  },
+  {
+    "id": "249316004",
+    "name": "Nasal deviation"
+  },
+  {
+    "id": "249344003",
+    "name": "Awareness of nasal cycle"
+  },
+  {
+    "id": "249366005",
+    "name": "Bleeding from nose"
+  },
+  {
+    "id": "249386009",
+    "name": "Beefy red tongue"
+  },
+  {
+    "id": "249403003",
+    "name": "White patches on oral mucosa"
+  },
+  {
+    "id": "249752003",
+    "name": "Large hands"
+  },
+  {
+    "id": "249786007",
+    "name": "Leg shortening"
+  },
+  {
+    "id": "24982008",
+    "name": "Double vision"
+  },
+  {
+    "id": "249902000",
+    "name": "Difficulty standing"
+  },
+  {
+    "id": "249913002",
+    "name": "Knee stiff"
+  },
+  {
+    "id": "249914008",
+    "name": "Hip stiff"
+  },
+  {
+    "id": "249918006",
+    "name": "Shoulder stiff"
+  },
+  {
+    "id": "249923006",
+    "name": "Locking of the joint"
+  },
+  {
+    "id": "249963007",
+    "name": "Abnormal blinking"
+  },
+  {
+    "id": "249968003",
+    "name": "Unpleasant urge to move legs"
+  },
+  {
+    "id": "250087009",
+    "name": "Joint deformity"
+  },
+  {
+    "id": "250102002",
+    "name": "Unstable knee"
+  },
+  {
+    "id": "25064002",
+    "name": "Headache"
+  },
+  {
+    "id": "25273001",
+    "name": "Large tongue"
+  },
+  {
+    "id": "25289003",
+    "name": "Hyperacusis"
+  },
+  {
+    "id": "25540007",
+    "name": "Tooth loss"
+  },
+  {
+    "id": "255471002",
+    "name": "Ocular torticollis"
+  },
+  {
+    "id": "26079004",
+    "name": "Tremor"
+  },
+  {
+    "id": "262285001",
+    "name": "Weight decreased"
+  },
+  {
+    "id": "262286000",
+    "name": "Weight increased"
+  },
+  {
+    "id": "26284000",
+    "name": "Mouth ulcer"
+  },
+  {
+    "id": "26329005",
+    "name": "Poor Concentration"
+  },
+  {
+    "id": "26517000",
+    "name": "Finger deformity"
+  },
+  {
+    "id": "26544005",
+    "name": "Muscle weakness"
+  },
+  {
+    "id": "266261006",
+    "name": "Raynaud's phenomenon"
+  },
+  {
+    "id": "266599000",
+    "name": "Dysmenorrhea"
+  },
+  {
+    "id": "266601003",
+    "name": "Excessive and frequent menstruation"
+  },
+  {
+    "id": "267029006",
+    "name": "Pallor"
+  },
+  {
+    "id": "267036007",
+    "name": "Breathlessness"
+  },
+  {
+    "id": "267038008",
+    "name": "Edema"
+  },
+  {
+    "id": "267042006",
+    "name": "Prominent veins"
+  },
+  {
+    "id": "267044007",
+    "name": "Reduced exercise tolerance"
+  },
+  {
+    "id": "267053000",
+    "name": "Tenesmus"
+  },
+  {
+    "id": "267059001",
+    "name": "Worms in stool"
+  },
+  {
+    "id": "267064002",
+    "name": "Retention of urine"
+  },
+  {
+    "id": "267095009",
+    "name": "Speech problem"
+  },
+  {
+    "id": "267102003",
+    "name": "Throat pain"
+  },
+  {
+    "id": "267103008",
+    "name": "Feeling of lump in throat"
+  },
+  {
+    "id": "268471004",
+    "name": "Vaginal show"
+  },
+  {
+    "id": "271084006",
+    "name": "Deformity of bone"
+  },
+  {
+    "id": "271594007",
+    "name": "Syncope"
+  },
+  {
+    "id": "271667004",
+    "name": "Koplik spots"
+  },
+  {
+    "id": "271687003",
+    "name": "Swelling of scrotum"
+  },
+  {
+    "id": "271691008",
+    "name": "Breasts asymmetrical"
+  },
+  {
+    "id": "271700006",
+    "name": "Chorea"
+  },
+  {
+    "id": "271732006",
+    "name": "Irregular pupil"
+  },
+  {
+    "id": "271761007",
+    "name": "Scaly skin"
+  },
+  {
+    "id": "271767006",
+    "name": "Peeling of skin"
+  },
+  {
+    "id": "271768001",
+    "name": "Nail ridges"
+  },
+  {
+    "id": "271771009",
+    "name": "Joint swelling"
+  },
+  {
+    "id": "271782001",
+    "name": "Drowsy"
+  },
+  {
+    "id": "271807003",
+    "name": "Skin rash"
+  },
+  {
+    "id": "271813007",
+    "name": "Petechiae"
+  },
+  {
+    "id": "271823003",
+    "name": "Tachypnea"
+  },
+  {
+    "id": "271834000",
+    "name": "Burping"
+  },
+  {
+    "id": "271870002",
+    "name": "Low blood pressure"
+  },
+  {
+    "id": "271939006",
+    "name": "Vaginal discharge"
+  },
+  {
+    "id": "2733002",
+    "name": "Heel pain"
+  },
+  {
+    "id": "27355003",
+    "name": "Toothache"
+  },
+  {
+    "id": "274667000",
+    "name": "Jaw pain"
+  },
+  {
+    "id": "274743004",
+    "name": "Groin swelling"
+  },
+  {
+    "id": "275295002",
+    "name": "Excessive salivation"
+  },
+  {
+    "id": "275887009",
+    "name": "Scaly scalp"
+  },
+  {
+    "id": "275921007",
+    "name": "Itchy scalp"
+  },
+  {
+    "id": "276242008",
+    "name": "Hydrophobia"
+  },
+  {
+    "id": "276322001",
+    "name": "Skin plaque"
+  },
+  {
+    "id": "276369006",
+    "name": "Reduced fetal movement"
+  },
+  {
+    "id": "2764000",
+    "name": "Joint crepitus"
+  },
+  {
+    "id": "276411001",
+    "name": "Small testicle"
+  },
+  {
+    "id": "277180005",
+    "name": "Sleep paralysis"
+  },
+  {
+    "id": "277207000",
+    "name": "Mastoid swelling"
+  },
+  {
+    "id": "277210007",
+    "name": "Tender mastoid"
+  },
+  {
+    "id": "277238004",
+    "name": "Tenderness of maxillary sinus"
+  },
+  {
+    "id": "277241008",
+    "name": "Tenderness of frontal sinus"
+  },
+  {
+    "id": "278851001",
+    "name": "Rectal discharge"
+  },
+  {
+    "id": "278999000",
+    "name": "Skin tenderness"
+  },
+  {
+    "id": "279038004",
+    "name": "Pain in upper back"
+  },
+  {
+    "id": "279039007",
+    "name": "Low back pain"
+  },
+  {
+    "id": "279043006",
+    "name": "Pain in buttock"
+  },
+  {
+    "id": "279084009",
+    "name": "Chest discomfort"
+  },
+  {
+    "id": "279992002",
+    "name": "Frequent falls"
+  },
+  {
+    "id": "28102002",
+    "name": "Distractibility"
+  },
+  {
+    "id": "282223002",
+    "name": "Unable to walk on a straight line"
+  },
+  {
+    "id": "283046003",
+    "name": "Sole of foot abnormal"
+  },
+  {
+    "id": "284258001",
+    "name": "Loss of hand grip"
+  },
+  {
+    "id": "28442001",
+    "name": "Polyuria"
+  },
+  {
+    "id": "285365001",
+    "name": "Pain in toe"
+  },
+  {
+    "id": "285375003",
+    "name": "Pain in penis"
+  },
+  {
+    "id": "285471008",
+    "name": "Mouth open always"
+  },
+  {
+    "id": "285680001",
+    "name": "Difficulty bearing weight"
+  },
+  {
+    "id": "286413006",
+    "name": "Speaking slowly"
+  },
+  {
+    "id": "286647002",
+    "name": "Low self esteem"
+  },
+  {
+    "id": "286933003",
+    "name": "Delirium"
+  },
+  {
+    "id": "28701003",
+    "name": "Low maternal weight gain"
+  },
+  {
+    "id": "288939007",
+    "name": "Difficulty swallowing"
+  },
+  {
+    "id": "289517005",
+    "name": "Vaginal lesion"
+  },
+  {
+    "id": "289524006",
+    "name": "Vaginal swelling"
+  },
+  {
+    "id": "2901004",
+    "name": "Black tarry stool"
+  },
+  {
+    "id": "290113009",
+    "name": "Bloody nipple discharge"
+  },
+  {
+    "id": "290125007",
+    "name": "Inadequate breast milk"
+  },
+  {
+    "id": "29448009",
+    "name": "Loss of proprioception"
+  },
+  {
+    "id": "297217002",
+    "name": "Rib pain"
+  },
+  {
+    "id": "297957009",
+    "name": "Tightening of skin"
+  },
+  {
+    "id": "297970000",
+    "name": "Skin discharge"
+  },
+  {
+    "id": "297989000",
+    "name": "Nail pain"
+  },
+  {
+    "id": "298000004",
+    "name": "Loss of scalp hair"
+  },
+  {
+    "id": "298001000",
+    "name": "Loss of body hair"
+  },
+  {
+    "id": "298012000",
+    "name": "Wound pain"
+  },
+  {
+    "id": "298222004",
+    "name": "Active range of joint movement reduced"
+  },
+  {
+    "id": "298280009",
+    "name": "Muscle swelling"
+  },
+  {
+    "id": "298380006",
+    "name": "Spine deformity"
+  },
+  {
+    "id": "29857009",
+    "name": "Chest pain"
+  },
+  {
+    "id": "298854003",
+    "name": "Shoulder joint unstable"
+  },
+  {
+    "id": "298872009",
+    "name": "Swelling of elbow joint"
+  },
+  {
+    "id": "298924009",
+    "name": "Unstable elbow joint"
+  },
+  {
+    "id": "299033004",
+    "name": "Deformity of hand"
+  },
+  {
+    "id": "299034005",
+    "name": "Claw hand"
+  },
+  {
+    "id": "299042006",
+    "name": "Weakness of hand"
+  },
+  {
+    "id": "299108004",
+    "name": "Unstable finger joint"
+  },
+  {
+    "id": "299232002",
+    "name": "Hip swelling"
+  },
+  {
+    "id": "299233007",
+    "name": "Hip deformity"
+  },
+  {
+    "id": "299234001",
+    "name": "Hip flexion deformity"
+  },
+  {
+    "id": "299328006",
+    "name": "Deformity of knee joint"
+  },
+  {
+    "id": "299414004",
+    "name": "Ankle swelling"
+  },
+  {
+    "id": "299460002",
+    "name": "Large feet"
+  },
+  {
+    "id": "299567001",
+    "name": "Toe deformity"
+  },
+  {
+    "id": "299630002",
+    "name": "Toe joint unstable"
+  },
+  {
+    "id": "29966009",
+    "name": "Hypertrichosis"
+  },
+  {
+    "id": "299703001",
+    "name": "Mass of neck"
+  },
+  {
+    "id": "299704007",
+    "name": "Lump on face"
+  },
+  {
+    "id": "299902004",
+    "name": "Loss of temperature sensation"
+  },
+  {
+    "id": "299950000",
+    "name": "Lhermitte's phenomenon"
+  },
+  {
+    "id": "300132001",
+    "name": "Ear discharge"
+  },
+  {
+    "id": "300246005",
+    "name": "Lesion of tongue"
+  },
+  {
+    "id": "300278002",
+    "name": "Abnormal tonsils"
+  },
+  {
+    "id": "300513000",
+    "name": "Lesion of penis"
+  },
+  {
+    "id": "300874009",
+    "name": "Ear swelling"
+  },
+  {
+    "id": "300953009",
+    "name": "Pain in axilla"
+  },
+  {
+    "id": "300954003",
+    "name": "Pain in calf"
+  },
+  {
+    "id": "300955002",
+    "name": "Pain in thumb"
+  },
+  {
+    "id": "301189006",
+    "name": "Nasal deformity"
+  },
+  {
+    "id": "301191003",
+    "name": "Lesion of nose"
+  },
+  {
+    "id": "301350008",
+    "name": "Lesion of lip"
+  },
+  {
+    "id": "301822002",
+    "name": "Abnormal vaginal bleeding"
+  },
+  {
+    "id": "301913002",
+    "name": "Lesion of eyelid"
+  },
+  {
+    "id": "302028002",
+    "name": "Sparseness of secondary sexual hair"
+  },
+  {
+    "id": "302188001",
+    "name": "Bad taste in the mouth"
+  },
+  {
+    "id": "302690004",
+    "name": "Encopresis"
+  },
+  {
+    "id": "30285000",
+    "name": "Warts"
+  },
+  {
+    "id": "304297005",
+    "name": "Decreased range of shoulder joint"
+  },
+  {
+    "id": "30704002",
+    "name": "Butterfly rash"
+  },
+  {
+    "id": "307077003",
+    "name": "Feeling hopelessness"
+  },
+  {
+    "id": "307136000",
+    "name": "History of fracture in the past"
+  },
+  {
+    "id": "30731004",
+    "name": "Painful tongue"
+  },
+  {
+    "id": "30746006",
+    "name": "Lymphadenopathy"
+  },
+  {
+    "id": "30760008",
+    "name": "Finger clubbing"
+  },
+  {
+    "id": "308698004",
+    "name": "Flatulence symptom"
+  },
+  {
+    "id": "309521004",
+    "name": "Numbness of hand"
+  },
+  {
+    "id": "309527000",
+    "name": "Mass of lower limb"
+  },
+  {
+    "id": "309538000",
+    "name": "Numbness of foot"
+  },
+  {
+    "id": "309557009",
+    "name": "Numbness of face"
+  },
+  {
+    "id": "309685001",
+    "name": "Swollen gums"
+  },
+  {
+    "id": "309737007",
+    "name": "Abdominal pain in pregnancy"
+  },
+  {
+    "id": "31342001",
+    "name": "Myopic shift"
+  },
+  {
+    "id": "314631008",
+    "name": "Menometrorrhagia"
+  },
+  {
+    "id": "315284009",
+    "name": "Mass of parotid gland"
+  },
+  {
+    "id": "31908003",
+    "name": "Vaginal dryness"
+  },
+  {
+    "id": "3253007",
+    "name": "Discoloration of skin"
+  },
+  {
+    "id": "33590004",
+    "name": "Bonding problem with infant"
+  },
+  {
+    "id": "34095006",
+    "name": "Dehydration"
+  },
+  {
+    "id": "3415004",
+    "name": "Cyanosis"
+  },
+  {
+    "id": "3424008",
+    "name": "Tachycardia"
+  },
+  {
+    "id": "34319007",
+    "name": "Induration of skin"
+  },
+  {
+    "id": "34436003",
+    "name": "Blood in urine"
+  },
+  {
+    "id": "34570004",
+    "name": "Loosening of tooth"
+  },
+  {
+    "id": "34615008",
+    "name": "Hemospermia"
+  },
+  {
+    "id": "34789001",
+    "name": "Pain in the coccyx"
+  },
+  {
+    "id": "34911001",
+    "name": "Micropenis"
+  },
+  {
+    "id": "35745008",
+    "name": "Umbilical discharge"
+  },
+  {
+    "id": "3578",
+    "name": "Frequent fractures"
+  },
+  {
+    "id": "361137007",
+    "name": "Irregular heart beat"
+  },
+  {
+    "id": "363168001",
+    "name": "Inflammation of skin"
+  },
+  {
+    "id": "36440009",
+    "name": "Failure to gain weight"
+  },
+  {
+    "id": "365921005",
+    "name": "Weight Changes"
+  },
+  {
+    "id": "366979004",
+    "name": "Depressed mood"
+  },
+  {
+    "id": "367391008",
+    "name": "Malaise"
+  },
+  {
+    "id": "367423000",
+    "name": "Contusion of eye"
+  },
+  {
+    "id": "36955009",
+    "name": "Loss of taste"
+  },
+  {
+    "id": "37031009",
+    "name": "Motion sickness"
+  },
+  {
+    "id": "37280007",
+    "name": "Areflexia"
+  },
+  {
+    "id": "373600006",
+    "name": "Multiple bruising"
+  },
+  {
+    "id": "373909009",
+    "name": "Choking sensation"
+  },
+  {
+    "id": "38160000",
+    "name": "Abnormal voice"
+  },
+  {
+    "id": "38343000",
+    "name": "Vaginal pain"
+  },
+  {
+    "id": "38433004",
+    "name": "Loss of pain sensation"
+  },
+  {
+    "id": "386661006",
+    "name": "Fever"
+  },
+  {
+    "id": "386689009",
+    "name": "Hypothermia"
+  },
+  {
+    "id": "386692008",
+    "name": "Menorrhagia"
+  },
+  {
+    "id": "386702006",
+    "name": "Victim of abuse"
+  },
+  {
+    "id": "386806002",
+    "name": "Impaired cognition"
+  },
+  {
+    "id": "386807006",
+    "name": "Memory impairment"
+  },
+  {
+    "id": "387603000",
+    "name": "Imbalance"
+  },
+  {
+    "id": "387833009",
+    "name": "Premature greying"
+  },
+  {
+    "id": "39659002",
+    "name": "Anhidrosis"
+  },
+  {
+    "id": "397974008",
+    "name": "Hypesthesia"
+  },
+  {
+    "id": "399153001",
+    "name": "Vertigo"
+  },
+  {
+    "id": "399317006",
+    "name": "Bradykinesia"
+  },
+  {
+    "id": "399353008",
+    "name": "Roomy nasal cavity"
+  },
+  {
+    "id": "399939002",
+    "name": "Hirsutism"
+  },
+  {
+    "id": "40144003",
+    "name": "Morning stiffness joint"
+  },
+  {
+    "id": "402599005",
+    "name": "Acanthosis nigricans"
+  },
+  {
+    "id": "403857009",
+    "name": "Skin tags"
+  },
+  {
+    "id": "404640003",
+    "name": "Dizziness"
+  },
+  {
+    "id": "405729008",
+    "name": "Blood in stool"
+  },
+  {
+    "id": "40739000",
+    "name": "Dysphagia"
+  },
+  {
+    "id": "409668002",
+    "name": "Photophobia"
+  },
+  {
+    "id": "414550002",
+    "name": "Janeway lesion"
+  },
+  {
+    "id": "41497008",
+    "name": "Febrile convulsion"
+  },
+  {
+    "id": "416010008",
+    "name": "Hypospadias"
+  },
+  {
+    "id": "416377005",
+    "name": "Port wine birth mark"
+  },
+  {
+    "id": "41652007",
+    "name": "Pain in eye"
+  },
+  {
+    "id": "418035005",
+    "name": "Excessive tear production"
+  },
+  {
+    "id": "418290006",
+    "name": "Itching"
+  },
+  {
+    "id": "419045004",
+    "name": "Loss of consciousness"
+  },
+  {
+    "id": "419145002",
+    "name": "Nightmares"
+  },
+  {
+    "id": "419326002",
+    "name": "Restricted eye movement"
+  },
+  {
+    "id": "421262002",
+    "name": "Tongue swelling"
+  },
+  {
+    "id": "42134006",
+    "name": "Distorted visual image"
+  },
+  {
+    "id": "422400008",
+    "name": "Vomit"
+  },
+  {
+    "id": "422587007",
+    "name": "Nausea"
+  },
+  {
+    "id": "422650009",
+    "name": "Social isolation"
+  },
+  {
+    "id": "42273000",
+    "name": "Oily skin"
+  },
+  {
+    "id": "423902002",
+    "name": "Purpura"
+  },
+  {
+    "id": "424131007",
+    "name": "Easy bruising"
+  },
+  {
+    "id": "424348007",
+    "name": "Loss of distant vision"
+  },
+  {
+    "id": "424527009",
+    "name": "Loss of near vision"
+  },
+  {
+    "id": "427746000",
+    "name": "Mass of shoulder region"
+  },
+  {
+    "id": "427797008",
+    "name": "Change in behaviour"
+  },
+  {
+    "id": "428786006",
+    "name": "Localized superficial swelling of skin"
+  },
+  {
+    "id": "428875002",
+    "name": "Recurrent infections"
+  },
+  {
+    "id": "429040005",
+    "name": "Ulcer"
+  },
+  {
+    "id": "42984000",
+    "name": "Night sweats"
+  },
+  {
+    "id": "43029002",
+    "name": "Abnormal posture"
+  },
+  {
+    "id": "43364001",
+    "name": "Abdominal discomfort"
+  },
+  {
+    "id": "43724002",
+    "name": "Chill"
+  },
+  {
+    "id": "438457000",
+    "name": "Testicular swelling"
+  },
+  {
+    "id": "43994002",
+    "name": "Hypokinesia | Hypoactivity"
+  },
+  {
+    "id": "44001008",
+    "name": "Premature ejaculation"
+  },
+  {
+    "id": "44077006",
+    "name": "Numbness"
+  },
+  {
+    "id": "441124000",
+    "name": "Mass of chest wall"
+  },
+  {
+    "id": "44169009",
+    "name": "Loss of sense of smell"
+  },
+  {
+    "id": "441708007",
+    "name": "Swelling of jaw region"
+  },
+  {
+    "id": "441975003",
+    "name": "Mass of tongue"
+  },
+  {
+    "id": "442076002",
+    "name": "Early satiety"
+  },
+  {
+    "id": "444000005",
+    "name": "Short stature for age"
+  },
+  {
+    "id": "444659003",
+    "name": "Blister of foot"
+  },
+  {
+    "id": "444780001",
+    "name": "High blood glucose level"
+  },
+  {
+    "id": "444899003",
+    "name": "Pain in forearm"
+  },
+  {
+    "id": "445413001",
+    "name": "Shiny skin"
+  },
+  {
+    "id": "445456006",
+    "name": "Mass of submandibular region"
+  },
+  {
+    "id": "44548000",
+    "name": "Hyperactive behavior"
+  },
+  {
+    "id": "44564008",
+    "name": "Loss of voice"
+  },
+  {
+    "id": "446512000",
+    "name": "Abnormal discharge from the neck"
+  },
+  {
+    "id": "44695005",
+    "name": "Paralysis"
+  },
+  {
+    "id": "44780000",
+    "name": "Hypnagogic hallucinations"
+  },
+  {
+    "id": "449813001",
+    "name": "Saddle anaesthesia"
+  },
+  {
+    "id": "449918009",
+    "name": "Cramp in lower leg"
+  },
+  {
+    "id": "45326000",
+    "name": "Shoulder pain"
+  },
+  {
+    "id": "45352006",
+    "name": "Muscle spasm"
+  },
+  {
+    "id": "46210008",
+    "name": "Cyst of eyelid"
+  },
+  {
+    "id": "46263000",
+    "name": "Cataplexy"
+  },
+  {
+    "id": "4754008",
+    "name": "Gynaecomastia"
+  },
+  {
+    "id": "47933007",
+    "name": "Foot pain"
+  },
+  {
+    "id": "4800001",
+    "name": "Pyuria"
+  },
+  {
+    "id": "48610005",
+    "name": "Coarse hair"
+  },
+  {
+    "id": "48694002",
+    "name": "Anxiety"
+  },
+  {
+    "id": "48867003",
+    "name": "Bradycardia"
+  },
+  {
+    "id": "48880000",
+    "name": "Postcoital bleeding"
+  },
+  {
+    "id": "49218002",
+    "name": "Hip pain"
+  },
+  {
+    "id": "49650001",
+    "name": "Dysuria"
+  },
+  {
+    "id": "49727002",
+    "name": "Cough"
+  },
+  {
+    "id": "49746001",
+    "name": "Breast engorged"
+  },
+  {
+    "id": "50219008",
+    "name": "Hoarse"
+  },
+  {
+    "id": "50818007",
+    "name": "Painful Ejaculation"
+  },
+  {
+    "id": "52613005",
+    "name": "Excessive sweating"
+  },
+  {
+    "id": "53057004",
+    "name": "Hand pain (finding)"
+  },
+  {
+    "id": "53430007",
+    "name": "Breast pain"
+  },
+  {
+    "id": "53888004",
+    "name": "Disturbance in sleep behavior"
+  },
+  {
+    "id": "53890003",
+    "name": "Pressure of speech"
+  },
+  {
+    "id": "53929009",
+    "name": "Scrotal nodule"
+  },
+  {
+    "id": "55300003",
+    "name": "Cramp"
+  },
+  {
+    "id": "55533009",
+    "name": "Forgetfulness"
+  },
+  {
+    "id": "55929007",
+    "name": "Feeling irritable"
+  },
+  {
+    "id": "56018004",
+    "name": "Wheezing"
+  },
+  {
+    "id": "563001",
+    "name": "Nystagmus"
+  },
+  {
+    "id": "56608008",
+    "name": "Pain in wrist"
+  },
+  {
+    "id": "56731001",
+    "name": "Muscle tightness"
+  },
+  {
+    "id": "56925008",
+    "name": "Abnormal sexual function"
+  },
+  {
+    "id": "57676002",
+    "name": "Joint pain"
+  },
+  {
+    "id": "58436003",
+    "name": "Increased libido"
+  },
+  {
+    "id": "58849003",
+    "name": "Aspiration of food"
+  },
+  {
+    "id": "58972000",
+    "name": "Dribbling of urine"
+  },
+  {
+    "id": "5972002",
+    "name": "Urinary hesitancy"
+  },
+  {
+    "id": "60728008",
+    "name": "Abdominal swelling"
+  },
+  {
+    "id": "60735000",
+    "name": "Lagophthalmos"
+  },
+  {
+    "id": "6077001",
+    "name": "Foot-drop"
+  },
+  {
+    "id": "60862001",
+    "name": "Tinnitus"
+  },
+  {
+    "id": "609328004",
+    "name": "Allergic disposition"
+  },
+  {
+    "id": "609380008",
+    "name": "Bowing deformity of lower limb"
+  },
+  {
+    "id": "61372001",
+    "name": "Aggressive behavior"
+  },
+  {
+    "id": "62315008",
+    "name": "Diarrhea"
+  },
+  {
+    "id": "62718007",
+    "name": "Drooling"
+  },
+  {
+    "id": "63176002",
+    "name": "Black head"
+  },
+  {
+    "id": "63491006",
+    "name": "Intermittent claudication"
+  },
+  {
+    "id": "63725005",
+    "name": "Corneal lesions"
+  },
+  {
+    "id": "63757006",
+    "name": "Osler's nodes"
+  },
+  {
+    "id": "63901009",
+    "name": "Pain in testicle"
+  },
+  {
+    "id": "64206003",
+    "name": "Hypomenorrhoea"
+  },
+  {
+    "id": "64445006",
+    "name": "Glare"
+  },
+  {
+    "id": "64611009",
+    "name": "Catarrhal nasal discharge"
+  },
+  {
+    "id": "65225007",
+    "name": "White head"
+  },
+  {
+    "id": "65377004",
+    "name": "Excessive breastfeeding"
+  },
+  {
+    "id": "65958008",
+    "name": "Hiccoughs"
+  },
+  {
+    "id": "65971000052100",
+    "name": "Psychosis"
+  },
+  {
+    "id": "66187002",
+    "name": "Fatty stool"
+  },
+  {
+    "id": "66255005",
+    "name": "Poor erection"
+  },
+  {
+    "id": "68235000",
+    "name": "Nasal congestion"
+  },
+  {
+    "id": "68345001",
+    "name": "Apraxia"
+  },
+  {
+    "id": "68653001",
+    "name": "Anal pain"
+  },
+  {
+    "id": "68962001",
+    "name": "Muscle pain"
+  },
+  {
+    "id": "69056000",
+    "name": "Large ears"
+  },
+  {
+    "id": "690701000119101",
+    "name": "Foul smelling urine"
+  },
+  {
+    "id": "69192004",
+    "name": "Brittle nails"
+  },
+  {
+    "id": "69215007",
+    "name": "Intolerant of heat"
+  },
+  {
+    "id": "699376002",
+    "name": "lip swelling"
+  },
+  {
+    "id": "699392007",
+    "name": "Itching of ear"
+  },
+  {
+    "id": "699393002",
+    "name": "Pulling at ears"
+  },
+  {
+    "id": "699784000",
+    "name": "Elongated face"
+  },
+  {
+    "id": "7011001",
+    "name": "Hallucinations"
+  },
+  {
+    "id": "70323002",
+    "name": "Eye strain"
+  },
+  {
+    "id": "703630003",
+    "name": "Red eye"
+  },
+  {
+    "id": "70407001",
+    "name": "Stridor"
+  },
+  {
+    "id": "705001007",
+    "name": "Self induced vomiting"
+  },
+  {
+    "id": "705083008",
+    "name": "Irritation in the eye"
+  },
+  {
+    "id": "70582006",
+    "name": "Scar of skin"
+  },
+  {
+    "id": "70733008",
+    "name": "Restricted joint movement"
+  },
+  {
+    "id": "713566001",
+    "name": "Lack of interest"
+  },
+  {
+    "id": "716376007",
+    "name": "Sweating attack"
+  },
+  {
+    "id": "719232003",
+    "name": "Difficulty walking"
+  },
+  {
+    "id": "72042002",
+    "name": "Incontinence of feces"
+  },
+  {
+    "id": "721130001",
+    "name": "Hair follicle inflammation"
+  },
+  {
+    "id": "72405004",
+    "name": "Increased appetite"
+  },
+  {
+    "id": "724386005",
+    "name": "Genital Ulcer"
+  },
+  {
+    "id": "725122008",
+    "name": "Micrographia"
+  },
+  {
+    "id": "72552008",
+    "name": "Feeding problems in newborn"
+  },
+  {
+    "id": "72863001",
+    "name": "Snoring"
+  },
+  {
+    "id": "72866009",
+    "name": "Varicose veins of lower limb"
+  },
+  {
+    "id": "73595000",
+    "name": "Stress"
+  },
+  {
+    "id": "74323005",
+    "name": "Pain in elbow"
+  },
+  {
+    "id": "74776002",
+    "name": "Itching of eye"
+  },
+  {
+    "id": "75088002",
+    "name": "Urgent desire to urinate"
+  },
+  {
+    "id": "75408008",
+    "name": "Anger"
+  },
+  {
+    "id": "7571003",
+    "name": "Sense of guilt"
+  },
+  {
+    "id": "75789001",
+    "name": "Detachment of nail plate"
+  },
+  {
+    "id": "75803007",
+    "name": "Postnasal drip"
+  },
+  {
+    "id": "76067001",
+    "name": "Sneezing"
+  },
+  {
+    "id": "762397008",
+    "name": "Burning sensation of skin"
+  },
+  {
+    "id": "767260005",
+    "name": "Upper lip retrusion"
+  },
+  {
+    "id": "76742009",
+    "name": "Postmenopausal bleeding"
+  },
+  {
+    "id": "771083005",
+    "name": "Pain in upper arm"
+  },
+  {
+    "id": "771542000",
+    "name": "Cold extremities"
+  },
+  {
+    "id": "7766007",
+    "name": "Cloudy urine"
+  },
+  {
+    "id": "77674003",
+    "name": "Hemianopia"
+  },
+  {
+    "id": "78104003",
+    "name": "Regurgitation"
+  },
+  {
+    "id": "78164000",
+    "name": "Feeding problem"
+  },
+  {
+    "id": "783572008",
+    "name": "Has special educational needs"
+  },
+  {
+    "id": "78456001",
+    "name": "Normal menstrual cycle"
+  },
+  {
+    "id": "78514002",
+    "name": "Thigh pain"
+  },
+  {
+    "id": "78622004",
+    "name": "Galactorrhoea"
+  },
+  {
+    "id": "789493002",
+    "name": "Pimples"
+  },
+  {
+    "id": "789507005",
+    "name": "Delayed healing of wound"
+  },
+  {
+    "id": "79017007",
+    "name": "Abnormal shape of pupil"
+  },
+  {
+    "id": "7973008",
+    "name": "Abnormal vision"
+  },
+  {
+    "id": "79879001",
+    "name": "Breath smells unpleasant"
+  },
+  {
+    "id": "79890006",
+    "name": "Loss of appetite"
+  },
+  {
+    "id": "8009008",
+    "name": "Nocturnal enuresis"
+  },
+  {
+    "id": "8011004",
+    "name": "Dysarthria"
+  },
+  {
+    "id": "80182007",
+    "name": "Irregular periods"
+  },
+  {
+    "id": "80313002",
+    "name": "Palpitations"
+  },
+  {
+    "id": "8034008",
+    "name": "Painful erection"
+  },
+  {
+    "id": "80474004",
+    "name": "Loss of vibration sense"
+  },
+  {
+    "id": "80585000",
+    "name": "Intolerant of cold"
+  },
+  {
+    "id": "80967001",
+    "name": "Dental caries"
+  },
+  {
+    "id": "81147004",
+    "name": "Fear about sex"
+  },
+  {
+    "id": "813001",
+    "name": "Ankle instability"
+  },
+  {
+    "id": "81680005",
+    "name": "Neck pain"
+  },
+  {
+    "id": "81712001",
+    "name": "Pain in female genitalia on intercourse"
+  },
+  {
+    "id": "823996003",
+    "name": "Blister of skin"
+  },
+  {
+    "id": "82470000",
+    "name": "Muscle fasciculation"
+  },
+  {
+    "id": "827160004",
+    "name": "Erythematous rash"
+  },
+  {
+    "id": "82971005",
+    "name": "Impaired mobility"
+  },
+  {
+    "id": "82991003",
+    "name": "Generalized aches and pains"
+  },
+  {
+    "id": "83077003",
+    "name": "Tall stature for age"
+  },
+  {
+    "id": "83128009",
+    "name": "Oliguria"
+  },
+  {
+    "id": "83551002",
+    "name": "Visual halos"
+  },
+  {
+    "id": "8357008",
+    "name": "Reduced libido"
+  },
+  {
+    "id": "83785004",
+    "name": "Transient visual obscuration"
+  },
+  {
+    "id": "84229001",
+    "name": "Fatigue"
+  },
+  {
+    "id": "84292000",
+    "name": "Amenorrhea"
+  },
+  {
+    "id": "84445001",
+    "name": "Joint stiffness"
+  },
+  {
+    "id": "85345005",
+    "name": "Skin thickening"
+  },
+  {
+    "id": "85638002",
+    "name": "CSF Rhinorrhea"
+  },
+  {
+    "id": "8619003",
+    "name": "Infertile"
+  },
+  {
+    "id": "86276007",
+    "name": "Bleeding gums"
+  },
+  {
+    "id": "86854008",
+    "name": "Hyperreflexia"
+  },
+  {
+    "id": "87319000",
+    "name": "Eschar"
+  },
+  {
+    "id": "87486003",
+    "name": "Aphasia"
+  },
+  {
+    "id": "87557004",
+    "name": "Urge incontinence of urine"
+  },
+  {
+    "id": "87715008",
+    "name": "Dry mouth"
+  },
+  {
+    "id": "87807004",
+    "name": "Hypopyon"
+  },
+  {
+    "id": "87866006",
+    "name": "Trismus"
+  },
+  {
+    "id": "88092000",
+    "name": "Muscle atrophy"
+  },
+  {
+    "id": "88111009",
+    "name": "Altered bowel habits"
+  },
+  {
+    "id": "89077005",
+    "name": "Nail discoloration"
+  },
+  {
+    "id": "89164003",
+    "name": "Breast lump"
+  },
+  {
+    "id": "90128006",
+    "name": "Photosensitivity"
+  },
+  {
+    "id": "90129003",
+    "name": "Cough Syncope"
+  },
+  {
+    "id": "90145001",
+    "name": "Frontal bossing"
+  },
+  {
+    "id": "90207007",
+    "name": "Grinding teeth"
+  },
+  {
+    "id": "90446007",
+    "name": "Pruritus ani"
+  },
+  {
+    "id": "91019004",
+    "name": "Paresthesia"
+  },
+  {
+    "id": "91175000",
+    "name": "Seizure"
+  },
+  {
+    "id": "9126005",
+    "name": "Vaginal spotting"
+  },
+  {
+    "id": "9491003",
+    "name": "Bald tongue"
+  },
+  {
+    "id": "95319004",
+    "name": "Skin nodule"
+  },
+  {
+    "id": "95321009",
+    "name": "Skin fissures"
+  },
+  {
+    "id": "95324001",
+    "name": "Skin lesion"
+  },
+  {
+    "id": "95668009",
+    "name": "Pain in face"
+  },
+  {
+    "id": "9748009",
+    "name": "Dyskinesia"
+  },
+  {
+    "id": "9957009",
+    "name": "Urethral discharge"
+  }
+]

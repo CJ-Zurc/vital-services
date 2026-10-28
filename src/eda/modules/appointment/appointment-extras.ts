@@ -9,8 +9,7 @@ import { lockAppointment, membership, appointmentOwn } from './appointment.js';
 import type { AppointmentCommand, AppointmentOwners } from './appointment-contracts.js';
 
 const feedbackInput = z.object({ expectedVersion: z.number().int().nonnegative(), rating: z.number().int().min(1).max(5) }).strict();
-const intakeQuery = z.object({ cursorAt: z.iso.datetime().optional(), cursorId: z.uuid().optional() }).strict()
-  .refine(value => Boolean(value.cursorAt) === Boolean(value.cursorId));
+
 
 export function createAppointmentExtras(pool: Pool, owners: Pick<AppointmentOwners, 'financial'>, clock = Date.now) {
   async function transaction<T>(run: (tx: PoolClient) => Promise<T>) {
@@ -68,18 +67,7 @@ export function createAppointmentExtras(pool: Pool, owners: Pick<AppointmentOwne
     async intakes(actor: Actor, patientId: string, raw: unknown) {
       z.uuid().parse(patientId); requireScope(actor, 'appointments.intake.read', patientId);
       if (actor.role !== 'doctor') throw new DomainError(403, 'APPOINTMENT_DOCTOR_REQUIRED', 'Doctor authority required.');
-      const query = intakeQuery.parse(raw);
-      return transaction(async tx => {
-        const doctor = await membership(tx, actor, 'doctor');
-        const result = await tx.query(`SELECT a.id AS "appointmentId",a."scheduledAt",p."submittedAt",COALESCE(p."chiefComplaint",'') AS "chiefComplaint",p.opqrst
-          FROM appointments a LEFT JOIN pre_consultations p ON p."appointmentId"=a.id
-          WHERE a."doctorId"=$1 AND a."patientId"=$2 AND a.status IN ('pending','approved','confirmed','completed','pending_patient_confirmation')
-          AND ($3::timestamp IS NULL OR (a."scheduledAt",a.id)<($3::timestamp,$4::text)) ORDER BY a."scheduledAt" DESC,a.id DESC LIMIT 11`,
-        [doctor.userId, patientId, query.cursorAt ?? null, query.cursorId ?? null]);
-        if (!result.rows.length && !query.cursorId) throw new DomainError(404, 'APPOINTMENT_PATIENT_ACCESS_NOT_FOUND', 'Patient access not found.');
-        const items = result.rows.slice(0, 10), last = items.at(-1);
-        return { items, next: result.rows.length > 10 && last ? { cursorAt: new Date(last.scheduledAt).toISOString(), cursorId: last.appointmentId } : null };
-      });
+      throw new DomainError(410,'APPOINTMENT_INTAKE_HISTORY_RETIRED','Open the authorized appointment instead.');
     },
   };
 }

@@ -18,11 +18,11 @@ function broker(identity, vhost) {
   return `${privateBroker ? 'amqp' : 'amqps'}://vital_${identity}:${encodeURIComponent(secret(`rabbit_${identity}_password`))}@rabbitmq:${privateBroker ? 5672 : 5671}/${vhost}`;
 }
 let commands;
-if (mode === 'api' || mode === 'worker') {
+if (mode === 'api' || mode === 'worker' || mode === 'ai-worker') {
   if (environment.VITAL_EDA_ENABLED !== 'true') throw new Error('EDA is OFF by default. Explicit isolated runtime opt-in is required.');
   if (suffix) throw new Error('Runtime entrypoints must not target test databases.');
   for (const domain of ['core', 'integrations']) {
-    environment[`VITAL_${domain.toUpperCase()}_DATABASE_URL`] = database(domain, mode);
+    environment[`VITAL_${domain.toUpperCase()}_DATABASE_URL`] = database(domain, mode === 'ai-worker' ? 'worker' : mode);
   }
   if (mode === 'worker') environment.VITAL_RABBITMQ_URL = broker('runtime', 'vital');
   commands = [[`dist/entrypoints/${mode}.js`]];

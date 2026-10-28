@@ -1,3 +1,4 @@
+import { accessFixtureSql } from './fixtures/appointment-access.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -26,6 +27,7 @@ function fixture() {
   const calls: string[] = [];
   const queries: { sql: string; args: unknown[] }[] = [];
   const tx = { async query(sql: string, args: unknown[] = []) {
+    const privacy=accessFixtureSql(sql,args,state.row);if(privacy)return privacy;
     calls.push(sql); queries.push({ sql, args: structuredClone(args) });
     const result = (rows: Stored[] = [], rowCount = rows.length) => ({ rows: structuredClone(rows), rowCount });
     if (sql.startsWith('BEGIN')) { previous = structuredClone(state); return result(); }
@@ -319,7 +321,7 @@ test('EDA Messaging owner gives assigned doctors history and monotonic read rece
   f.advance(1000);
   const reply = await f.module.send(f.actor('send', 'doctor'), f.id, f.meta(), { content: 'doctor reply', clientMessageId: randomUUID() });
   const doctor = await f.module.history(f.actor('history', 'doctor'), f.id), patient = await f.module.history(f.actor('history'), f.id);
-  assert.deepEqual(doctor, patient); assert.deepEqual(doctor.messages.map(message => message.id), [first.message.id, second.message.id, reply.message.id]);
+  assert.deepEqual(doctor.messages.map(m=>m.content),patient.messages.map(()=> 'Message withheld for privacy'));assert.ok(doctor.messages.filter(m=>m.senderRole==='patient').every(m=>m.senderUserId===null)); assert.deepEqual(doctor.messages.map(message => message.id), [first.message.id, second.message.id, reply.message.id]);
   assert.equal(reply.message.senderRole, 'doctor'); assert.equal(reply.message.senderUserId, f.state().row.doctorId);
   assert.equal((await f.module.conversations(f.actor('conversations', 'doctor'))).conversations[0]!.unreadCount, 2);
   assert.equal((await f.module.conversations(f.actor('conversations'))).conversations[0]!.unreadCount, 1);

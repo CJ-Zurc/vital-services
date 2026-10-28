@@ -38,3 +38,7 @@ monitoring, ratings, complaint correction, calendar review/save and the bell's
 local API need no new Gateway BFF routes. The shared notification service keeps
 its Gateway routes and recipient isolation. All Gateway browser compatibility routes are retired;
 no migration or domain-policy change is introduced by this routing revision.
+
+## VITAL intelligence prototype
+
+[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.

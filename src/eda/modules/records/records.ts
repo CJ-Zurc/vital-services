@@ -1,3 +1,5 @@
+import { episodeEvidence } from './episode-evidence.js';
+import { hasLiveAppointmentAccess,requireLiveAppointmentAccess } from '../appointment/appointment-access.js';
 import { signingSnapshot,signatureDate } from "./signing.js";
 import { randomUUID } from "node:crypto";
 import type { Pool,PoolClient } from "pg";
@@ -29,6 +31,7 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
     if(row.status!=="confirmed")recordsDenied(409,"RECORDS_LIVE_ACCESS_DENIED");
     if(!recovery)assertPaperwork(row,clock());
     else if(row.doctorConfirmedAt||row.paperworkLockedAt)recordsDenied(409,"RECORDS_RECOVERY_ALREADY_FROZEN");
+    await requireLiveAppointmentAccess(tx,row,clock());
     await currentPaid(tx,row,config.financial);
     const episode=(await tx.query<{status:string;frozenSnapshotId:string|null}>(`SELECT status,"frozenSnapshotId" FROM records_episode_grants WHERE "appointmentId"=$1 AND "patientId"=$2 AND "doctorId"=$3 AND "associationVersion"=$4 FOR UPDATE`,[row.id,row.patientId,row.doctorId,row.associationVersion])).rows[0];
     if(!episode||episode.status!=="live"||episode.frozenSnapshotId)recordsDenied(409,"RECORDS_EPISODE_ACCESS_DENIED");
@@ -75,11 +78,11 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
       if(!['patient','doctor'].includes(actor.role))recordsDenied(403,'RECORDS_READER_DENIED');
       await owningRead(actor,"context",id);const p=await patient(pool,id);
       if(actor.role==="patient"&&actor.authId!==p.authId)recordsDenied(403,"RECORDS_PATIENT_DENIED");
-      if(actor.role==="doctor"){
-        const d=await membership(pool,actor,"doctor");const grants=await pool.query(`SELECT g."appointmentId" FROM records_episode_grants g WHERE g."patientId"=$1 AND g."doctorId"=$2
-          AND (g.status='live' OR g."snapshotId" IS NOT NULL) AND COALESCE((SELECT c.accepted FROM consent_records c WHERE c."patientId"=g."patientId"
-            AND c."consentType"='medical_record' AND (c."appointmentId" IS NULL OR c."appointmentId"=g."appointmentId") ORDER BY c."consentedAt" DESC,c.id DESC LIMIT 1),false) LIMIT 1`,[id,d.userId]);
-        if(!grants.rows.length)recordsDenied(403,"RECORDS_DOCTOR_DENIED");
+      if(actor.role==='doctor'){
+        const d=await membership(pool,actor,'doctor');
+        const candidates=(await pool.query(`SELECT a.id FROM appointments a JOIN records_episode_grants g ON g."appointmentId"=a.id AND g.status='live' WHERE a."patientId"=$1 AND a."doctorId"=$2 AND a.status='confirmed'`,[id,d.userId])).rows;
+        let authorized=false;for(const candidate of candidates){const row=await readAppointment(pool,candidate.id);try{await requireLiveAppointmentAccess(pool,row,clock());await medicalConsent(pool,id,row.id);authorized=true;break;}catch(e){if(!(e instanceof Error&&'status' in e&&e.status===403))throw e;}}
+        if(!authorized)recordsDenied(403,'RECORDS_CODE_REQUIRED');
       }
       return{patientId:p.userId,authId:p.authId,ehrPatientId:p.ehrPatientId,version:p.version};
     },
@@ -114,8 +117,8 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
         await eligibility(tx,actor,row,w.recovery);const p=await patient(tx,row.patientId,true);if(p.ehrPatientId!==w.ehrPatientId)recordsDenied(409,"RECORDS_EHR_LINK_CHANGED");
         const evidence=verifyEhrEvidence(input.receipt,config.evidence,{kind:"snapshot",workflowId:w.id,actorAuthId:actor.authId,patientId:w.ehrPatientId,caseId:w.ehrCaseId,payloadHash:clinicalHash(input.payload)},Math.floor(clock()/1000));
         const cutoff=new Date(Math.min(clock(),paperworkDeadline(row).getTime()));
-        const docs=(await tx.query<{id:string;assetId:string;kind:string;protectedPayload:unknown;issuedAt:Date}>(`SELECT id,"assetId",kind,"protectedPayload","issuedAt" FROM records_documents WHERE "patientId"=$1 AND "issuedAt"<=$2 ORDER BY "issuedAt",id LIMIT 257`,[row.patientId,cutoff])).rows;
-        const files=(await tx.query<{id:string;kind:string;protectedPayload:unknown;createdAt:Date}>(`SELECT id,kind,"protectedPayload","createdAt" FROM records_file_assets WHERE "patientId"=$1 AND kind='upload' AND state='ready' AND "createdAt"<=$2 ORDER BY "createdAt",id LIMIT 257`,[row.patientId,cutoff])).rows;
+        const docs=(await tx.query<{id:string;assetId:string;kind:string;protectedPayload:unknown;issuedAt:Date}>(`SELECT id,"assetId",kind,"protectedPayload","issuedAt" FROM records_documents WHERE "patientId"=$1 AND "appointmentId"=$3 AND "issuedAt"<=$2 ORDER BY "issuedAt",id LIMIT 257`,[row.patientId,cutoff,row.id])).rows;
+        const files=(await tx.query<{id:string;kind:string;protectedPayload:unknown;createdAt:Date}>(`SELECT id,kind,"protectedPayload","createdAt" FROM records_file_assets WHERE "patientId"=$1 AND "appointmentId"=$3 AND kind='upload' AND state='ready' AND "createdAt"<=$2 ORDER BY "createdAt",id LIMIT 257`,[row.patientId,cutoff,row.id])).rows;
         if(docs.length>256||files.length>256)recordsDenied(413,'RECORDS_EVIDENCE_COLLECTION_LIMIT');
         const snapshotId=randomUUID();const localDocuments=docs.map(doc=>({id:doc.id,assetId:doc.assetId,kind:doc.kind,issuedAt:doc.issuedAt.toISOString(),...publicDocument(unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(row.patientId,doc.id,"document.v1"),doc.protectedPayload))}));
         const localFiles=files.map(file=>({id:file.id,assetId:file.id,createdAt:file.createdAt.toISOString(),...unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(row.patientId,file.id,"file.v1"),file.protectedPayload)}));
@@ -131,13 +134,20 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
         await audit(tx,actor,snapshotId,1,meta.operationId,"snapshot_captured");return{snapshotId,appointmentId:row.id,operationStatus:"completed"};
       });},
     async snapshot(actor:Actor,id:string){const member=await owningRead(actor,"snapshot.read",id);
-      const s=(await pool.query<{id:string;patientId:string;doctorId:string;appointmentId:string;protectedPayload:unknown;capturedAt:Date}>(`SELECT s.* FROM records_snapshots s JOIN records_episode_grants g ON g."appointmentId"=s."appointmentId"
+      const s=(await pool.query<{id:string;patientId:string;doctorId:string;appointmentId:string;ehrCaseId:string|null;protectedPayload:unknown;capturedAt:Date}>(`SELECT s.* FROM records_snapshots s JOIN records_episode_grants g ON g."appointmentId"=s."appointmentId"
         WHERE s.id=$1::uuid AND s.id=COALESCE(g."frozenSnapshotId",g."snapshotId")`,[id])).rows[0];
       if(!s||(actor.role==="patient"?member.userId!==s.patientId:actor.role!=="doctor"||member.userId!==s.doctorId))recordsDenied(403,"RECORDS_SNAPSHOT_ACCESS_DENIED");
       await medicalConsent(pool,s.patientId,s.appointmentId);
       const payload=unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(s.patientId,s.id,"snapshot.v1"),s.protectedPayload);
       const frozen=(await pool.query<{protectedPayload:unknown}>(`SELECT "protectedPayload" FROM records_episode_freezes WHERE "appointmentId"=$1 AND "snapshotId"=$2::uuid`,[s.appointmentId,s.id])).rows[0];
-      return{snapshotId:s.id,appointmentId:s.appointmentId,capturedAt:s.capturedAt.toISOString(),payload:{...payload,...(frozen?unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(s.patientId,s.appointmentId,"freeze.v1"),frozen.protectedPayload):{})}};
+      if(frozen)Object.assign(payload,unprotectPayload<Record<string,unknown>>(config.keyring,payloadBinding(s.patientId,s.appointmentId,"freeze.v1"),frozen.protectedPayload));
+      if(actor.role==='doctor'&&!await hasLiveAppointmentAccess(pool,await readAppointment(pool,s.appointmentId),clock())){
+        payload.ehr=episodeEvidence(payload.ehr,s.ehrCaseId);
+        const approvedDocs=(await pool.query('SELECT id FROM records_documents WHERE "appointmentId"=$1',[s.appointmentId])).rows;
+        payload.documents=Array.isArray(payload.documents)?payload.documents.filter((d:unknown)=>d&&typeof d==='object'&&approvedDocs.some(r=>r.id===(d as {id?:unknown}).id)):[];
+        payload.files=[];
+      }
+      return{snapshotId:s.id,appointmentId:s.appointmentId,capturedAt:s.capturedAt.toISOString(),payload};
     },
     async prepareDocument(actor:Actor,meta:AppointmentCommand,body:unknown){const input=documentPrepare.parse(body);const data=input.kind==="prescription"?prescriptionData.parse(input.data):certificateData.parse(input.data);
       return mutate(actor,"document.prepare",input.appointmentId??input.patientId??input.patientAuthId!,meta,{...input,data},async tx=>{

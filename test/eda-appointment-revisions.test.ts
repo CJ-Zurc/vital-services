@@ -1,3 +1,4 @@
+import { accessFixtureSql } from './fixtures/appointment-access.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
@@ -33,11 +34,12 @@ test('S6 reschedule allowances preserve historical usage and enforce role plus c
 
 function clinicalFixture(){
   const id=randomUUID(),doctorId=randomUUID(),patientId=randomUUID(),doctorAuthId=randomUUID(),patientAuthId=randomUUID();
-  const row={id,doctorId,patientId,doctorAuthId,patientAuthId,status:'pending',version:0,billingLineageId:randomUUID(),scheduledAt:new Date(now+3600000),proposedEndAt:new Date(now+7200000),paperworkLockedAt:null,doctorConfirmedAt:null} as AppointmentRow;
+  const row={id,doctorId,patientId,doctorAuthId,patientAuthId,status:'confirmed',version:0,billingLineageId:randomUUID(),scheduledAt:new Date(now+3600000),proposedEndAt:new Date(now+7200000),paperworkLockedAt:null,doctorConfirmedAt:null} as AppointmentRow;
   const actor:Actor={authId:doctorAuthId,role:'doctor',resource:id,scopes:['appointments.intake.read','appointments.intake.write'],serviceId:'vital-web',isSuperAdmin:false,correlationId:randomUUID()};
   let current:string|null=null,processing=false,command:any=null;
   const history:any[]=[],events:any[]=[],calls:{sql:string;args:unknown[]}[]=[];
   const tx={async query(sql:string,args:unknown[]=[]){calls.push({sql,args});
+    const privacy=accessFixtureSql(sql,args,row);if(privacy)return privacy;
     if(sql.includes('SELECT p.* FROM vital_'))return{rows:[{userId:actor.role==='doctor'?doctorId:patientId}]};
     if(sql.includes('SELECT a.*'))return{rows:[row]};
     if(sql.includes('SELECT * FROM command_operations'))return{rows:command?[command]:[]};
@@ -73,7 +75,7 @@ test('S6 complaint corrections deny another doctor stale versions workflows and 
   f.processing();await assert.rejects(updateComplaint(f.tx,f.actor,f.id,meta(),input,now),{code:'APPOINTMENT_PROCESSING'});
   for(const status of ['completed','cancelled','rescheduled'])assert.equal(complaintEditable({...f.row,status},now),false);
   assert.equal(complaintEditable({...f.row,paperworkLockedAt:new Date(now)},now),false);
-  assert.equal(complaintEditable({...f.row,sourceAppointmentId:randomUUID()},now),false);
+  assert.equal(complaintEditable({...f.row,status:'pending',sourceAppointmentId:randomUUID()},now),false);
   assert.equal(complaintEditable(f.row,now+2*86400000),false);
   assert.equal(f.history.length,0);
 });

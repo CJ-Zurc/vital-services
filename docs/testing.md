@@ -159,3 +159,7 @@ No Services runtime/schema change. Reviewed hashes were updated for the Web seri
 Published-slot revision verification: Web full suite 303 passed; Services full suite 462 passed / 2 isolated-stack skipped after permitted loopback rerun; focused Appointment suite 34 passed; compatibility suite 4 passed; exact-source contract review 5 passed. Services build and Web standalone type-check passed; affected Web lint and BFF check passed. Services ESLint excludes the affected TypeScript paths, so it is not claimed as a source lint pass. Browser test updated but not executed against a compatible live stack. The earlier Auth-profile regression fixture now supplies its required nullable name fields for type-checking; no production identity behavior changed.
 
 Final Web production build passed (133 pages) after correcting UTF-8 encoding in the revised form and rerunning outside the stalled restricted build. No validation or runtime security rule was weakened. Final source-contract checks: 5 passed; affected Web ESLint: no warnings/errors. No temporary verification artifacts retained.
+
+## VITAL intelligence prototype
+
+[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.

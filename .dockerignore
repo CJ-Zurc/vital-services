@@ -18,3 +18,7 @@ src/eda/generated
 .eda-secrets
 docker/eda/local-secrets
 .pytest_cache
+__pycache__
+*.pyc
+!runtimes/nlp/tests
+!runtimes/nlp/tests/**

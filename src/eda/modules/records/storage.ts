@@ -15,6 +15,7 @@ export interface RecordsStorage {
   ensureFinal(key: string, bytes: Buffer, mime: RecordsMime, signal?: AbortSignal): Promise<void>;
   inspectFinal(key: string, expected: StoredContent, signal?: AbortSignal): Promise<boolean>;
   signedLink(key: string): Promise<string>;
+  readFinal?(key:string,expected:StoredContent):Promise<Buffer>;
 }
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const HASH = /^[a-f0-9]{64}$/;
@@ -105,6 +106,7 @@ export class S3RecordsStorage implements RecordsStorage {
   }
   async putQuarantine(key: string, bytes: Buffer, mime: RecordsMime, signal?: AbortSignal): Promise<void> { await this.put("quarantine", key, bytes, mime, signal); }
   async ensureFinal(key: string, bytes: Buffer, mime: RecordsMime, signal?: AbortSignal): Promise<void> { await this.put("final", key, bytes, mime, signal); }
+  async readFinal(key:string,expected:StoredContent){this.assertKey(key,"final");return this.read(key,expected,this.signal());}
   async signedLink(key: string): Promise<string> {
     this.assertKey(key, "final");
     const signed = new URL(await getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.config.bucket, Key: key, ResponseCacheControl: "private, no-store", ResponseContentDisposition: "inline" }), { expiresIn: 300 }));

@@ -1,4 +1,8 @@
+> **2026-10-28 superseding scope:** Specialty recommendation endpoints are retired (410). The 19-specialty TRACE lookup remains for manual selection. Booking is doctor/slot first, with NLP confirmation in final review. Appointment identity and record access require the separate six-digit-code policy, independently of AI flags. Deploy paired Web/Services contracts and provision dedicated access keys before cutover. See [the current implementation brief](vital-ai-implementation.md).
+
 # VITAL integration contracts
+
+AI recommendation delegation now includes trusted `verifiedDepartments` ID/name/category rows from the authenticated Gateway clinical-specialty lookup rather than only UUIDs. Browser-supplied authority fields are rejected. Private Python candidates include `sourceSpecialtyIds` and `versions.candidateProvenance=bodhi-specialty-ids-v1`; older interactive results require reanalysis. See [department mapping](department-mapping.md) and deploy paired Web, Services and Python versions.
 
 - VITAL browser workflows call same-origin Web BFF `/api/...` routes. Web
   delegates VITAL domain operations directly to Services over private mTLS and
@@ -72,3 +76,7 @@ No database migration, data reset or additional environment variable is needed.
 ## S6-011–S6-014 contracts
 
 See [appointment revisions](eda/sprint6-appointment-revisions.md) for local Core/Web contracts and the shared Notification connection through Gateway. Deploy compatible sources together. Core owns migration `202610210001_s6_appointment_revisions`; EHR schemas remain unchanged. Notification delivery is durable metadata-only in-app intent with recipient-scoped VITAL reads; no producer URLs or clinical text are accepted.
+
+## VITAL intelligence prototype
+
+[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.
