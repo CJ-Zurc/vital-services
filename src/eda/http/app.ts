@@ -1,3 +1,4 @@
+import { observeRequest } from '../infrastructure/observation.js';
 import express, { type ErrorRequestHandler, type RequestHandler } from "express";
 import type { TLSSocket } from "node:tls";
 import jwt from "jsonwebtoken";
@@ -31,6 +32,7 @@ import { createAppointmentCommandPreparationRouter, type AppointmentCommandPrepa
 
 export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig, profileWrites = false, syncStatuses?: ProfileSyncStatuses, payment?: PaymentModule, appointment?: AppointmentRuntime, records?: RecordsRuntime,video?:VideoRuntime,messaging?:MessagingRuntime,streams?:StreamOwners,completion?:CompletionReads,profileQr?:ProfileQrModule,appointmentExtras?:AppointmentExtras,portal?:PortalIntegrations,commandPreparations?:AppointmentCommandPreparationRuntime) {
   const app = express();
+  app.use(observeRequest);
   app.disable("x-powered-by");
   app.set("trust proxy", false);
   app.use(createProfileQrUploadIngress(assertion));

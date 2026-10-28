@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { observeDeliveryOutcome } from '../../infrastructure/observation.js';
 import type { Pool, PoolClient } from "pg";
 import { processWithInbox } from "../../infrastructure/outbox.js";
 import { parseEvent, type EventEnvelope } from "../../contracts/events.js";
@@ -77,10 +78,12 @@ export async function deliverPending(pool: Pool, config: DeliveryConfig, fetcher
       const accepted = await pool.query(`UPDATE integration_deliveries SET status='accepted',"receiptId"=$3,"leaseOwner"=NULL,"leaseUntil"=NULL,"updatedAt"=NOW()
         WHERE id=$1 AND "leaseOwner"=$2 AND status='processing' AND "leaseUntil">NOW()`, [row.id, owner, receiptId]);
       if (accepted.rowCount !== 1) throw new Error("DELIVERY_LEASE_LOST");
+      observeDeliveryOutcome(row.destination, 'accepted');
     } catch {
       await pool.query(`UPDATE integration_deliveries SET status=$3,attempts=attempts+1,"nextAttemptAt"=NOW()+($4 * INTERVAL '1 second'),
         "lastErrorCode"='DELIVERY_FAILED',"leaseOwner"=NULL,"leaseUntil"=NULL,"updatedAt"=NOW() WHERE id=$1 AND "leaseOwner"=$2`,
       [row.id, owner, row.attempts >= 19 ? "blocked" : "pending", Math.min(60 * 2 ** Math.min(row.attempts, 10), 21600)]);
+      observeDeliveryOutcome(row.destination, row.attempts >= 19 ? 'blocked' : 'retry_pending');
     }
   }
   return result.rows.length;
