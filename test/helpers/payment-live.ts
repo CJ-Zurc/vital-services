@@ -1,3 +1,5 @@
+// Dedicated synthetic keys for isolated lifecycle/code issuance tests only.
+import '../fixtures/appointment-access.js';
 import assert from "node:assert/strict";
 import { randomUUID, generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
