@@ -1,3 +1,5 @@
+> **2026-10-28 superseding scope:** Specialty recommendation endpoints are retired (410). The 19-specialty TRACE lookup remains for manual selection. Booking is doctor/slot first, with NLP confirmation in final review. Appointment identity and record access require the separate six-digit-code policy, independently of AI flags. Deploy paired Web/Services contracts and provision dedicated access keys before cutover. See [the current implementation brief](vital-ai-implementation.md).
+
 # VITAL Services deployment
 
 Root `compose.yaml` owns the API, worker, scanner and infrastructure lifecycle.
@@ -52,3 +54,7 @@ VITAL retains full verification on staging and production pushes. Development
 events skip the full regression job; Services also skips paired route review
 and isolated database/broker integration on those events. Existing staging
 publication and deployment dependencies remain in place.
+
+## VITAL intelligence prototype
+
+[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.

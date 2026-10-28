@@ -1,0 +1,28 @@
+{
+  "name": "BODHI-S",
+  "source": "https://github.com/eka-care/BODHI",
+  "commit": "daca31c2a5a28876a0140135015518a44eb2d37d",
+  "license": "CC BY-NC 4.0",
+  "expectedCounts": {
+    "symptoms": 4037,
+    "rootSymptoms": 590,
+    "conditions": 779,
+    "specialties": 39,
+    "relationships": 13204,
+    "PRESENT_IN": 10352,
+    "TREATED_BY": 1558,
+    "IS_INFLUENCED_BY": 1020,
+    "RELATED_TO": 221,
+    "HAS_PREREQUISITE": 53
+  },
+  "sha256": {
+    "edges_has_prerequisite.csv": "66e440961f5c208fb44978d19e40276646bbde6ee139f3d8321a45a52f048721",
+    "edges_is_influenced_by.csv": "d8cabd0593a205e42b0fcb892d2afe2aaa0230de569bfb78c149fb2e7d4ae606",
+    "edges_present_in.csv": "84597fcf9e027c8fa6bb3b3f36ef0070b43bf2477a4eb8e613a801baefb56171",
+    "edges_related_to.csv": "94f63d1f1f136cdb300a1f8979c692762e2416600fbb06fc31daa049a1fc3904",
+    "edges_treated_by.csv": "ce3e002f60b8ca137f3796f301ffd2f332b986a8c2d312f9d8ef227ecbf3b742",
+    "nodes_condition.csv": "3fd7b6328286ccd53ca7a6c43a5fbf8d674844379f4d44e66e8af16bcac799f1",
+    "nodes_speciality.csv": "c85ef86b4d7a5d5ecfcdf5fd503bfaa99743ea740b5d9827b6dc764158613958",
+    "nodes_symptom.csv": "5b3440fcfe3d892ec2fe1d2b9796da5cebcd74352ffdcdc4e76895902106824a"
+  }
+}

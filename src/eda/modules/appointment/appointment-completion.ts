@@ -1,3 +1,4 @@
+import { appointmentAccessState } from './appointment-access.js';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import type { AppointmentReads, AppointmentReadOwners, AppointmentReadSnapshot } from './appointment-reads.js';
@@ -74,7 +75,7 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
         const relation = (r: NonNullable<AppointmentReadSnapshot['sourceAppointment']>) => ({ ...r,
           scheduledAt: new Date(r.scheduledAt), proposedEndAt: r.proposedEndAt ? new Date(r.proposedEndAt) : null, updatedAt: new Date(r.updatedAt),
           statusLogs: r.statusLogs.map(l => ({ ...l, changedAt: new Date(l.changedAt).toISOString() })) });
-        appointments.push({ id: row.id, version: row.version, patientId: row.patientId, doctorId: row.doctorId, patientAuthId: row.patientAuthId, doctorAuthId: row.doctorAuthId,
+        appointments.push({ access:await appointmentAccessState(pool,row as unknown as Parameters<typeof appointmentAccessState>[1],clock()),id: row.id, version: row.version, patientId: row.patientId, doctorId: row.doctorId, patientAuthId: row.patientAuthId, doctorAuthId: row.doctorAuthId,
           rating: null, canRate: false,
           specialty: row.specialty, status: row.status, consultationType: row.consultationType, scheduleSlotId: row.scheduleSlotId, scheduleSlot: row.scheduleSlot,
           sourceAppointmentId: row.sourceAppointmentId, appointmentKind: row.appointmentKind, followUpOfAppointmentId: row.followUpOfAppointmentId,

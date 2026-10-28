@@ -1,3 +1,6 @@
+import { saveOperationalBrief } from './appointment-summary.js';
+import { requireLiveAppointmentAccess } from './appointment-access.js';
+import { reviseIntelligence } from '../intelligence/corrections.js';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
@@ -15,7 +18,7 @@ export function complaintEditable(row: AppointmentRow, now: number) {
 export async function complaintHistory(tx: PoolClient, actor: Actor, id: string, raw: unknown, now: number) {
   requireScope(actor, 'appointments.intake.read', id);
   await membership(tx, actor);
-  const row = await readAppointment(tx, id); appointmentOwn(actor, row);
+  const row = await readAppointment(tx, id); appointmentOwn(actor, row);if(actor.role==='doctor')await requireLiveAppointmentAccess(tx,row,now);
   const { offset } = z.object({ offset: z.coerce.number().int().min(0).max(100000).default(0) }).strict().parse(raw);
   const current = (await tx.query('SELECT "chiefComplaint" FROM pre_consultations WHERE "appointmentId"=$1', [id])).rows[0];
   const rows = (await tx.query(`SELECT id,"previousText","currentText","doctorAuthId","changedAt","appointmentVersion"
@@ -37,7 +40,7 @@ export async function updateComplaint(tx: PoolClient, actor: Actor, id: string, 
   const hash = requestHash('COMPLAINT', id, { input, transportHash: meta.requestHash });
   await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['complaint:' + actor.authId + ':' + meta.operationId]);
   await membership(tx, actor, 'doctor');
-  const row = await lockAppointment(tx, id); appointmentOwn(actor, row);
+  const row = await lockAppointment(tx, id); appointmentOwn(actor, row);if(actor.role==='doctor')await requireLiveAppointmentAccess(tx,row,now);
   await membership(tx, actor, 'doctor');
   const old = (await tx.query('SELECT * FROM command_operations WHERE "actorId"=$1 AND "operationId"=$2', [actor.authId, meta.operationId])).rows[0];
   if (old) {
@@ -54,6 +57,9 @@ export async function updateComplaint(tx: PoolClient, actor: Actor, id: string, 
       ON CONFLICT ("appointmentId") DO UPDATE SET "chiefComplaint"=EXCLUDED."chiefComplaint"`, [randomUUID(), id, input.chiefComplaint]);
     await tx.query('UPDATE appointments SET version=version+1,"updatedAt"=NOW() WHERE id=$1', [id]);
     row.version++;
+    const currentIntake=(await tx.query('SELECT opqrst FROM pre_consultations WHERE "appointmentId"=$1',[id])).rows[0];
+    if(currentIntake?.opqrst)await saveOperationalBrief(tx,id,input.chiefComplaint,currentIntake.opqrst,[],row.version);
+    if(process.env.VITAL_AI_ENABLED==='true')await reviseIntelligence(tx,id,input.chiefComplaint);
     await tx.query(`INSERT INTO chief_complaint_history (id,"appointmentId","previousText","currentText","doctorAuthId","appointmentVersion","changedAt")
       VALUES($1,$2,$3,$4,$5,$6,$7)`, [randomUUID(), id, state.chiefComplaint, input.chiefComplaint, actor.authId, row.version, new Date(now)]);
     await appendSqlOutbox(tx, { producer: 'appointment', eventType: 'vital.audit.requested', aggregateId: id, aggregateVersion: row.version,

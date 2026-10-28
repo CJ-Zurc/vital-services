@@ -1,3 +1,6 @@
+import { knownReviewIdentities,appointmentAccessState } from '../appointment/appointment-access.js';
+import { readAppointment } from '../appointment/appointment.js';
+import { reviewText } from '../appointment/review-sanitizer.js';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
@@ -37,8 +40,8 @@ async function signal(tx: PoolClient, actor: Actor, appointmentId: string, row: 
 }
 export function createMessagingModule(pool: Pool, environment: NodeJS.ProcessEnv = process.env, clock = Date.now) {
   const crypto = createMessageCrypto(environment);
-  function publicMessage(row: Message, appointmentId: string) {
-    return { id: row.id, senderUserId: row.senderUserId, senderRole: row.senderRole, content: crypto.decrypt(row, appointmentId), createdAt: row.createdAt.toISOString() };
+  function publicMessage(row: Message, appointmentId: string, restricted=false,knownIdentities:string[]|null=null) {
+    return { id: row.id, senderUserId:restricted&&row.senderRole==='patient'?null:row.senderUserId, senderRole: row.senderRole, content: restricted?(reviewText(crypto.decrypt(row,appointmentId),knownIdentities).text??'Message withheld for privacy'):crypto.decrypt(row, appointmentId), createdAt: row.createdAt.toISOString() };
   }
   async function command<T>(actor: Actor, action: string, resource: string, meta: AppointmentCommand, input: unknown,
     run: (tx: PoolClient, old: { result: unknown } | undefined) => Promise<{ result: T; journal: unknown }>) {
@@ -74,7 +77,9 @@ export function createMessagingModule(pool: Pool, environment: NodeJS.ProcessEnv
         const page = (await tx.query<Message>(`SELECT * FROM appointment_messages WHERE "conversationId"=$1
           AND ($2::timestamp IS NULL OR ("createdAt",id)<($2,$3)) ORDER BY "createdAt" DESC,id DESC LIMIT 31`, [found.id, boundary?.at ?? null, boundary?.id ?? null])).rows;
         const visible = page.slice(0, 30), oldest = visible.at(-1);
-        return { messages: visible.reverse().map(row => publicMessage(row, id)), nextCursor: page.length > 30 && oldest
+        const restricted=actor.role==='doctor'&&!(await appointmentAccessState(tx,await readAppointment(tx,id),clock())).identityUnlocked;
+        const awaitIdentities=await knownReviewIdentities(tx,id);
+        return { messages: visible.reverse().map(row => publicMessage(row, id,restricted,awaitIdentities)), nextCursor: page.length > 30 && oldest
           ? Buffer.from(JSON.stringify({ at: oldest.createdAt.toISOString(), id: oldest.id })).toString('base64url') : null, ...access };
       });
     },
@@ -97,7 +102,8 @@ export function createMessagingModule(pool: Pool, environment: NodeJS.ProcessEnv
             FROM appointment_messages WHERE "conversationId"=$1`, [found.id, actor.role === 'patient' ? 'doctor' : 'patient', lastReadAt ?? null])).rows[0] : undefined;
           const processing = await appointmentMessagingProcessing(tx, row);
           if (processing || found?.purgedAt) Object.assign(access, { canSend: false, sendUntil: null, nextOpenAt: null, availabilityReason: found?.purgedAt ? 'purged' : 'processing' });
-          conversations.push({ appointmentId: row.id, counterpartAuthId: row.counterpartAuthId, specialty: row.specialty, status: row.status,
+          const privacy=await appointmentAccessState(tx,await readAppointment(tx,row.id),clock());
+          conversations.push({ patientReference:privacy.reference,privacyContractVersion:2,appointmentId: row.id, counterpartAuthId:actor.role==='doctor'&&!privacy.identityUnlocked?null:row.counterpartAuthId, specialty: row.specialty, status: row.status,
             scheduledAt: row.scheduledAt.toISOString(), lastMessageAt: state?.lastMessageAt?.toISOString() ?? null, unreadCount: state?.unreadCount ?? 0, ...access });
         }
         return { conversations, nextCursor };
@@ -114,7 +120,7 @@ export function createMessagingModule(pool: Pool, environment: NodeJS.ProcessEnv
         const previous = found ? (await tx.query<Message>('SELECT * FROM appointment_messages WHERE "conversationId"=$1 AND "senderUserId"=$2 AND "clientMessageId"=$3', [found.id, member.userId, input.clientMessageId])).rows[0] : undefined;
         if (previous) {
           if (crypto.decrypt(previous, id) !== input.content) denied(409, 'MESSAGE_REPLAY_CONFLICT', 'This message retry ID was already used.');
-          return { result: { message: publicMessage(previous, id), created: false }, journal: { messageId: previous.id } };
+          return { result: { message: publicMessage(previous, id,actor.role==='doctor'&&!(await appointmentAccessState(tx,await readAppointment(tx,id),clock())).identityUnlocked), created: false }, journal: { messageId: previous.id } };
         }
         if (old) denied(409, 'MESSAGE_REPLAY_UNAVAILABLE', 'The original message is no longer available.');
         if (context.processing) denied(409, 'APPOINTMENT_TRANSITION_PENDING', 'This conversation is temporarily read-only.');
@@ -128,7 +134,7 @@ export function createMessagingModule(pool: Pool, environment: NodeJS.ProcessEnv
           encrypted.ciphertext, encrypted.nonce, encrypted.authTag, encrypted.keyVersion, new Date(clock())])).rows[0]!;
         found = (await tx.query<Conversation>('UPDATE message_conversations SET version=version+1 WHERE id=$1 RETURNING *', [found.id])).rows[0]!;
         await signal(tx, actor, id, found, 'message', meta.operationId);
-        return { result: { message: publicMessage(message, id), created: true }, journal: { messageId } };
+        return { result: { message: publicMessage(message, id,actor.role==='doctor'&&!(await appointmentAccessState(tx,await readAppointment(tx,id),clock())).identityUnlocked), created: true }, journal: { messageId } };
       });
     },
     async read(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {

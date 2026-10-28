@@ -160,6 +160,10 @@ Published-slot revision verification: Web full suite 303 passed; Services full s
 
 Final Web production build passed (133 pages) after correcting UTF-8 encoding in the revised form and rerunning outside the stalled restricted build. No validation or runtime security rule was weakened. Final source-contract checks: 5 passed; affected Web ESLint: no warnings/errors. No temporary verification artifacts retained.
 
+## VITAL intelligence prototype
+
+[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, independent AI feature flags and root Compose overlay. Appointment privacy and access-code controls remain enforced when AI is disabled; specialty recommendations are retired. No legacy analytics data is imported.
+
 
 ## Operator observability revision (2026-10-28)
 

@@ -1,3 +1,4 @@
+import { accessFixtureSql } from './fixtures/appointment-access.js';
 import assert from 'node:assert/strict';
 import { randomBytes,randomUUID,generateKeyPairSync,createHash } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
@@ -46,6 +47,7 @@ function fixture(){
   let prcLicense:string|null='TEST-LICENSE';
   const calls:Array<{sql:string;args:unknown[]}>=[];
   const tx={release(){},async query(sql:string,args:unknown[]=[]):Promise<{rows:any[];rowCount:number}>{
+    const privacy=accessFixtureSql(sql,args,state.appointment);if(privacy&&!sql.startsWith('SELECT accepted'))return privacy;
     calls.push({sql,args});const done=(rows:any[]=[],rowCount=rows.length)=>({rows,rowCount});
     if(sql.startsWith('BEGIN')){prior=structuredClone(state);return done();}if(sql==='ROLLBACK'){state=prior;return done();}if(sql==='COMMIT'||sql.includes('pg_advisory_xact_lock'))return done();
     if(sql.includes('FROM vital_doctors d JOIN doctor_signatures'))return done([signature]);
@@ -62,6 +64,7 @@ function fixture(){
     if(sql.includes('SELECT * FROM command_operations'))return done(state.commands.has(String(args[1]))?[state.commands.get(String(args[1]))]:[]);
     if(sql.includes('INSERT INTO command_operations')){state.commands.set(String(args[2]),{action:args[3],resourceId:args[4],requestHash:args[5],status:'completed',result:JSON.parse(String(args[6]))});return done([],1);}
     if(sql.includes('SELECT a.*'))return done(args[0]===id?[structuredClone(state.appointment)]:[]);
+    if(sql.startsWith('SELECT a.id FROM appointments a JOIN records_episode_grants'))return done(state.grant.status==='live'?[{id}]:[]);
     if(sql.includes('SELECT accepted FROM consent_records'))return done([{accepted:consented}]);
     if(sql.includes('AS "appointmentId"')&&sql.includes('c."consentType"'))return done(consented?[{appointmentId:id,version:1,associationVersion:1,status:'confirmed',snapshotId:null,ehrCaseId,recordsBlockCode:null}]:[]);
     if(sql.includes('SELECT DISTINCT p."userId"')&&sql.includes('c."consentType"'))return done(consented?[{patientId,authId:patientAuthId,ehrPatientId}]:[]);
@@ -168,15 +171,12 @@ test('EDA Records paperwork deadline closes without a snapshot or completion pub
   assert.throws(()=>assertPaperwork(row,f.now),isCode('RECORDS_PAPERWORK_CLOSED'));assert.equal(row.status,'confirmed');
   row.completionDeadlineAt=new Date(f.now+1);assertPaperwork(row,f.now);row.paperworkLockedAt=new Date(f.now);assert.throws(()=>assertPaperwork(row,f.now));
 });
-test('EDA Records read-only recovery after deadline cannot reopen paperwork and permits verified completion',async()=>{
-  const f=fixture();f.state().appointment.proposedEndAt=new Date(f.now-86400000-1);const workflowId=randomUUID();
-  await assert.rejects(f.module.prepareSnapshot(f.actor('snapshot.prepare'),f.meta(),{workflowId:randomUUID(),appointmentId:f.id,expectedVersion:1}),isCode('RECORDS_PAPERWORK_CLOSED'));
-  const p=await f.module.prepareSnapshot(f.actor('snapshot.prepare'),f.meta(),{workflowId,appointmentId:f.id,expectedVersion:1,recovery:true}),payload={clinical:'SYNTHETIC RECOVERY'};
-  await f.module.captureSnapshot(f.actor('snapshot.capture',workflowId),workflowId,f.meta(),{inputHash:p.inputHash,payload,receipt:f.receipt(workflowId,payload)});
-  await f.lifecycle.apply(f.tx as any,f.state().appointment,'complete',{operationId:randomUUID(),beforeState:'confirmed',afterState:'completed',effectiveAt:paperworkDeadline(f.state().appointment)});
-  assert.equal(f.state().grant.status,'historical');assert.equal(f.state().freezes.size,1);assert.throws(()=>assertPaperwork(f.state().appointment,f.now));
-  assert.ok(f.calls.every(c=>!c.sql.includes('INSERT INTO patients')&&!c.sql.includes('INSERT INTO cases')));
+test('EDA Records expired appointment code grant cannot reopen live access through recovery',async()=>{
+ const f=fixture();f.state().appointment.proposedEndAt=new Date(f.now-86400000-1);
+ await assert.rejects(f.module.prepareSnapshot(f.actor('snapshot.prepare'),f.meta(),{workflowId:randomUUID(),appointmentId:f.id,expectedVersion:1,recovery:true}),isCode('APPOINTMENT_CODE_REQUIRED'));
+ assert.equal(f.state().snapshots.size,0);
 });
+
 test('EDA Records doctor acknowledgement requires snapshot and freezes a local evidence cutoff once',async()=>{
   const f=fixture(),context={operationId:randomUUID(),beforeState:'confirmed',afterState:'confirmed',effectiveAt:new Date(f.now)};
   await assert.rejects(f.lifecycle.beforeDoctorAcknowledgement!(f.tx as any,f.state().appointment,context),isCode('RECORD_SNAPSHOT_REQUIRED'));
@@ -264,6 +264,7 @@ test('EDA Records historical file access checks consent on the authorizing snaps
     if(sql.includes('SELECT p.* FROM vital_'))return{rows:[{userId:f.doctorId}],rowCount:1};
     if(sql.includes('SELECT * FROM records_file_assets'))return{rows:[asset],rowCount:1};
     if(sql.includes('FROM records_snapshot_assets'))return{rows:[{appointmentId:episode}],rowCount:1};
+
     if(sql.includes('SELECT accepted FROM consent_records'))return{rows:[{accepted:args[1]===origin||accepted}],rowCount:1};
     if(sql.includes('SELECT a.id FROM appointments'))return{rows:[],rowCount:0};
     return{rows:[],rowCount:0};}};
@@ -308,9 +309,9 @@ test('EDA Records episode and patient directories use relevant episode consent r
 test('EDA Records doctor identity context denies revoked empty episodes absent consent and admin scope substitution',async()=>{
   const f=fixture(),actor=f.actor('context',f.patientId);
   assert.equal((await f.module.patientContext(actor,f.patientId)).authId,f.patientAuthId);
-  f.state().grant.status='revoked';await assert.rejects(f.module.patientContext(actor,f.patientId),isCode('RECORDS_DOCTOR_DENIED'));
-  f.state().grant.snapshotId=randomUUID();assert.equal((await f.module.patientContext(actor,f.patientId)).patientId,f.patientId);
-  f.consent(false);await assert.rejects(f.module.patientContext(actor,f.patientId),isCode('RECORDS_DOCTOR_DENIED'));
+  f.state().grant.status='revoked';await assert.rejects(f.module.patientContext(actor,f.patientId),isCode('RECORDS_CODE_REQUIRED'));
+  f.state().grant.snapshotId=randomUUID();await assert.rejects(f.module.patientContext(actor,f.patientId),isCode('RECORDS_CODE_REQUIRED'));
+  f.consent(false);await assert.rejects(f.module.patientContext(actor,f.patientId),isCode('RECORDS_CODE_REQUIRED'));
   await assert.rejects(f.module.patientContext({...actor,role:'admin'},f.patientId),isCode('RECORDS_READER_DENIED'));
 });
 

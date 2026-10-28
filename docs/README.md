@@ -17,4 +17,9 @@ describe implemented interfaces; source tests do not certify a deployed workflow
 
 
 - [S6 appointment revisions](eda/sprint6-appointment-revisions.md): ratings, complaint history, calendar review, quotas and VITAL inbox contracts.
+
+- [VITAL intelligent intake and symptom analytics](intelligence.md): gated prototype, contracts, privacy, evaluation and rollout.
+- [AI status and completion report](vital-ai-status-and-completion-report.md): current evidence, deployment requirements and remaining operational steps.
+- [TRACE-aligned 19-specialty mapping](department-mapping.md): accepted BODHI specialties, exact TRACE resolution, unresolved UUIDs and reanalysis compatibility.
+
 See [department and specialty contracts](department_catalog.md).

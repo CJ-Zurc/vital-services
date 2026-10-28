@@ -320,6 +320,11 @@ model DoctorRecordAccess {
 }
 
 model Appointment {
+  access AppointmentAccess?
+  intakeBrief AppointmentIntakeBrief?
+  accessAttempts AppointmentAccessAttempt[]
+  aiSubmission AiSubmission?
+
   recordFreeze RecordsEpisodeFreeze?
   recordGrants RecordsEpisodeGrant?
   recordSnapshots RecordsSnapshot[]
@@ -403,6 +408,9 @@ model AppointmentLog {
 }
 
 model PreConsultation {
+  aiSubmissionId String? @db.Uuid
+  aiSubmission AiSubmission? @relation(fields:[aiSubmissionId],references:[id],onDelete:NoAction,onUpdate:NoAction)
+
   id             String      @id @default(uuid())
   appointmentId  String      @unique  
   appointment    Appointment @relation(fields: [appointmentId], references: [id])
@@ -1050,4 +1058,159 @@ model ChiefComplaintHistory {
   appointmentVersion Int
   @@index([appointmentId, changedAt])
   @@map("chief_complaint_history")
+}
+
+// New AI state lives in Core; Python has no database identity.
+model AiIntakeDraft {
+ id String @id @db.Uuid
+ patientAuthId String
+ sessionBinding String
+ version Int @default(0)
+ payload Json
+ analysis Json?
+ confirmation Json?
+ confirmedAt DateTime? @db.Timestamptz(6)
+ ageYears Int?
+ sandbox Boolean @default(false)
+ expiresAt DateTime @db.Timestamptz(6)
+ updatedAt DateTime @default(now()) @db.Timestamptz(6)
+ @@unique([patientAuthId,sessionBinding])
+ @@index([expiresAt],map:"ai_intake_drafts_expiry")
+ @@map("ai_intake_drafts")
+}
+model AiJob {
+ availableAt DateTime @default(now()) @db.Timestamptz(6)
+ id String @id @db.Uuid
+ kind String
+ resourceId String
+ sourceVersion Int
+ status String @default("pending")
+ leaseUntil DateTime? @db.Timestamptz(6)
+ leaseOwner String? @db.Uuid
+ attempts Int @default(0)
+ errorCode String?
+ createdAt DateTime @default(now()) @db.Timestamptz(6)
+ completedAt DateTime? @db.Timestamptz(6)
+ @@unique([kind,resourceId,sourceVersion])
+ @@index([status,kind,createdAt],map:"ai_jobs_pending")
+ @@map("ai_jobs")
+}
+model AiSubmission {
+ id String @id @db.Uuid
+ appointmentId String @unique
+ appointment Appointment @relation(fields:[appointmentId],references:[id],onDelete:NoAction,onUpdate:NoAction)
+ preConsultations PreConsultation[]
+ patientAuthId String
+ intakeVersion Int
+ submittedAt DateTime @db.Timestamptz(6)
+ reportDate DateTime @db.Date
+ expiresAt DateTime @db.Timestamptz(6)
+ ageYears Int?
+ payload Json
+ concepts Json?
+ analysis Json?
+ features Json?
+ sourceHash String
+ processedHash String?
+ status String @default("pending")
+ updatedAt DateTime @default(now()) @db.Timestamptz(6)
+ approvedBrief String?
+ approvedBy String?
+ approvedAt DateTime? @db.Timestamptz(6)
+ approvedHash String?
+ synthetic Boolean @default(false)
+ @@index([reportDate,expiresAt],map:"ai_submissions_report")
+ @@map("ai_submissions")
+}
+model AiDailyAggregate {
+ date DateTime @id @db.Date
+ payload Json
+ computedAt DateTime @default(now()) @db.Timestamptz(6)
+ expiresAt DateTime @db.Timestamptz(6)
+ @@map("ai_daily_aggregates")
+}
+model AiClusterVersion {
+ id String @id
+ inputHash String @unique
+ payload Json
+ createdAt DateTime @default(now()) @db.Timestamptz(6)
+ expiresAt DateTime @db.Timestamptz(6)
+ labels AiClusterLabel[]
+ @@map("ai_cluster_versions")
+}
+model AiClusterLabel {
+ versionId String
+ clusterId String
+ label String
+ reviewerAuthId String
+ reviewedAt DateTime @default(now()) @db.Timestamptz(6)
+ version AiClusterVersion @relation(fields:[versionId],references:[id],onDelete:Cascade,onUpdate:NoAction)
+ @@id([versionId,clusterId])
+ @@map("ai_cluster_labels")
+}
+model AiSetting {
+ id String @id
+ activatedAt DateTime @default(now()) @db.Timestamptz(6)
+ @@map("ai_settings")
+}
+
+model AiIntakeSession {
+ patientAuthId String
+ sessionBinding String
+ revokedAt DateTime @default(now()) @db.Timestamptz(6)
+ expiresAt DateTime @db.Timestamptz(6)
+ @@id([patientAuthId,sessionBinding])
+ @@map("ai_intake_sessions")
+}
+
+model AppointmentAccess {
+ identityValues Json?
+ appointment Appointment @relation(fields:[appointmentId],references:[id],onDelete:Cascade)
+ appointmentId String @id
+ reference String @db.VarChar(8)
+ patientId String
+ doctorId String
+ generation Int @default(0)
+ digest String?
+ ciphertext Json?
+ attempts Int @default(0)
+ consumedAt DateTime? @db.Timestamptz
+ revokedAt DateTime? @db.Timestamptz
+ grantUntil DateTime? @db.Timestamptz
+ grantedAt DateTime? @db.Timestamptz
+ ageYears Int?
+ sex String?
+ consentVersion String @default("appointment-sharing-v1")
+ consentedAt DateTime @default(now()) @db.Timestamptz
+ createdAt DateTime @default(now()) @db.Timestamptz
+ @@map("appointment_access")
+}
+model AppointmentReference {
+ reference String @id @db.VarChar(8)
+ createdAt DateTime @default(now()) @db.Timestamptz
+ @@map("appointment_references")
+}
+model AppointmentAccessAttempt {
+ appointment Appointment @relation(fields:[appointmentId],references:[id],onDelete:Cascade)
+ id BigInt @id @default(autoincrement())
+ appointmentId String
+ doctorId String
+ kind String
+ createdAt DateTime @default(now()) @db.Timestamptz
+ @@index([doctorId,createdAt],map:"appointment_access_attempts_doctor_time")
+ @@index([appointmentId,createdAt],map:"appointment_access_attempts_booking_time")
+ @@map("appointment_access_attempts")
+}
+model AppointmentIntakeBrief {
+ appointment Appointment @relation(fields:[appointmentId],references:[id],onDelete:Cascade)
+ appointmentId String @id
+ intakeVersion Int @default(1)
+ sourceHash String
+ summary Json
+ approvedText String?
+ approvedHash String?
+ approvedBy String?
+ approvedAt DateTime? @db.Timestamptz
+ createdAt DateTime @default(now()) @db.Timestamptz
+ @@map("appointment_intake_briefs")
 }

@@ -62,17 +62,10 @@ test('feedback replay conflicts rollback and revoked ownership fail closed', asy
   const failed = fixture(); failed.fail(); await assert.rejects(failed.owner.feedback(failed.actor(), failed.id, failed.meta, failed.input), /audit failed/);
   assert.equal(failed.state().feedback, null); assert.equal(failed.state().command, null); assert.equal(failed.state().ratingWrites, 0);
 });
-test('intake reads preserve submitted dates and deny unrelated clinicians', async () => {
-  const f = fixture();
-  const page = await f.owner.intakes(f.actor('appointments.intake.read', 'doctor', f.patientId), f.patientId, {});
-  assert.equal(page.items[0].submittedAt.toISOString(), '2026-09-30T22:00:00.000Z');
-  const query = f.calls.find(call => call.sql.includes('LEFT JOIN pre_consultations'))!;
-  assert.equal(query.args[1], f.patientId); assert.match(query.sql, /a\."doctorId"=\$1 AND a\."patientId"=\$2/);
-  f.manyIntakes(); const many = await f.owner.intakes(f.actor('appointments.intake.read', 'doctor', f.patientId), f.patientId, {});
-  assert.equal(many.items.length, 10); assert.equal(many.next?.cursorId, many.items[9].appointmentId);
-  await assert.rejects(f.owner.intakes(f.actor('appointments.intake.read'), f.patientId, {}), { code: 'ACTOR_SCOPE_DENIED' });
-  f.revoke(); await assert.rejects(f.owner.intakes(f.actor('appointments.intake.read', 'doctor', f.patientId), f.patientId, {}), { code: 'APPOINTMENT_MEMBERSHIP_REVOKED' });
+test('patient-wide intake history is retired in favor of appointment-scoped review',async()=>{
+ const f=fixture();await assert.rejects(()=>f.owner.intakes(f.actor('appointments.intake.read','doctor',f.patientId),f.patientId,{}),{code:'APPOINTMENT_INTAKE_HISTORY_RETIRED'});
 });
+
 test('remaining owner SQL binds hostile values and rejects dynamic identifiers', async () => {
   const f = fixture(); await f.owner.feedback(f.actor(), f.id, f.meta, f.input);
   await assert.rejects(f.owner.feedback(f.actor(),f.id,{...f.meta,operationId:randomUUID()},{...f.input,comment:"private"}));

@@ -9,6 +9,9 @@ src/eda/generated/
 !.env.*.example
 coverage/
 .artifacts/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 *.log
 npm-debug.log*
 .DS_Store
