@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { observeDeliveryOutcome } from '../../infrastructure/observation.js';
 import type { Pool, PoolClient } from "pg";
 import { processWithInbox } from "../../infrastructure/outbox.js";
 import { parseEvent, type EventEnvelope } from "../../contracts/events.js";
@@ -57,6 +58,8 @@ export async function deliverPending(pool: Pool, config: DeliveryConfig, fetcher
     FROM due WHERE delivery.id=due.id RETURNING delivery.*`, [owner]);
   for (const row of result.rows) {
     const target = config[row.destination];
+    let reason: 'configuration' | 'transport' | 'http_rejected' | 'receipt' | 'storage' = 'configuration';
+    let httpStatus: number | undefined;
     try {
       if (!target?.baseUrl || !target.key) throw new Error("DELIVERY_NOT_CONFIGURED");
       const path = row.destination === "audit" ? "/ingest/business" : "/internal/v1/vital/notifications";
@@ -65,22 +68,29 @@ export async function deliverPending(pool: Pool, config: DeliveryConfig, fetcher
       const headers: Record<string, string> = { "Content-Type": "application/json", "X-Correlation-ID": row.correlationId };
       if (row.destination === "audit") headers["X-Audit-Ingest-Key"] = target.key;
       else { headers["X-Internal-Service"] = "vital-services"; headers["X-Internal-Service-Key"] = target.key; }
+      reason = 'transport';
       const response = await fetcher(url, { method: "POST", redirect: "error", headers,
         body: JSON.stringify(row.payload), signal: AbortSignal.timeout(10_000) });
+      reason = 'http_rejected'; httpStatus = response.status;
       if (response.status !== 202) throw new Error("DELIVERY_NOT_ACCEPTED");
+      reason = 'receipt'; httpStatus = undefined;
       let receiptId: string | null = null;
       if (row.destination === "notification") {
         const receipt = await boundedJsonReceipt(response) as { requestId?: string; notificationId?: string; status?: string };
         if (receipt.requestId !== row.requestId || typeof receipt.notificationId !== "string") throw new Error("DELIVERY_RECEIPT_MISMATCH");
         receiptId = receipt.notificationId;
       }
+      reason = 'storage';
       const accepted = await pool.query(`UPDATE integration_deliveries SET status='accepted',"receiptId"=$3,"leaseOwner"=NULL,"leaseUntil"=NULL,"updatedAt"=NOW()
         WHERE id=$1 AND "leaseOwner"=$2 AND status='processing' AND "leaseUntil">NOW()`, [row.id, owner, receiptId]);
       if (accepted.rowCount !== 1) throw new Error("DELIVERY_LEASE_LOST");
+      observeDeliveryOutcome(row.destination, 'accepted');
     } catch {
       await pool.query(`UPDATE integration_deliveries SET status=$3,attempts=attempts+1,"nextAttemptAt"=NOW()+($4 * INTERVAL '1 second'),
         "lastErrorCode"='DELIVERY_FAILED',"leaseOwner"=NULL,"leaseUntil"=NULL,"updatedAt"=NOW() WHERE id=$1 AND "leaseOwner"=$2`,
       [row.id, owner, row.attempts >= 19 ? "blocked" : "pending", Math.min(60 * 2 ** Math.min(row.attempts, 10), 21600)]);
+      observeDeliveryOutcome(row.destination, row.attempts >= 19 ? 'blocked' : 'retry_pending',
+        { reason, ...(httpStatus === undefined ? {} : { http_status: httpStatus }) });
     }
   }
   return result.rows.length;

@@ -1,3 +1,4 @@
+import { observeDelivery } from '../infrastructure/observation.js';
 import "dotenv/config";
 import { setTimeout as sleep } from "node:timers/promises";
 import { createDatabases } from "../infrastructure/databases.js";
@@ -37,6 +38,7 @@ const video=videoRuntime(databases);
 const appointment=appointmentRuntime(databases,payment,process.env,records,video);
 const messaging=messagingRuntime(databases);
 const profileQr = profileQrRuntime(databases);
+let lastDeliveryObservation = 0;
 let lastVideoScan=0;
 let lastAppointmentScan=0;
 let lastPaymentScan = 0;
@@ -76,6 +78,10 @@ async function run() {
       console.log(JSON.stringify({ level: "info", event: "eda.worker.connected", consumerCount: consumers.length, migrationComplete: false }));
       while (!closing && !brokerClosed && consumers.every((consumer) => consumer.healthy())) {
         health.ready();
+        if (Date.now() - lastDeliveryObservation >= 30_000) {
+          lastDeliveryObservation = Date.now();
+          await observeDelivery(databases.integrationsPool);
+        }
         const publish = (event: Parameters<typeof publishConfirmed>[3]) => publishConfirmed(publisher, exchangeFor(event.producer), event.eventType, event);
         await dispatchOutbox(databases.corePool, publish);
         await dispatchOutbox(databases.integrationsPool, publish);

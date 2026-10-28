@@ -22,7 +22,7 @@ function fixture(){
     completionDeadlineAt:null,paperworkLockedAt:null,completedAt:null,proposalRole:null};
   let state={row,proposals:new Map<string,AppointmentRow>(),commands:new Map<string,Record<string,unknown>>(),events:[] as Record<string,unknown>[],workflows:new Map<string,Record<string,unknown>>(),logs:[] as unknown[][]};
   const slot={id:scheduleSlotId,doctorId,slotDate:new Date("2099-01-02T00:00:00Z"),startTime:"23:45",endTime:"01:00",consultationType:"both",isPublished:true};
-  let blocked=false,occupied=false;
+  let blocked=false,occupied=false,quoted=false; const billingInserts: Array<{sql:string;args:unknown[]}> = [];
   let previous=structuredClone(state);let revoked=false,failOutbox=false,hasProposal=false;
   const pendingConflicts:string[]=[];
   const calls:string[]=[];const effects:string[]=[];
@@ -74,7 +74,8 @@ function fixture(){
     if(sql.includes("UPDATE appointment_workflows SET state=")){state.workflows.get(String(args[0]))!.state="committed";return{rows:[],rowCount:1};}
     if(sql.includes('SELECT "ehrPatientId" FROM vital_patients'))return{rows:[{ehrPatientId:patientId}],rowCount:1};
     if(sql.includes("SELECT * FROM appointment_payment_projections"))return{rows:[{paymentId:randomUUID(),sourceVersion:1,status:"paid",reviewRequired:false,billingLineageId:state.row.billingLineageId,associationVersion:state.row.associationVersion}],rowCount:1};
-    if(sql.includes("FROM appointment_billing_quotes"))return{rows:[],rowCount:0};
+    if(sql.includes("FROM appointment_billing_quotes"))return{rows:quoted?[{billingLineageId:state.row.billingLineageId}]:[],rowCount:quoted?1:0};
+    if(sql.includes("INSERT INTO appointment_billing_intents")){billingInserts.push({sql,args});return{rows:[],rowCount:1};}
     throw new Error("UNEXPECTED_TEST_SQL:"+sql);
   },release(){}};
   const pool={connect:async()=>tx,query:tx.query.bind(tx)} as unknown as Pool;
@@ -87,7 +88,7 @@ function fixture(){
     prepareWorkflow:async(workflowId:string,selection:VideoSelection)=>{const receipt={workflowId,sourceAppointmentId:id,targetAppointmentId:id,expectedSourceVersion:0,expectedTargetVersion:0,billingLineageId:state.row.billingLineageId,associationVersion:1,selectionHash:selectionHash(selection),resourceId:randomUUID(),resourceVersion:0,freezeToken:randomUUID()};receipts.set(workflowId,receipt);return receipt;},
     finalizeWorkflow:async(workflowId:string)=>{state.workflows.get(workflowId)!.videoProcessingState='finalized';return receipts.get(workflowId)!;}},
     financial:{verifyPaid:async()=>{}}};
-  return{now,id,patientId,patientAuthId,scheduleSlotId,slot,block:()=>{blocked=true;},occupy:()=>{occupied=true;},pool,tx,calls,effects,actor,meta,owners,state:()=>state,revoke:()=>{revoked=true;},fail:()=>{failOutbox=true;},proposal:()=>{hasProposal=true;},
+  return{now,id,patientId,patientAuthId,scheduleSlotId,slot,block:()=>{blocked=true;},occupy:()=>{occupied=true;},quote:()=>{quoted=true;},billingInserts,pool,tx,calls,effects,actor,meta,owners,state:()=>state,revoke:()=>{revoked=true;},fail:()=>{failOutbox=true;},proposal:()=>{hasProposal=true;},
     conflict:()=>{const id=randomUUID();pendingConflicts.push(id);return id;},
     module:(enabled=false)=>createAppointmentModule(pool,enabled?owners:{},()=>now)};
 }
@@ -255,6 +256,15 @@ test("EDA Appointment maintenance expires proposals into existing terminal statu
   assert.equal(f.state().row.status,'rejected');assert.equal(f.state().row.patientRescheduleCount,0);
   assert.equal(f.state().logs[0]![2],'pending_patient_confirmation');assert.equal(f.state().logs[0]![3],'rejected');
   assert.equal(f.state().events.filter(event=>event.eventType==='vital.audit.requested').length,1);
+});
+test("EDA Appointment maintenance records quoted expiry with distinct actor and operation parameters",async()=>{
+  const f=fixture();f.quote();f.state().row.status='pending_patient_confirmation';f.state().row.sourceAppointmentId=randomUUID();
+  f.state().row.scheduledAt=new Date(f.now-7200000);f.state().row.proposedEndAt=new Date(f.now-3600000);
+  assert.equal((await createAppointmentMaintenance(f.pool,f.owners,undefined,()=>f.now).lifecycle()).processed,1);
+  assert.equal(f.billingInserts.length,1);const {sql,args}=f.billingInserts[0]!;
+  assert.match(sql,/VALUES\(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9/);
+  assert.equal(args[5],args[6]);assert.match(String(args[6]),/^[0-9a-f-]{36}$/i);
+  assert.equal(args[8],'expire');assert.equal(f.state().events.filter(event=>event.eventType==='vital.audit.requested').length,1);
 });
 test("EDA Appointment automatic completion rechecks unresolved proposals rather than completing a stale selection",async()=>{
   const f=fixture();f.state().row.status='confirmed';f.state().row.scheduledAt=new Date(f.now-3*86400000);f.state().row.proposedEndAt=new Date(f.now-2*86400000);f.proposal();

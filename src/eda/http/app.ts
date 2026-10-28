@@ -1,3 +1,4 @@
+import { observeRequest } from '../infrastructure/observation.js';
 import express, { type ErrorRequestHandler, type RequestHandler } from "express";
 import { createIntelligenceRouter } from './intelligence-router.js';
 import type { IntelligenceModule } from '../modules/intelligence/module.js';
@@ -33,6 +34,7 @@ import { createAppointmentCommandPreparationRouter, type AppointmentCommandPrepa
 
 export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig, profileWrites = false, syncStatuses?: ProfileSyncStatuses, payment?: PaymentModule, appointment?: AppointmentRuntime, records?: RecordsRuntime,video?:VideoRuntime,messaging?:MessagingRuntime,streams?:StreamOwners,completion?:CompletionReads,profileQr?:ProfileQrModule,appointmentExtras?:AppointmentExtras,portal?:PortalIntegrations,commandPreparations?:AppointmentCommandPreparationRuntime,intelligence?:IntelligenceModule) {
   const app = express();
+  app.use(observeRequest);
   app.disable("x-powered-by");
   app.set("trust proxy", false);
   app.use(createProfileQrUploadIngress(assertion));

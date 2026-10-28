@@ -41,4 +41,9 @@ no migration or domain-policy change is introduced by this routing revision.
 
 ## VITAL intelligence prototype
 
-[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.
+[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, independent AI feature flags and root Compose overlay. Appointment privacy and access-code controls remain enforced when AI is disabled; specialty recommendations are retired. No legacy analytics data is imported.
+
+
+## Operator observability revision (2026-10-28)
+
+The private API emits api_request metadata at response headers without consuming bodies. Only route templates, method/status, header latency and verified actor correlation enter observations. The worker emits delivery_snapshot counts/ages every thirty seconds for Audit and Notifications; snapshot failure never changes delivery behavior.
