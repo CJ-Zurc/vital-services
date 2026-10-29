@@ -1,3 +1,4 @@
+import type { AuditRuntime } from '../modules/audit/runtime.js';
 import { observeRequest } from '../infrastructure/observation.js';
 import express, { type ErrorRequestHandler, type RequestHandler } from "express";
 import { createIntelligenceRouter } from './intelligence-router.js';
@@ -32,7 +33,7 @@ import { createPortalIntegrationsRouter, portalIntegrationDelegation } from './p
 import type { PortalIntegrations } from '../modules/portal-integrations/portal-integrations.js';
 import { createAppointmentCommandPreparationRouter, type AppointmentCommandPreparationRuntime } from './appointment-command-preparation-router.js';
 
-export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig, profileWrites = false, syncStatuses?: ProfileSyncStatuses, payment?: PaymentModule, appointment?: AppointmentRuntime, records?: RecordsRuntime,video?:VideoRuntime,messaging?:MessagingRuntime,streams?:StreamOwners,completion?:CompletionReads,profileQr?:ProfileQrModule,appointmentExtras?:AppointmentExtras,portal?:PortalIntegrations,commandPreparations?:AppointmentCommandPreparationRuntime,intelligence?:IntelligenceModule) {
+export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig, profileWrites = false, syncStatuses?: ProfileSyncStatuses, payment?: PaymentModule, appointment?: AppointmentRuntime, records?: RecordsRuntime,video?:VideoRuntime,messaging?:MessagingRuntime,streams?:StreamOwners,completion?:CompletionReads,profileQr?:ProfileQrModule,appointmentExtras?:AppointmentExtras,portal?:PortalIntegrations,commandPreparations?:AppointmentCommandPreparationRuntime,intelligence?:IntelligenceModule,audit?:AuditRuntime) {
   const app = express();
   app.use(observeRequest);
   app.disable("x-powered-by");
@@ -78,6 +79,16 @@ export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig,
     } catch (error) { next(error); }
   };
   app.use("/internal/v1", delegation);
+  app.post('/internal/v1/audit/denials',async(req,res)=>{
+    if(!audit)throw new DomainError(503,'AUDIT_UNAVAILABLE','Audit recording unavailable.');
+    res.json({success:true,contractVersion:1,data:await audit.boundary(res.locals.actor,req.body)});
+  });
+  app.post('/internal/v1/audit/intents',async(req,res)=>{
+    if(!audit)throw new DomainError(503,'AUDIT_UNAVAILABLE','Audit recording unavailable.');
+    if(!res.locals.command)throw new DomainError(401,'COMMAND_METADATA_REQUIRED','Signed command required.');
+    const result=await audit.intent(res.locals.actor,res.locals.command.operationId,res.locals.command.requestHash,req.body);
+    res.json({success:true,contractVersion:1,data:result});
+  });
   app.use('/internal/v1/ai',createIntelligenceRouter(intelligence));
   app.use('/internal/v1', createStreamRouter(streams));
   app.use('/internal/v1/completion', createCompletionRouter(completion));
@@ -95,8 +106,12 @@ export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig,
   app.use('/internal/v1/video',createVideoRouter(video));
   app.use('/internal/v1/messaging', createMessagingRouter(messaging));
   app.use((_req, res) => res.status(404).json({ success: false, code: "ROUTE_NOT_EXTRACTED", message: "This route has not passed extraction acceptance." }));
-  const errors: ErrorRequestHandler = (error: unknown, _req, res, _next) => {
+  const errors: ErrorRequestHandler = async (error: unknown, _req, res, _next) => {
     if (res.headersSent) { res.destroy(); return; }
+    if(audit&&(error instanceof DomainError||error instanceof ZodError)&&res.locals.actor){
+      const template=typeof _req.route?.path==='string'?_req.baseUrl.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi,'{id}')+_req.route.path.replace(/:([A-Za-z]+)/g,'{$1}'):null;
+      if(template&&/^\/[a-zA-Z0-9_/{}/.-]{0,240}$/.test(template))await audit.denied(res.locals.actor,template,_req.method,error instanceof DomainError?error.status:400).catch(()=>console.error(JSON.stringify({event:'vital.audit.persistence_failed'})));
+    }
     if(error instanceof AppointmentPendingConflictsError){res.status(409).json({success:false,code:error.code,message:error.message,data:{conflictIds:error.conflictIds}});return;}
     if (error instanceof DomainError) {if(error.status===429||error.status===503||/PENDING/.test(error.code))res.set('Retry-After',error.code==='MESSAGE_RATE_LIMIT'?'60':'5');res.status(error.status).json({ success: false, code: error.code, message: error.message });}
     else if (error instanceof ZodError) res.status(400).json({ success: false, code: "INVALID_INPUT", message: "Invalid request." });
