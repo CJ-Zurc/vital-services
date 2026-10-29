@@ -47,7 +47,7 @@ function get(path: string) {
 function method(path: string, verb = 'GET') { return get(path).methods.find((row: any) => row.method === verb); }
 
 test('route contract review maps every current Web route and exported method without claiming runtime parity', () => {
-  assert.equal(current.length, 158, 'A changed route inventory requires explicit source review.');
+  assert.equal(current.length, 160, 'A changed route inventory requires explicit source review.');
   for (const route of current) {
     const result = get(route.path);
     assert.equal(result.reviewed, true, route.path + ': ' + JSON.stringify(result.gates));
@@ -161,6 +161,13 @@ test('route contract review hashes source validators and test evidence without i
   assert.match(sending.callerAndTestEvidence.scope, /HTTP method.*not inferred/);
   const route = current.find(row => row.path === '/api/doctor/google-meet/callback')!;
   assert.deepEqual(review(route), review(route), 'Static output must be deterministic, without timestamps or live calls.');
+});
+
+test('VITAL audit routes have explicit admin ownership and do not claim runtime parity',()=>{
+  for(const [path,verb] of [['/api/admin/audit-logs','GET'],['/api/admin/audit-logs/export','POST']]){
+    const row=method(path!,verb!);assert.equal(row.family,'audit');assert.equal(row.requiredRole,'admin');assert.equal(row.dispatch.symbol,'targetAudit');
+    assert.equal(row.dispatch.frontDoor.targetModeAccepted,true);assert.equal(row.parityStatus,'not_verified');
+  }
 });
 
 test('AI and appointment-code routes retain explicit owners, roles and dispatch',()=>{

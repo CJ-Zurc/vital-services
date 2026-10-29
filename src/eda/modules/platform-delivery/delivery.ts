@@ -1,3 +1,4 @@
+import { auditMetadataSchema } from '../../contracts/audit.js';
 import { randomUUID } from "node:crypto";
 import { observeDeliveryOutcome } from '../../infrastructure/observation.js';
 import type { Pool, PoolClient } from "pg";
@@ -26,7 +27,11 @@ export async function enqueueAudit(pool: Pool, raw: EventEnvelope) {
   const event = parseEvent(raw);
   await processWithInbox(pool, "platform-audit", event, async (tx) => {
     if (event.eventType !== "vital.audit.requested") throw new Error("AUDIT_SUBSCRIPTION_MISMATCH");
-    await saveDelivery(tx, event, "audit", event.eventId, {
+    const metadata=event.data.auditMetadata ? auditMetadataSchema.parse(event.data.auditMetadata) : null;
+    await saveDelivery(tx, event, "audit", event.eventId, metadata ? {
+      schema_version:2,source_service:"vital-services",event_id:event.eventId,event_type:event.data.auditType,
+      correlation_id:event.correlationId,user_id:metadata.actor_id,system:"vital",timestamp:event.occurredAt,details:metadata,
+    } : {
       event_id: event.eventId, event_type: event.data.auditType,
       correlation_id: event.correlationId, user_id: event.data.actorAuthId,
       system: "vital", timestamp: event.occurredAt,

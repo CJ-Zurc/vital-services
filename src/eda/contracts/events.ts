@@ -1,3 +1,4 @@
+import { auditMetadataSchema } from './audit.js';
 import { z } from "zod";
 
 const uuid = z.uuid();
@@ -71,8 +72,9 @@ export const eventDataSchemas = {
   "vital.audit.requested": z.object({
     auditType: z.string().regex(/^vital\.[a-z_.]{1,96}$/),
     actorAuthId: uuid.nullable(),
-    resourceId: uuid,
-    resourceType: z.enum(["profile", "appointment", "payment", "document", "message", "video"]),
+    resourceId: uuid.nullable(),
+    resourceType: z.enum(["profile", "appointment", "payment", "document", "message", "video", "audit_history"]),
+    auditMetadata: auditMetadataSchema.optional(),
   }).strict(),
   "vital.notification.requested": z.object({
     requestId: uuid,

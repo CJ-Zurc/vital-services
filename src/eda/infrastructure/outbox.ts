@@ -1,3 +1,4 @@
+import { auditMetadata } from '../contracts/audit.js';
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { parseEvent, type EventEnvelope, type EventType, type Producer } from "../contracts/events.js";
@@ -19,6 +20,10 @@ export interface OutboxInput {
 type Writer = Pick<CorePrisma.TransactionClient, "outboxEvent"> | Pick<IntegrationsPrisma.TransactionClient, "outboxEvent">;
 
 export function makeEvent(input: OutboxInput): EventEnvelope {
+  if(input.eventType==='vital.audit.requested'&&!input.data.auditMetadata){
+    const data=input.data as {auditType:string;actorAuthId:string|null;resourceId:string|null;resourceType:string};
+    input={...input,data:{...input.data,auditMetadata:auditMetadata(data)}};
+  }
   return parseEvent({ ...input, eventId: input.eventId ?? randomUUID(), schemaVersion: 1,
     occurredAt: input.occurredAt ?? new Date().toISOString(), causationId: input.causationId ?? null });
 }

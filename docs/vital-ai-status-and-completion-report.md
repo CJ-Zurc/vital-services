@@ -31,3 +31,7 @@ Before source cleanup, the full Services run passed 491 tests with four environm
 - Enable only after acceptance. Landing-page tutorial remains deferred.
 
 The complete implementation contract and runbook are in [the implementation brief](vital-ai-implementation.md).
+
+## Audit integration addition
+
+VITAL universal audit publishing, security outcomes, admin history and bounded CSV export are documented in [audit integration](audit-integration.md). This does not activate anomaly detection or change production retention.
