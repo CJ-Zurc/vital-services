@@ -47,11 +47,32 @@ test('read validation cursor rechecks the whole snapshot without advancing',asyn
 });
 test('read page SQL seek identifiers are closed while all cursor values stay bound',async()=>{
   const f=fixture(2),first=await f.read({limit:1});await f.read({limit:1,cursor:first.meta.nextCursor!});
-  const seek=f.calls.find(call=>call.sql.includes('WHERE ('))!;assert.match(seek.sql,/r\."id" > \$2::text/);assert.ok(seek.values.includes('000000'));
+  const seek=f.calls.find(call=>call.sql.includes('WHERE ('))!;assert.match(seek.sql,/r\."id"::text > \$2::text/);assert.ok(seek.values.includes('000000'));
   await assert.rejects(readCollectionPage(f.pool,prepareReadPage(f.actor,'x',{}, {limit:10}),{sql:'SELECT id FROM fixture_rows',values:[],
     order:[{key:'id; DROP TABLE appointments',direction:'ASC',cast:'text'}]}),/INVALID_READ_SPECIFICATION/);
   for(const limit of[0,51,'10;DROP'])assert.equal(z.object(readPageInput).safeParse({limit}).success,false);
 });
+test('read pagination casts projected date and time columns consistently',async()=>{
+  const f=fixture(2),calls:string[]=[];
+  const rows=[{id:'a',slotDate:'2026-10-30',startTime:'09:00:00'},{id:'b',slotDate:'2026-10-30',startTime:'10:00:00'}];
+  const pool={connect:async()=>({release(){},async query(sql:string){
+    calls.push(sql);
+    if(sql.includes(' AS revision'))return{rows:[{revision:'stable',total:'2'}]};
+    if(sql.startsWith('SELECT r.*'))return{rows:sql.includes('WHERE (')?rows.slice(1):rows};
+    return{rows:[]};
+  }})} as unknown as Pool;
+  const read=(cursor?:string)=>readCollectionPage(pool,prepareReadPage(f.actor,'slots',{}, {limit:1,cursor}),{
+    sql:'SELECT id,"slotDate"::text,"startTime"::text FROM schedules',values:[],
+    order:[{key:'slotDate',direction:'ASC',cast:'date'},{key:'startTime',direction:'ASC',cast:'time'},{key:'id',direction:'ASC',cast:'text'}]});
+  const first=await read();await read(first.meta.nextCursor!);
+  const seek=calls.find(sql=>sql.includes('WHERE ('))!;
+  assert.match(seek,/r\."slotDate"::date > \$1::date/);
+  assert.match(seek,/r\."slotDate"::date IS NOT DISTINCT FROM \$1::date/);
+  assert.match(seek,/r\."startTime"::time > \$2::time/);
+  assert.match(seek,/r\."startTime"::time IS NOT DISTINCT FROM \$2::time/);
+  assert.match(seek,/ORDER BY r\."slotDate"::date ASC NULLS LAST,r\."startTime"::time ASC NULLS LAST,r\."id"::text ASC NULLS LAST/);
+});
+
 test('read composition rejects duplicate cursors items revisions and oversized results',async()=>{
   const f=fixture(2),first=await f.read({limit:1});
   await assert.rejects(collectReadPages(async()=>first),error=>error instanceof DomainError&&error.code==='APPOINTMENT_READ_SNAPSHOT_CHANGED');
