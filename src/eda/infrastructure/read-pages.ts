@@ -74,14 +74,14 @@ export async function readCollectionPage<T extends { id: string }>(pool: Pool, p
     if (after) {
       const bindings = order.map((field, index) => { parameters.push(after[index]); return '$' + parameters.length + '::' + field.cast; });
       seek = 'WHERE (' + order.map((field, index) => {
-        const prefix = order.slice(0, index).map((earlier, j) => `r."${earlier.key}" IS NOT DISTINCT FROM ${bindings[j]}`);
-        const advance = after[index] === null ? 'FALSE' : `(r."${field.key}" ${field.direction === 'ASC' ? '>' : '<'} ${bindings[index]} OR r."${field.key}" IS NULL)`;
+        const prefix = order.slice(0, index).map((earlier, j) => `r."${earlier.key}"::${earlier.cast} IS NOT DISTINCT FROM ${bindings[j]}`);
+        const advance = after[index] === null ? 'FALSE' : `(r."${field.key}"::${field.cast} ${field.direction === 'ASC' ? '>' : '<'} ${bindings[index]} OR r."${field.key}" IS NULL)`;
         return '(' + [...prefix, advance].join(' AND ') + ')';
       }).join(' OR ') + ')';
     }
     parameters.push(page.limit + 1);
     const selected = (await tx.query<T>(`SELECT r.* FROM (${sql}) r ${seek}
-      ORDER BY ${order.map(field => `r."${field.key}" ${field.direction} NULLS LAST`).join(',')}
+      ORDER BY ${order.map(field => `r."${field.key}"::${field.cast} ${field.direction} NULLS LAST`).join(',')}
       LIMIT $${parameters.length}`, parameters)).rows;
     const items = selected.slice(0, page.limit), last = items.at(-1) as (T & Record<string, unknown>) | undefined;
     const total = z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).parse(current.total);

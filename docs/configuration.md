@@ -27,4 +27,6 @@ OTP or enable shared sandbox bypasses for normal staging.
 
 ## VITAL intelligence prototype
 
-[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.
+[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, root Compose overlay and independently enforced appointment privacy. Specialty recommendations are retired. No legacy data is imported.
+
+See the [production configuration reference](configuration-reference.md) for every service example variable, feature dependencies and the activation sequence.

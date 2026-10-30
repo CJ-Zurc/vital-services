@@ -13,6 +13,10 @@ const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIO
 const hash = text => createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex');
 // A review snapshot, not a parity certificate. Changes require a fresh source review.
 const reviewedHashes = Object.freeze({
+  'tests/audit-bff.test.ts': '57a00c784277565115d9b2503321e75a9cf3969cfae0cd2275c2662a3160e72f',
+  'lib/eda/audit-bff.ts': '1d8d084e1b85051e5423e3db5fa4dfc31d961297e70cfa69c21e4344adec9a1d',
+  'app/api/admin/audit-logs/export/route.ts': 'a5e810c29912b92829c124dc619f9bfa382f41043131cba8afa09f98f8459a49',
+  'app/api/admin/audit-logs/route.ts': '60c155976ad3e852c31dddadea4a2ea76f5060c1839076f1e2277bf442cef74e',
   'lib/eda/intelligence-bff.ts': 'c64ef01f24317201edd298c317602f687f0a64f9d2f8161834a4041e2837e72d',
   'lib/eda/intelligence-paths.ts': 'be3682c582f8455cbbcdf6e496f7bfdd1986fecceffffbfaf501a0ad5cf07130',
   'tests/intelligence-paths.test.ts': '9454af79d389f33c3edd0c796cb732dffc34a983334a8915fd5d4e090fb8676c',
@@ -220,7 +224,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/messaging-paths.ts': '320185fde0904df6ac25828bebe20dd3a2a126138eac68b0980d5c7988dcced5',
   'lib/eda/messaging-route-policy.ts': 'f8fe5c61d6c5f7105e0fe9241816258bc5a63fb27ef37708831e7cef332b5e94',
   'lib/eda/messaging.ts': '1ce8421f0dbd074d669eaf85d5ee119f2a98cddcfd62efb74e9b9c8b5ceb9cd9',
-  'lib/eda/mode-policy.ts': '450b1f1293e88ecd1d54a7607c087db68303980096db7d034f86aeff1058f6c1',
+  'lib/eda/mode-policy.ts': '140b36fde2ef9304e7bde09354995af8a4ae2aef21b5cac2151bda14590617d0',
   'lib/eda/patient-onboarding.ts': 'bf14670643dc52a6693e4bb8ea452b247b43834246196f28554d9686673e092d',
   'lib/eda/patient-record-notice.ts': '966b336c56669936b94c6470a6598802335f0509f562e2373142f841a97db35c',
   'lib/eda/patient-workflow.ts': '81de5bf45249c1d71da5f7df9fda58866fcbd3a998cc5ca50e4b01b277533f4b',
@@ -251,7 +255,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/request-body.ts': '7a78782d69c435e689b110eee50541ed73795c6bfcdb2aaa43ca6da10c71b0d5',
   'lib/eda/stream-bff.ts': '2fa4d988f94763e0876d4b4995c843c155846c1a61dd96ad537fed6ed01e32c7',
   'lib/eda/stream-transport.ts': 'ada0197f643603eb27a9659728a2629b0301ea96e81477afa5b737730037fd5d',
-  'lib/eda/transport.ts': 'cd00aa27369da8ad0a85f67a3efc491d9fc5b6aafdcac15f35da0b9d50457cef',
+  'lib/eda/transport.ts': 'b1ebb6c0d36caf6bad3e6d52193a73f41fd3c2fdab9d6907e4bd2368321e5859',
   'app/api/internal/vital/readiness/route.ts': 'b7ffb181f5babb03300373584259088eb10b1d57494b09f579d93aa5183a0877',
   'tests/eda-readiness.test.ts': 'a37c0db033d0143465be8faf2472406e4a4ed75cb86000c6947ee1591cb2c16a',
   'lib/eda/video-bff.ts': '81021e8f76361365a7ebb5432b1242fffc5012b14196020f701fe732ee1811bd',
@@ -265,7 +269,7 @@ const reviewedHashes = Object.freeze({
   'lib/errors.ts': 'a763f1f8be88fda317b4f85103e3883874879d1528cbeb816b690560fbb70510',
   'lib/form-validation.ts': '7585cdcdbd7f4d9eca0017fdf65ed59768bf156d3a936be14dc95991918e91f4',
   'lib/gateway-actor.ts': '620521eeac45bd4b96ed0512b214bf46dc730d83aac4258a10fad6041c651cbe',
-  'lib/gateway.ts': '12762ecd3c46087aeaf8461f113cdf2444f17b2aa008296d9fae0ad3fabec334',
+  'lib/gateway.ts': '1d580fa61e5e33d53b8f704c02810eda5fe7104da29d504d77eb6a32fb71cf19',
   'lib/integration-api.ts': '28c82016ae6464c923b682d988fc8275f84deb8445ed8cd98c37daed5838f679',
   'lib/internal-auth.ts': '246c4562bd5d4ddf35b2366f49c5124b01781d8ebd81e8b91f21bcc0fa1a73aa',
   'lib/jwt.ts': 'acb2d4cb6353e2468244997729abe9d838e6677023ce9cc0a0509cfe2bd394d7',
@@ -314,7 +318,7 @@ const reviewedHashes = Object.freeze({
   'tests/eda-records.test.ts': '03103dea537461fd952b59126ff3c08867a78f1d28dd05eb6b6ffdbc6aaa6a91',
   'tests/eda-remaining-owners.test.ts': '7636d90da065ad7830294bc4c0494c34e0323f5dbda6a4730eb5eece418c4bd8',
   'tests/eda-sse.test.ts': '1fb489e045e2b0a4b57bd48071ee92b22a32a421107dd7042036aeedae69c2d2',
-  'tests/eda-transport.test.ts': 'cb1655b61712663535af377df977fe72cadd5ca415b17d606313550bd82a12a9',
+  'tests/eda-transport.test.ts': 'b4c69ba71f15e3a1c39b4d19701180ac928d548c796a2afc0215eacf49004de0',
   'tests/eda-video-appointment.test.ts': 'f0fb5b22446153a5a0416b5c14c1ee46a4df2863716392aeee259d3eb5ab49da',
   'tests/eda-video-transport.test.ts': '2259404aca880daadfc6d48244276c95fb4a526c0653f977a0a463bf56748517',
   'tests/eda-video.test.ts': '1f8958f5b8bc183e5ca61018df3f3ea2cd0784d61011e36e845bdf85a660b729',
@@ -340,6 +344,11 @@ const reviewedHashes = Object.freeze({
 });
 
 const families = {
+  audit: {owner:'BGH Audit through Gateway; Services durable access intents',entry:'lib/eda/audit-bff.ts',dispatch:'targetAudit',
+    files:['lib/eda/profile.ts','lib/eda/transport.ts','lib/gateway.ts'],tests:['audit-bff.test.ts'],
+    request:'Current VITAL admin membership, fixed system=vital, safe exact filters; export same-origin POST with explicit hospital dates, at most31 days and10000 events',
+    response:'Safe metadata-only cursor page or complete formula-protected UTF8 CSV; no raw details, patient names, partial exports or public download links',
+    statuses:[200,400,401,403,409,413,502,503,504],deps:['Gateway session','Core Profile administrator marker','Core durable audit intents','BGH Audit business list'],flags:['VITAL_EDA_ENABLED']},
   intelligence: {owner:'Services Intelligence',entry:'lib/eda/intelligence-bff.ts',dispatch:'targetIntelligence',files:['lib/eda/intelligence-paths.ts'],tests:['intelligence-paths.test.ts','intelligence-departments.test.ts'],request:'Role-bound, same-origin, bounded draft/confirmation or brief command; Gateway session deadline and private signed actor; sandbox synthetic cases only',response:'Session-bound draft, concepts, deterministic brief, analysis job202 or retired recommendations410; no diagnostic inference',statuses:[200,202,400,401,403,409,410,503],deps:['Core Intelligence','private NLP','Gateway session status'],flags:['VITAL_AI_ENABLED','VITAL_AI_PATIENT_ENABLED or VITAL_AI_SANDBOX_ENABLED; brief actions independent of AI flags']},
   intakeConfig: {owner:'Web authenticated capability projection',entry:'lib/auth.ts',dispatch:'requireBffSession',files:[],tests:['intelligence-paths.test.ts'],request:'Passive resolved session GET; no draft data',response:'enabled boolean for patient normalization; no-store',statuses:[200,401],deps:['Gateway session'],flags:['VITAL_EDA_ENABLED']},
 
@@ -463,6 +472,8 @@ function add(family, declarations) {
     }
   }
 }
+add('audit', `GET /api/admin/audit-logs
+POST /api/admin/audit-logs/export`);
 add('intelligence', `
 GET,POST,PATCH,DELETE /api/patient/intakes
 GET /api/patient/intakes/catalog

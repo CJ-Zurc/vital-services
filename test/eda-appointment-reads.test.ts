@@ -41,7 +41,7 @@ test('appointment pending requests bind owning doctor and pending status without
   const f=fixture(),result=await f.reads.listRequests(f.actor);
   assert.equal(result.requests[0]?.id,f.row.id);assert.equal(result.requests[0]?.patientAuthId,null);
   const query=f.calls.find(c=>c.sql.startsWith('SELECT r.*')&&c.sql.includes('SELECT a.*,p.'))!;
-  assert.equal(query.args[0],f.row.doctorId);assert.equal(query.args[1],'pending');assert.match(query.sql,/createdAt" DESC/);
+  assert.equal(query.args[0],f.row.doctorId);assert.equal(query.args[1],'pending');assert.match(query.sql,/createdAt"::timestamp DESC/);
   assert.equal(result.requests[0]?.payment,null);assert.equal(result.requests[0]?.consultation,null);
   assert.ok(f.calls.every(c=>! /INSERT|UPDATE|DELETE/.test(c.sql)));
 });

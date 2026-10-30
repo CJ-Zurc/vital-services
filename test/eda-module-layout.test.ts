@@ -13,7 +13,7 @@ function sources(directory:string):string[]{
 
 test('EDA feature layout has explicit business owners without old Core or Integrations forwarding folders',()=>{
   const actual=readdirSync(resolve(root,'modules'),{withFileTypes:true}).filter(entry=>entry.isDirectory()).map(entry=>entry.name).sort();
-  assert.deepEqual(actual,['appointment','composition','intelligence','messaging','payment','platform-delivery','portal-integrations','profile','records','video']);
+  assert.deepEqual(actual,['appointment','audit','composition','intelligence','messaging','payment','platform-delivery','portal-integrations','profile','records','video']);
   for(const old of ['core','integrations'])assert.equal(existsSync(resolve(root,'../../dist/modules',old)),false,'Build must remove retired compiled module paths.');
   const manifest=JSON.parse(readFileSync(resolve(root,'../../package.json'),'utf8'));
   assert.match(manifest.scripts.build,/node scripts\/eda\/clean-output\.mjs/);

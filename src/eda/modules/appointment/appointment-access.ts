@@ -1,3 +1,4 @@
+import { securityIntent } from '../audit/runtime.js';
 import { copyOperationalBrief } from './appointment-summary.js';
 import { assertRecordsIdle,currentPaid } from '../records/authorization.js';
 import { appendSqlOutbox } from '../../infrastructure/outbox.js';
@@ -104,6 +105,8 @@ export function createAppointmentAccess(pool:Pool,read:(db:DB,id:string,lock?:bo
    if(rate.doctor>=30||rate.booking>=10)deny(429,'APPOINTMENT_CODE_RATE_LIMIT');
    await db.query(`INSERT INTO appointment_access_attempts("appointmentId","doctorId",kind) VALUES($1,$2,'redeem')`,[id,row.doctorId]);
    if(!a.digest||!accessCrypto(environment).verify(input.code,accessBinding(a),a.digest)){
+    await securityIntent(db,actor,'code_incorrect',id);
+    if(a.attempts+1>=5)await securityIntent(db,actor,'code_locked',id);
     await db.query('UPDATE appointment_access SET attempts=attempts+1 WHERE "appointmentId"=$1',[id]);await db.query('COMMIT');return{state:a.attempts+1>=5?'locked':'review_only',error:'APPOINTMENT_CODE_INCORRECT',attemptsRemaining:4-a.attempts};
    }
    await db.query('UPDATE appointment_access SET "consumedAt"=NOW(),"grantedAt"=NOW(),"grantUntil"=$2,digest=NULL,ciphertext=NULL WHERE "appointmentId"=$1',[id,effectiveCompletionDeadline(row)]);
