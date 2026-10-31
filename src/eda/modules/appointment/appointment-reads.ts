@@ -1,3 +1,4 @@
+import { patientDoctorRatings } from './patient-ratings.js';
 import { isDeepStrictEqual } from 'node:util';
 import { appointmentPayloadCrypto } from './access-crypto.js';
 import { restrictedBrief } from './appointment-summary.js';
@@ -231,6 +232,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
       const qr=(await pool.query('SELECT EXISTS(SELECT 1 FROM doctor_qr_codes WHERE "doctorId"=$1 AND "isActive"=true) AS active',[d.userId])).rows[0];
       const result=await slots(actor,d.userId,input);await membership(pool,actor,'doctor');
       return {doctor:{specialty:d.specialty??null,availabilityType:d.availabilityType??null,hasActivePaymentQr:qr.active},slots:result.items,meta:result.meta};},
+    patientRatings:(actor:Actor,id:string,input:unknown={})=>patientDoctorRatings(pool,actor,id,input,clock),
     async blocks(actor:Actor,input:unknown={}){requireScope(actor,'appointments.blocks.read',actor.authId);const member=await membership(pool,actor,'doctor');
       const result=await blocksPage(actor,member.userId,input);await membership(pool,actor,'doctor');return {blocks:result.items.map(({id,version,startDate,endDate,weekday})=>({id,version,startDate,endDate,weekday})),meta:result.meta};},
     async bookings(actor:Actor,id:string,input:unknown={}){requireScope(actor,'appointments.schedule.read',id);const member=await membership(pool,actor,'doctor');

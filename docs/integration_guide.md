@@ -85,3 +85,6 @@ See [VITAL audit integration](audit-integration.md) for universal metadata, admi
 
 
 See [portal consistency and clinical review](portal-consistency.md) for appointment review, name masking, batch slots and the merged dashboard.
+
+
+See [portal consistency v2](portal-consistency-v2.md) for anonymous patient ratings and the screenshot-aligned portal changes.
