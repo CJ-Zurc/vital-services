@@ -20,6 +20,7 @@ export function createAppointmentRouters(runtime?:AppointmentRuntime){
   };
   const command=(meta:AppointmentCommand|undefined)=>{if(!meta)throw new DomainError(401,"COMMAND_METADATA_REQUIRED","Signed command ID required.");return meta;};
   appointments.get('/doctors',handle((actor,_id,_meta,input)=>runtime!.reads.discovery(actor,input)));
+  appointments.get('/doctors/:id/ratings',handle((actor,id,_meta,input)=>runtime!.reads.patientRatings(actor,id,input)));
   appointments.get('/doctors/:id/availability',handle((actor,id,_meta,input)=>runtime!.reads.availability(actor,id,input)));
   appointments.get('/requests',handle((actor,_id,_meta,input)=>runtime!.reads.listRequests(actor,input)));
   appointments.get('/dashboard',handle(actor=>runtime!.reads.dashboard(actor)));
