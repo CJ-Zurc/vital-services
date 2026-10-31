@@ -82,18 +82,21 @@ export async function appointmentLiveScenarios(t:TestContext,context:Context){
       {module,saga,resume:(actor,id,meta,body)=>resumeAppointmentSaga(context.core,actor,id,meta,body),maintenanceTick:async()=>{}});
     const server=createServer({key:readFileSync(context.certs.apiKey),cert:readFileSync(context.certs.apiCert),ca:readFileSync(context.certs.serviceCa),requestCert:true,rejectUnauthorized:true},app);
     await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const port=(server.address() as {port:number}).port;
-    const path='/internal/v1/date-blocks';
-    function call(certificate:boolean,audience='vital-services',resource=f.doctorAuthId,body:unknown={startDate:day(10),endDate:day(10)}){
-      const operationId=randomUUID();const hash=requestHash('POST',path,body);
-      const actor={...f.actor,authId:f.doctorAuthId,role:'doctor',scopes:['appointments.blocks.write'],resource};
-      const token=jwt.sign({actor,action:'POST '+path,requestHash:hash,operationId},keys.privateKey,{algorithm:'RS256',keyid:'test',issuer:'vital-web',audience,subject:f.doctorAuthId,jwtid:randomUUID(),expiresIn:30});
-      return new Promise<number>((resolve,reject)=>{const request=httpsRequest({host:'127.0.0.1',port,servername:'vital-api.test',path,method:'POST',
+    await context.core.query('UPDATE vital_doctors SET specialty=$2,"availabilityType"=$3 WHERE "userId"=$1',[f.doctorId,'Cardiology','virtual']);
+    const path='/internal/v1/schedules/preview';
+    const input={selection:{mode:'custom',dates:[day(10)]},times:[{startTime:'09:00',endTime:'09:30'}],consultationType:'virtual',isPublished:true};
+    function call(certificate:boolean,audience='vital-services',resource=f.doctorAuthId,body:unknown=input,targetPath=path){
+      const operationId=randomUUID();const hash=requestHash('POST',targetPath,body);
+      const actor={...f.actor,authId:f.doctorAuthId,role:'doctor',scopes:['appointments.schedule.write'],resource};
+      const token=jwt.sign({actor,action:'POST '+targetPath,requestHash:hash,operationId},keys.privateKey,{algorithm:'RS256',keyid:'test',issuer:'vital-web',audience,subject:f.doctorAuthId,jwtid:randomUUID(),expiresIn:30});
+      return new Promise<number>((resolve,reject)=>{const request=httpsRequest({host:'127.0.0.1',port,servername:'vital-api.test',path:targetPath,method:'POST',
         ca:readFileSync(context.certs.serviceCa),...(certificate?{cert:readFileSync(context.certs.webCert),key:readFileSync(context.certs.webKey)}:{}),
         rejectUnauthorized:true,headers:{'Content-Type':'application/json','X-Vital-Actor-Assertion':token,'Idempotency-Key':operationId}},response=>{
           response.resume();response.once('end',()=>resolve(response.statusCode??0));});request.setTimeout(5000,()=>request.destroy(new Error('TEST_TLS_TIMEOUT')));request.once('error',reject);request.end(JSON.stringify(body));});
     }
     try{await assert.rejects(call(false));assert.equal(await call(true,'wrong-audience'),401);assert.equal(await call(true,'vital-services',randomUUID()),403);
-      assert.equal(await call(true,'vital-services',f.doctorAuthId,{startDate:day(10),endDate:day(10),doctorId:f.doctorId}),400);assert.equal(await call(true),200);}
+      assert.equal(await call(true,'vital-services',f.doctorAuthId,{...input,doctorId:f.doctorId}),400);assert.equal(await call(true),200);
+      assert.equal(await call(true,'vital-services',f.doctorAuthId,{},'/internal/v1/date-blocks'),410);}
     finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await prisma.$disconnect();
       await context.core.query('DELETE FROM doctor_date_blocks WHERE doctor_id=$1',[f.doctorId]);}
   }));
