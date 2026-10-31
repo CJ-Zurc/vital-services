@@ -82,3 +82,6 @@ See [appointment revisions](eda/sprint6-appointment-revisions.md) for local Core
 [Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.
 
 See [VITAL audit integration](audit-integration.md) for universal metadata, admin history, bounded CSV export and coordinated rollout.
+
+
+See [portal consistency and clinical review](portal-consistency.md) for appointment review, name masking, batch slots and the merged dashboard.

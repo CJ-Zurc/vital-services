@@ -17,7 +17,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/audit-bff.ts': '1d8d084e1b85051e5423e3db5fa4dfc31d961297e70cfa69c21e4344adec9a1d',
   'app/api/admin/audit-logs/export/route.ts': 'a5e810c29912b92829c124dc619f9bfa382f41043131cba8afa09f98f8459a49',
   'app/api/admin/audit-logs/route.ts': '60c155976ad3e852c31dddadea4a2ea76f5060c1839076f1e2277bf442cef74e',
-  'lib/eda/intelligence-bff.ts': 'c64ef01f24317201edd298c317602f687f0a64f9d2f8161834a4041e2837e72d',
+  'lib/eda/intelligence-bff.ts': '054bf8aea1bcdaf0ee8d44f2eb20c28cc1f59fca28503bac4dbfb08f8c1f9fed',
   'lib/eda/intelligence-paths.ts': 'be3682c582f8455cbbcdf6e496f7bfdd1986fecceffffbfaf501a0ad5cf07130',
   'tests/intelligence-paths.test.ts': '9454af79d389f33c3edd0c796cb732dffc34a983334a8915fd5d4e090fb8676c',
   'tests/intelligence-departments.test.ts': 'ff4912c60f6ef9fc1169be3183dffefd643d1bc3b0e956040cb0fcff1000b462',
@@ -73,8 +73,8 @@ const reviewedHashes = Object.freeze({
   'proxy.ts': 'ff7433c4f8ed9cc2f6ad874dc1085c754d79a991a6b337c76ff1cc33b7928199',
   'tests/eda-ingress-policy.test.ts': '76e048956f619a7903ef986cf8773efac21e5219b8709d076235c0f4af88b691',
   'app/api/admin/analytics/batches/current/route.ts': '8ed67fd1777a6d676558ccfa189c25d050b878b4e655a0970fa7aed57b8bd976',
-  'app/api/admin/analytics/batches/refresh/route.ts': '3823e5bc8c31ac42343d5f13e124b8d140ac052369d8fb5eb035f89de96a2b2d',
-  'app/api/admin/analytics/dashboard/route.ts': '8953ebbbed35040e6214ac125bdc67a5a275cc6ac36ba24833b89102778fe716',
+  'app/api/admin/analytics/batches/refresh/route.ts': '7bea4132b7d1e9a34eb6793114843f740a8796b788f4b2b9f3362c7ba729ae71',
+  'app/api/admin/analytics/dashboard/route.ts': '201047ca288855317cd6f8edfca3aea09c1252d5df1450b6ca36aa9c27962062',
   'app/api/admin/concerns/[concernId]/route.ts': '30f6eb108281385a98649215f9406b81bacc99cce85c112ac8582d5de2e44a23',
   'app/api/admin/concerns/route.ts': '668f696b3acc07f886fb4a529d1320f126cfaec07bc68b9a8feb1ab29bd8f2b8',
   'app/api/admin/consent/route.ts': '2b794449aecdd21865684e890b9add1e5b196c46a31f81b5ac842aabb2fb33e2',
@@ -197,7 +197,7 @@ const reviewedHashes = Object.freeze({
   'lib/auth-profile-format.ts': '7b747465ce29a41dabd9cfb06927e90a1eeca55c66d8f9fe1ec28510d0a6f27d',
   'lib/auth-profiles.ts': '4dc2dd0ab6631a7c28fe6d08976b3f3273342a171837f2fb8af3a20cf4cdfb14',
   'lib/auth.ts': '95769de8680e0088458917d490140cc54dd4a22d5e3822a41abbe3a39e42f194',
-  'lib/client-session.ts': '7920ad8b7bc03e620ed9276bb116946c66462af246ded56d59cd92093cdd4554',
+  'lib/client-session.ts': '191ad0b0d22b0280d8f8a65bd07dfb3d53e771877200ee78e19b1a3e3cd9dee5',
   'lib/cn.ts': 'e05155c088aebc65066f00d1d3bcf556509d157e15c62c99ba391e58b28692e6',
   'lib/cookies.ts': 'ca53e11a9b83c462fecd2ee4eae8d2a4d41edccbde507f96af689645d9e9e359',
   'lib/date-block-matching.ts': '284b1f3d2d6bbd5c11029ad1374321365a958be35d175d8de1328e42b8111f3b',
@@ -208,7 +208,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/appointment-bff.ts': '2092fc48e2a2c113cecaee4325b8e3b571a3a5076fa7fa62e11421afda06575c',
   'lib/eda/appointment-compatibility.ts': 'bf56796bfe1bfaff9c7165c591834b14db66a23168a91df54c0d5869e3c16d67',
   'lib/eda/appointment-extras-bff.ts': 'cc922d17ca497c7d948a7b46914d2b77bd03a3f7d843019b1c9a13afb7bd84ef',
-  'lib/eda/appointment-paths.ts': '37bc8207b89dc75f5be6d8e9e2a9b1e974b68d847bd4431c8e7846295bbf1fd6',
+  'lib/eda/appointment-paths.ts': 'a4ba63d503ab1ca3a5b2e600167358aa4c8b1d9ecff884b9b47b766db4dfad1d',
   'lib/eda/appointment-read-bff.ts': 'd7b0504f0469ac640d45dcc92a884d78b509d7926b63c43193104dfbb3b96430',
   'lib/eda/appointment-read-dto.ts': 'e8468a647e8652579b21da4631ba9cdbfcfab03c01249c70719a04e9a619b3c6',
   'lib/eda/candidate.ts': '94f79ef985d6ff3301f3c902871b912d77229039bcbcc8d8ea56c7625b649115',
@@ -224,7 +224,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/messaging-paths.ts': '320185fde0904df6ac25828bebe20dd3a2a126138eac68b0980d5c7988dcced5',
   'lib/eda/messaging-route-policy.ts': 'f8fe5c61d6c5f7105e0fe9241816258bc5a63fb27ef37708831e7cef332b5e94',
   'lib/eda/messaging.ts': '1ce8421f0dbd074d669eaf85d5ee119f2a98cddcfd62efb74e9b9c8b5ceb9cd9',
-  'lib/eda/mode-policy.ts': '140b36fde2ef9304e7bde09354995af8a4ae2aef21b5cac2151bda14590617d0',
+  'lib/eda/mode-policy.ts': '5295f871764612c2278b4fd5efb59a14c9e5d0d22e2c1e005ee5ba60760dec3b',
   'lib/eda/patient-onboarding.ts': 'bf14670643dc52a6693e4bb8ea452b247b43834246196f28554d9686673e092d',
   'lib/eda/patient-record-notice.ts': '966b336c56669936b94c6470a6598802335f0509f562e2373142f841a97db35c',
   'lib/eda/patient-workflow.ts': '81de5bf45249c1d71da5f7df9fda58866fcbd3a998cc5ca50e4b01b277533f4b',
@@ -341,6 +341,10 @@ const reviewedHashes = Object.freeze({
   'tests/session-response.test.ts': '92bd9fb8904f7347c3d289e3915147e60c723e268ec73f79a48ae4459db45943',
   'tests/sso-return.test.ts': 'b0bb2c334290b63f41c443eb8f099e79b563946f51dc0c442319507d3cfd90b2',
   'tests/sso-session.test.ts': '8020847f102990e7fb0c333b8c3799262631dd4cd6472176cc9fbf759fcde73d',
+  'lib/eda/slot-batch-bff.ts': '6576b79c3d5505855190377602c63b2f70ee7e1d2d360cb4990e94ff52b73052',
+  'tests/portal-consistency.test.ts': '3363f8d48f1260edbde1839ebbbd8ae842d715676b3940a01b5ff415609ef411',
+  'app/api/doctor/schedule/preview/route.ts': '89494558bf9de8164084c37d2bd591f93f88fb43545df72f473a1d758745e507',
+  'app/api/doctor/schedule/batch/route.ts': '89494558bf9de8164084c37d2bd591f93f88fb43545df72f473a1d758745e507',
 });
 
 const families = {
@@ -364,6 +368,7 @@ const families = {
     request:'GET own-patient or authorized admin acknowledgment by appointment UUID; backend authorization rechecks identity',
     response:'immutable completion-bound payment snapshot or hash-verified PDF bytes; refund status separate',statuses:[200,409,403,503],
     deps:['Appointment billing authority','Integrations Payment acknowledgment snapshot'],flags:['VITAL_EDA_ENABLED','VITAL_EDA_PAYMENT_ENABLED']},
+  slotBatch: { owner:'Services Appointment',entry:'lib/eda/slot-batch-bff.ts',dispatch:'slotBatchBff',policy:['lib/eda/appointment-paths.ts','appointmentRoute'],files:['lib/eda/appointment-paths.ts'],tests:['portal-consistency.test.ts'],request:'Doctor-owned same-origin selection and time rows with UUID Idempotency-Key; backend validates limits and care modes',response:'Bounded preview slots and dated conflicts or atomic created slot IDs/count',statuses:[200,400,401,403,409,502,503],deps:['Core Appointment calendar and command journal'],flags:['VITAL_EDA_ENABLED','VITAL_EDA_APPOINTMENT_ENABLED']},
   appointment: { owner: 'Services Appointment', entry: 'lib/eda/appointment-bff.ts', dispatch: 'targetAppointment',
     policy: ['lib/eda/appointment-paths.ts', 'appointmentRoute'],
     files: ['lib/eda/appointment-compatibility.ts', 'lib/eda/appointment-read-bff.ts', 'lib/eda/appointment-read-dto.ts'],
@@ -495,6 +500,8 @@ POST /api/doctor/ai/sandbox/confirm
 POST /api/doctor/ai/sandbox/recommendations
 POST /api/admin/analytics/clusters/label
 GET,POST /api/doctor/appointments/[appointmentId]/intake-brief forward`);
+add('slotBatch', `POST /api/doctor/schedule/preview
+POST /api/doctor/schedule/batch`);
 add('intakeConfig', `GET /api/patient/intakes/config`);
 add('appointment', `GET /api/doctor/appointments/[appointmentId]/access
 POST /api/doctor/appointments/[appointmentId]/access/redeem
@@ -641,10 +648,9 @@ GET /api/patient/ehr-access/session
 POST /api/patient/ehr-access/end-session
 POST /api/patient/ehr-access/face-capture-sessions
 POST /api/patient/ehr-access/face-capture-sessions/[sessionId]/complete patientFaceCaptureProxy`);
-add('analytics', `
-GET /api/admin/analytics/dashboard
-GET /api/admin/analytics/batches/current
+add('intelligence', `GET /api/admin/analytics/dashboard
 POST /api/admin/analytics/batches/refresh`);
+add('analytics', `GET /api/admin/analytics/batches/current`);
 add('readiness', 'GET /api/internal/vital/readiness edaReadiness');
 add('export', 'GET /api/internal/analytics/v1/pre-consultations');
 add('welcome', `
@@ -915,7 +921,7 @@ export function reviewRouteContract(route, options = {}) {
     } catch (error) { issue('HANDLER_UNREVIEWED', source, String(error.message)); }
     const files = [...new Set(['proxy.ts', 'lib/env.ts', 'lib/route-access.ts', 'lib/eda/mode-policy.ts', ...(family.entry ? [family.entry] : []), ...(binding?.file ? [binding.file] : []), ...(family.files ?? []),
       ...(rule.family !== 'retired' && rule.family !== 'worker' && !['address', 'e2e', 'readiness'].includes(rule.family) ? ['lib/auth.ts', 'lib/cookies.ts'] : []),
-      ...(['revisions', 'notifications', 'appointment', 'extras', 'completion', 'payment', 'records', 'recordsIntegration', 'video', 'messaging', 'stream', 'qr', 'portal', 'profile', 'registration', 'export'].includes(rule.family)
+      ...(['slotBatch', 'revisions', 'notifications', 'appointment', 'extras', 'completion', 'payment', 'records', 'recordsIntegration', 'video', 'messaging', 'stream', 'qr', 'portal', 'profile', 'registration', 'export'].includes(rule.family)
         ? ['lib/eda/transport.ts', 'lib/eda/mode-policy.ts', 'lib/eda/candidate.ts', 'lib/eda/request-body.ts'] : []),
       ...(family.policy ? [family.policy[0]] : [])])];
     const facts = { validators: [], statuses: [], errors: [], cookies: [], dependencies: [] };

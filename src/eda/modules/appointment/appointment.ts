@@ -1,3 +1,4 @@
+import { previewSlotBatch, createSlotBatch } from './appointment-slot-batch.js';
 import { saveOperationalBrief } from './appointment-summary.js';
 import { accessRow,ensureAppointmentAccess,issueAppointmentCode,revokeAppointmentAccess,createAppointmentAccess,appointmentAccessState } from './appointment-access.js';
 import { consumeIntake, intakeReferenceSchema, approvedHandoff, captureBooking } from '../intelligence/booking.js';
@@ -73,11 +74,6 @@ export async function membership(tx: Pick<PoolClient,"query">, actor: Actor, rol
 }
 export async function assertCalendarAvailable(tx: PoolClient, doctorId: string, start: Date, end: Date, exclude: string[] = [], operationId?: string) {
   if (!(end > start)) fail(400,"SLOT_INTERVAL_INVALID");
-  const blocked = await tx.query(`SELECT id FROM doctor_date_blocks WHERE doctor_id=$1 AND EXISTS(
-    SELECT 1 FROM generate_series(($2::timestamptz AT TIME ZONE 'Asia/Manila')::date,
-      (($3::timestamptz-INTERVAL '1 microsecond') AT TIME ZONE 'Asia/Manila')::date,INTERVAL '1 day') day
-    WHERE day::date BETWEEN start_date AND end_date AND (weekday IS NULL OR weekday=EXTRACT(DOW FROM day))) LIMIT 1`,[doctorId,start,end]);
-  if (blocked.rows.length) fail(409,"CALENDAR_DATE_BLOCKED");
   const occupied = await tx.query(`SELECT a.id FROM appointments a LEFT JOIN schedules s ON s.id=a."scheduleSlotId"
     WHERE a."doctorId"=$1 AND a.status IN ('approved','confirmed') AND NOT(a.id=ANY($4::text[])) AND a."scheduledAt"<$3
     AND COALESCE((s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila',a."proposedEndAt",a."scheduledAt")>$2 LIMIT 1`,[doctorId,start,end,exclude]);
@@ -185,6 +181,8 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
   }
   return {
     owners,
+    previewSlotBatch:(actor:Actor,body:unknown)=>previewSlotBatch(pool,actor,body,clock()),
+    createSlotBatch:(actor:Actor,meta:AppointmentCommand,body:unknown)=>createSlotBatch(pool,actor,meta,body,clock()),
     previewDateBlocks: (actor: Actor, selection: unknown) => previewDateBlocks(pool, actor, selection, clock()),
     batchDateBlocks: (actor: Actor, meta: AppointmentCommand, input: unknown) => saveDateBlocks(pool, actor, meta, input, clock()),
     access:createAppointmentAccess(pool,readAppointment,process.env,clock,owners.financial),

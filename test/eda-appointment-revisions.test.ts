@@ -1,3 +1,4 @@
+import { appointmentPayloadCrypto } from '../src/eda/modules/appointment/access-crypto.js';
 import { accessFixtureSql } from './fixtures/appointment-access.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -105,4 +106,18 @@ test('S6 calendar batch rejects stale previews or reservations before writes and
   const saved=await saveDateBlocks(pool,actor,meta,input,now);assert.equal(saved.createdDateCount,2);assert.equal(writes,2);
   assert.deepEqual(await saveDateBlocks(pool,actor,meta,input,now),saved);assert.equal(writes,2);
   assert.deepEqual(await saveDateBlocks(pool,actor,meta,input,now+366*86400000),saved);assert.equal(writes,2);
+});
+
+test('assigned doctor reads submitted complaint before code redemption with names masked and corrections still locked',async()=>{
+ const f=clinicalFixture();f.row.status='pending';
+ const identityValues=appointmentPayloadCrypto().encrypt(['Jane Example'],'appointment-identities:'+f.id);
+ const db={query:async(sql:string,args:unknown[]=[])=>{
+   if(sql.startsWith('SELECT * FROM appointment_access'))return{rows:[{appointmentId:f.id,reference:'7K4M9Q2R',patientId:f.row.patientId,doctorId:f.row.doctorId,generation:0,attempts:0,grantedAt:null,grantUntil:null,revokedAt:null,identityValues}]};
+   if(sql.startsWith('SELECT "chiefComplaint"'))return{rows:[{chiefComplaint:'Jane Example: Masakit ang tiyan ko.'}]};
+   return f.tx.query(sql,args);
+ }} as unknown as PoolClient;
+ const result=await complaintHistory(db,f.actor,f.id,{},now);
+ assert.equal(result.chiefComplaint,'[Patient]: Masakit ang tiyan ko.');assert.equal(result.canEdit,false);
+ await assert.rejects(complaintHistory(db,{...f.actor,authId:randomUUID()},f.id,{},now),{code:'APPOINTMENT_OWNER_DENIED'});
+ await assert.rejects(updateComplaint(db,f.actor,f.id,{operationId:randomUUID(),requestHash:'a'.repeat(64)},{expectedVersion:0,chiefComplaint:'Correction'},now),{code:'APPOINTMENT_CODE_REQUIRED'});
 });

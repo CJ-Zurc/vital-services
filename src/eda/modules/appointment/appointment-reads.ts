@@ -93,7 +93,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
     const query=paging.parse(input),page=prepareReadPage(actor,'date-blocks:'+doctorId,{future},query,clock),revision=await calendarRevision(doctorId);
     const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(new Date(page.at));
     const result=await readCollectionPage<DateBlockRow>(pool,page,{sql:`SELECT id,version,start_date::text AS "startDate",end_date::text AS "endDate",weekday,$3::text AS "calendarRevision"
-      FROM doctor_date_blocks WHERE doctor_id=$1 AND ($2::date IS NULL OR end_date>=$2::date)`,values:[doctorId,future?day:null,revision],
+      FROM doctor_date_blocks WHERE FALSE AND doctor_id=$1 AND ($2::date IS NULL OR end_date>=$2::date)`,values:[doctorId,future?day:null,revision],
       order:[{key:'startDate',direction:'ASC',cast:'date'},{key:'id',direction:'ASC',cast:'text'}]});
     if(await calendarRevision(doctorId)!==revision)throw new DomainError(409,'APPOINTMENT_READ_SNAPSHOT_CHANGED','Calendar changed during composition.');
     return {...result,meta:{...result.meta,calendarRevision:revision}};
@@ -218,8 +218,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
           AND ($3::text IS NULL OR s."consultationType"::text IN ($3,'both')) AND ($5::boolean=false OR ((s."slotDate"+s."startTime") AT TIME ZONE 'Asia/Manila'>$4::timestamptz AND ($2::date IS NOT NULL OR s."slotDate"<=($4::timestamptz AT TIME ZONE 'Asia/Manila')::date+30)))
           AND (s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila'>$4::timestamptz
           AND NOT EXISTS(SELECT 1 FROM appointments a WHERE a."scheduleSlotId"=s.id AND a.status IN ('approved','confirmed'))
-          AND NOT EXISTS(SELECT 1 FROM doctor_date_blocks b WHERE b.doctor_id=$1 AND s."slotDate" BETWEEN b.start_date AND b.end_date
-            AND (b.weekday IS NULL OR b.weekday=EXTRACT(DOW FROM s."slotDate"))) ORDER BY s."slotDate",s."startTime",s.id LIMIT 1`,
+ ORDER BY s."slotDate",s."startTime",s.id LIMIT 1`,
           [d.id,f.availableDate??null,f.consultationType??null,new Date(page.at),f.availabilityFirst==='true'])).rows[0];
         const first=earliest?serializeReadSlot(earliest,page.at,true):null;
         results.push({...doctor,...(f.departments.length?{departmentExternalId:d.departmentExternalId}:{}),starRating:summary.average===null?0:Number(summary.average),reviewCount:z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).parse(summary.count),
@@ -263,12 +262,11 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
     const pageArgs={limit:query.limit,...(query.cursor?{cursor:query.cursor}:{})};
     if(query.collection==='dateBlocks'){
       const result=await blocksPage(actor,id,pageArgs,true);await membership(pool,actor,'patient');
-      return {doctor,slots:[],dateBlocks:result.items.map(({id,version,startDate,endDate,weekday})=>({id,version,startDate,endDate,weekday})),meta:result.meta,collection:query.collection};
+      return {doctor,slots:[],dateBlocks:[],meta:result.meta,collection:query.collection};
     }
     const result=await slots(actor,id,pageArgs,true),calendar=[];
     for(const s of result.items){
-      const isBlocked=(await pool.query(`SELECT EXISTS(SELECT 1 FROM doctor_date_blocks WHERE doctor_id=$1 AND $2::date BETWEEN start_date AND end_date
-        AND (weekday IS NULL OR weekday=EXTRACT(DOW FROM $2::date))) AS blocked`,[id,s.slotDate])).rows[0].blocked===true;
+      const isBlocked=false;
       calendar.push({...s,isBlocked,isSelectable:s.isSelectable&&!isBlocked});
     }
     if(await calendarRevision(id)!==result.meta.calendarRevision)throw new DomainError(409,'APPOINTMENT_READ_SNAPSHOT_CHANGED','Calendar changed during composition.');

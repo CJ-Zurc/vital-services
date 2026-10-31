@@ -30,3 +30,6 @@ OTP or enable shared sandbox bypasses for normal staging.
 [Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, root Compose overlay and independently enforced appointment privacy. Specialty recommendations are retired. No legacy data is imported.
 
 See the [production configuration reference](configuration-reference.md) for every service example variable, feature dependencies and the activation sequence.
+
+
+See [portal rollout configuration](portal-consistency.md#admin-dashboard-and-rollout) for paired symptom analytics flags and disabled face verification.

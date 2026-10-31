@@ -47,3 +47,6 @@ no migration or domain-policy change is introduced by this routing revision.
 ## Operator observability revision (2026-10-28)
 
 The private API emits api_request metadata at response headers without consuming bodies. Only route templates, method/status, header latency and verified actor correlation enter observations. The worker emits delivery_snapshot counts/ages every thirty seconds for Audit and Notifications; snapshot failure never changes delivery behavior.
+
+
+See [portal consistency and clinical review](portal-consistency.md) for appointment review, name masking, batch slots and the merged dashboard.

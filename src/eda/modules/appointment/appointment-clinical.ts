@@ -1,5 +1,6 @@
+import { reviewText } from './review-sanitizer.js';
 import { saveOperationalBrief } from './appointment-summary.js';
-import { requireLiveAppointmentAccess } from './appointment-access.js';
+import { appointmentAccessState, knownReviewIdentities, requireLiveAppointmentAccess } from './appointment-access.js';
 import { reviseIntelligence } from '../intelligence/corrections.js';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
@@ -18,7 +19,7 @@ export function complaintEditable(row: AppointmentRow, now: number) {
 export async function complaintHistory(tx: PoolClient, actor: Actor, id: string, raw: unknown, now: number) {
   requireScope(actor, 'appointments.intake.read', id);
   await membership(tx, actor);
-  const row = await readAppointment(tx, id); appointmentOwn(actor, row);if(actor.role==='doctor')await requireLiveAppointmentAccess(tx,row,now);
+  const row = await readAppointment(tx, id); appointmentOwn(actor, row);
   const { offset } = z.object({ offset: z.coerce.number().int().min(0).max(100000).default(0) }).strict().parse(raw);
   const current = (await tx.query('SELECT "chiefComplaint" FROM pre_consultations WHERE "appointmentId"=$1', [id])).rows[0];
   const rows = (await tx.query(`SELECT id,"previousText","currentText","doctorAuthId","changedAt","appointmentVersion"
@@ -27,9 +28,11 @@ export async function complaintHistory(tx: PoolClient, actor: Actor, id: string,
     AND ((state='prepared' AND "expiresAt">NOW()) OR (state='committed' AND "videoProcessingState"<>'finalized'))
     UNION ALL SELECT 1 FROM saga_operations WHERE "billingLineageId"=$2 AND status NOT IN ('completed','compensated','cancelled','failed')
     UNION ALL SELECT 1 FROM appointments WHERE "sourceAppointmentId"=$1 AND status IN ('pending','pending_patient_confirmation') LIMIT 1`, [id, row.billingLineageId])).rows.length > 0;
-  return { appointmentId: id, version: row.version, chiefComplaint: current?.chiefComplaint ?? null,
-    canEdit: actor.role === 'doctor' && complaintEditable(row, now) && !processing,
-    history: rows.slice(0, 20), nextOffset: rows.length > 20 ? offset + 20 : null };
+  const restricted = actor.role === 'doctor' && !(await appointmentAccessState(tx,row,now)).identityUnlocked;
+  const identities = restricted ? await knownReviewIdentities(tx,id) : [];
+  return { appointmentId: id, version: row.version, chiefComplaint: restricted ? reviewText(current?.chiefComplaint,identities).text : current?.chiefComplaint ?? null,
+    canEdit: actor.role === 'doctor' && !restricted && complaintEditable(row, now) && !processing,
+    history: rows.slice(0, 20).map(change => restricted ? {...change,previousText:reviewText(change.previousText,identities).text,currentText:reviewText(change.currentText,identities).text} : change), nextOffset: rows.length > 20 ? offset + 20 : null };
 }
 
 export async function updateComplaint(tx: PoolClient, actor: Actor, id: string, meta: AppointmentCommand, raw: unknown, now: number) {

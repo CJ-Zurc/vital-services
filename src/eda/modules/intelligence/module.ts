@@ -41,6 +41,7 @@ export function createIntelligence(pool:Pool,environment:NodeJS.ProcessEnv=proce
       if(action.startsWith('admin/')){
         requireScope(actor,'ai.admin',actor.authId);
         if(!intelligenceEnabled(environment)||actor.role!=='admin'||!(await pool.query('SELECT 1 FROM vital_admins WHERE "authId"=$1',[actor.authId])).rowCount)fail(403,'AI_ADMIN_DENIED');
+        if(environment.VITAL_AI_ANALYTICS_ENABLED!=='true')fail(503,'AI_ANALYTICS_DISABLED');
         if(action==='admin/dashboard')return dashboard(pool,input);
         if(action==='admin/refresh'){await pool.query("UPDATE ai_jobs SET status='pending',attempts=0,\"availableAt\"=NOW() WHERE kind='submission' AND status='failed' AND \"resourceId\" IN (SELECT id::text FROM ai_submissions WHERE \"expiresAt\">NOW())");await pool.query("INSERT INTO ai_jobs(id,kind,\"resourceId\",\"sourceVersion\") VALUES($1,'clusters','refresh',$2) ON CONFLICT DO NOTHING",[randomUUID(),Math.floor(Date.now()/60000)]);return{status:'queued'};}
         if(action==='admin/clusters/label'){

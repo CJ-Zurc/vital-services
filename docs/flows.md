@@ -14,3 +14,6 @@ view and bounded admin summary route. Messaging now follows scheduled 24-hour
 appointment/follow-up windows with retained read-only history. See
 [integration contracts](integration_guide.md#s6-005-patient-monitoring-and-s6-009-messaging)
 for routes, ownership, response fields and boundary behavior.
+
+
+See [portal consistency and clinical review](portal-consistency.md) for appointment review, name masking, batch slots and the merged dashboard.
