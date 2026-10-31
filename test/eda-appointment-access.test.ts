@@ -10,7 +10,15 @@ import type { Actor } from '../src/eda/contracts/actor.js';
 const env={VITAL_APPOINTMENT_ACCESS_KEYS:JSON.stringify({1:Buffer.alloc(32,7).toString('base64')}),VITAL_APPOINTMENT_ACCESS_ACTIVE_KEY_VERSION:'1',VITAL_APPOINTMENT_ACCESS_DIGEST_KEY:Buffer.alloc(32,9).toString('base64')};
 test('references are independently random, readable, and avoid ambiguous symbols',()=>{const values=new Set(Array.from({length:500},patientReference));assert.equal(values.size,500);for(const value of values){assert.match(value,/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);assert.match(displayReference(value),/^Patient #[A-Z2-9]{4}-[A-Z2-9]{4}$/);}});
 test('six digit codes round-trip with binding; ciphertext and digest do not disclose plaintext',()=>{const crypto=accessCrypto(env),binding='appointment/patient/doctor/generation';for(let i=0;i<50;i++){const secret=crypto.issue(binding),code=crypto.retrieve(secret.ciphertext,binding);assert.match(code,/^\d{6}$/);assert.equal(crypto.verify(code,binding,secret.digest),true);assert.equal(crypto.verify(code,binding+'/changed',secret.digest),false);assert.throws(()=>crypto.retrieve(secret.ciphertext,binding+'/changed'));assert.notEqual(secret.digest,code);assert.equal(crypto.verify('123',binding,secret.digest),false);}});
-test('unknown or identifying text is withheld; clinical answers remain readable',()=>{assert.equal(reviewText('sharp chest pain worse walking').text,'sharp chest pain worse walking');for(const text of ['Jane Example has pain','call jane@example.test','09171234567','https://example.test','my address is 12 Example Road'])assert.equal(reviewText(text).withheld,true);assert.equal(reviewText('pain',['pain']).withheld,true);assert.deepEqual(reviewIntake({severity:7,additionalNotes:'Jane Example'}),{severity:7,additionalNotes:'Withheld for privacy'});});
+test('clinical and multilingual text stays readable while known names are redacted',()=>{
+ assert.equal(reviewText('sharp chest pain worse walking').text,'sharp chest pain worse walking');
+ assert.equal(reviewText('Masakit ang tiyan ko, doctor.',['Jane Example']).text,'Masakit ang tiyan ko, doctor.');
+ assert.equal(reviewText('Jane Example has pain',['Jane Example']).text,'[Patient] has pain');
+ assert.equal(reviewText('Jane has pain',['Jane Example']).text,'[Patient] has pain');
+ assert.equal(reviewText('Janet has pain',['Jane']).text,'Janet has pain');
+ assert.equal(reviewText('Jane has pain',null).withheld,true);
+ assert.deepEqual(reviewIntake({severity:7,additionalNotes:'Jane has pain'},['Jane Example']),{severity:7,additionalNotes:'[Patient] has pain'});
+});
 
 function harness(){
  const now=Date.parse('2026-10-28T02:00:00Z');

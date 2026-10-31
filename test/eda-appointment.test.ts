@@ -295,13 +295,13 @@ test('patient published reschedule binds overnight slot while retaining original
  assert.deepEqual(f.state().row,original);
  assert.ok(f.calls.findIndex(s=>s.includes('appointment-calendar:')||s.includes('pg_advisory_xact_lock'))<f.calls.findIndex(s=>s.startsWith('SELECT * FROM schedules')));
 });
-for(const scenario of ['unpublished','other doctor','incompatible','past','blocked','occupied'] as const)test('patient slot rejects '+scenario+' before appointment writes',async()=>{
+for(const scenario of ['unpublished','other doctor','incompatible','past','occupied'] as const)test('patient slot rejects '+scenario+' before appointment writes',async()=>{
  const f=fixture();f.state().row.status='confirmed';
  if(scenario==='unpublished')f.slot.isPublished=false;
  if(scenario==='other doctor')f.slot.doctorId=randomUUID();
  if(scenario==='incompatible')f.slot.consultationType='in_person';
  if(scenario==='past')f.slot.slotDate=new Date('2000-01-01');
- if(scenario==='blocked')f.block();if(scenario==='occupied')f.occupy();
+ if(scenario==='occupied')f.occupy();
  await assert.rejects(f.module().propose(f.actor('reschedule','patient'),f.id,f.meta(),{expectedVersion:0,reason:'Test',scheduleSlotId:f.scheduleSlotId}));
  assert.ok(!f.calls.some(sql=>sql.startsWith('INSERT INTO appointments')));
 });

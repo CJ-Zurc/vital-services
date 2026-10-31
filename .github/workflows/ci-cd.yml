@@ -54,7 +54,9 @@ jobs:
             (github.event.pull_request.base.ref == 'development' || github.event.pull_request.base.ref == 'staging'))
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
-          WEB_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          # A development -> staging promotion must review the companion source being promoted.
+          # Feature PRs still pair with their target branch; pushes pair with the pushed branch.
+          WEB_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref == 'staging' && github.head_ref == 'development' && 'development' || github.event.pull_request.base.ref || github.ref_name }}
           WEB_SHA_OVERRIDE: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' && vars[format('VITAL_EDA_PR_{0}_WEB_SHA', github.event.pull_request.number)] || '' }}
         shell: bash
         run: |

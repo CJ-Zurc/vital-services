@@ -45,9 +45,12 @@ export function createAppointmentRouters(runtime?:AppointmentRuntime){
   appointments.post('/:id/complete',handle((actor,id,meta,input)=>runtime!.module.complete(actor,id,command(meta),input)));
   schedules.get('/',handle((actor,_id,_meta,input)=>runtime!.reads.schedules(actor,input)));
   schedules.get('/:id/bookings',handle((actor,id,_meta,input)=>runtime!.reads.bookings(actor,id,input)));
+  schedules.post('/preview',handle((actor,_id,_meta,input)=>runtime!.module.previewSlotBatch(actor,input)));
+  schedules.post('/batch',handle((actor,_id,meta,input)=>runtime!.module.createSlotBatch(actor,command(meta),input)));
   schedules.post('/',handle((actor,_id,meta,input)=>runtime!.module.createSchedule(actor,command(meta),input)));
   schedules.patch('/:id',handle((actor,id,meta,input)=>runtime!.module.changeSchedule(actor,id,command(meta),input)));
   schedules.post('/:id/delete',handle((actor,id,meta,input)=>runtime!.module.changeSchedule(actor,id,command(meta),input,true)));
+  blocks.use((_req,_res,next)=>next(new DomainError(410,'DATE_BLOCKS_RETIRED','Date blocking has been retired.')));
   blocks.get('/preview', handle((actor,_id,_meta,input) => {
     const query=z.object({ selection:z.string().max(4096) }).strict().parse(input);
     return runtime!.module.previewDateBlocks(actor,JSON.parse(query.selection));

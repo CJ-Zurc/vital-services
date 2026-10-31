@@ -168,3 +168,12 @@ Final Web production build passed (133 pages) after correcting UTF-8 encoding in
 ## Operator observability revision (2026-10-28)
 
 The maintained eda-observation test verifies zero-valued delivery states and redaction of stored payloads. Public API, mTLS/actor authorization and persistence schemas are unchanged.
+
+
+Development-to-staging promotion PRs pair the Services head with Web's development
+branch, so both sides of a coordinated change are reviewed before either is merged.
+Feature PRs continue to pair with their target Web branch; pushes to staging use
+Web staging. Exact checked-out SHAs and reviewed route fingerprints remain enforced.
+The real mTLS calendar scenario targets active slot preview and verifies missing
+certificates, wrong audience/resource, injected authority fields, valid preview,
+and the separate 410 response from retired date blocking.
