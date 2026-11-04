@@ -116,15 +116,11 @@ jobs:
                 head_sha: mergedHeadSha,
                 per_page: 100,
               });
-              const matchingRuns = (listedRuns.data.workflow_runs || []).filter((run) => {
-                if (run.event !== 'pull_request' || run.head_branch !== mergedPR.head.ref ||
-                    run.head_sha !== mergedHeadSha) return false;
-                return (run.pull_requests || []).some((pullRequest) =>
-                  pullRequest.number === mergedPR.number &&
-                  pullRequest.base.ref === branch &&
-                  pullRequest.head.sha === mergedHeadSha
-                );
-              });
+              const matchingRuns = (listedRuns.data.workflow_runs || []).filter((run) =>
+                run.event === 'pull_request' &&
+                run.head_branch === mergedPR.head.ref &&
+                run.head_sha === mergedHeadSha
+              );
               const latestRun = matchingRuns.sort((left, right) =>
                 Date.parse(right.updated_at || right.created_at) - Date.parse(left.updated_at || left.created_at)
               )[0];
