@@ -616,9 +616,21 @@ jobs:
               fi
 
               echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-              trap "docker logout ghcr.io >/dev/null 2>&1 || true" EXIT
+              restore_pins_on_failure() {
+                status=$?
+                if [ "$status" -ne 0 ]; then
+                  sed -i "s|^VITAL_EDA_SERVICES_IMAGE=.*|VITAL_EDA_SERVICES_IMAGE=$previous_api_pin|" .env.compose
+                  sed -i "s|^VITAL_EDA_TOOLS_IMAGE=.*|VITAL_EDA_TOOLS_IMAGE=$previous_tools_pin|" .env.compose
+                  echo "Deployment failed; previous image pins restored. Database migrations may need separate recovery." >&2
+                fi
+                docker logout ghcr.io >/dev/null 2>&1 || true
+              }
+              trap restore_pins_on_failure EXIT
               docker pull "$IMAGE_REF"
               docker pull "$TOOLS_IMAGE_REF"
+              mkdir -p .artifacts/releases/vital-ghcr
+              umask 077
+              printf "VITAL_EDA_SERVICES_IMAGE=%s\nVITAL_EDA_TOOLS_IMAGE=%s\n" "$previous_api_pin" "$previous_tools_pin" > ".artifacts/releases/vital-ghcr/${SOURCE_REVISION}-services-previous.env"
               sed -i "s|^VITAL_EDA_SERVICES_IMAGE=.*|VITAL_EDA_SERVICES_IMAGE=$IMAGE_REF|" .env.compose
               sed -i "s|^VITAL_EDA_TOOLS_IMAGE=.*|VITAL_EDA_TOOLS_IMAGE=$TOOLS_IMAGE_REF|" .env.compose
               docker compose --env-file .env.compose -f compose.yaml -f compose.staging.yaml config --quiet

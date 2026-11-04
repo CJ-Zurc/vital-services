@@ -43,11 +43,13 @@ The tools image runs committed Core migration `202610210001_s6_appointment_revis
 ## CI verification tiers
 
 Development PRs and pushes run fast lint or syntax checks only. Full regression
-suites and build checks run on PRs into `staging` and `main`/`master`, and on
-manual dispatch. The original verification job ID and check name aggregate the
-selected tier and fail if it fails or is unexpectedly skipped. Keep that check
-required before promotion; workflow YAML does not configure branch protection.
-Test commands and artifact names remain unchanged. See the workspace
+suites run on promotion PRs, staging and production pushes, and manual dispatch.
+Staging deployment verifies paired Web contracts and PostgreSQL/RabbitMQ
+checks, then deploys the build-produced runtime and tools digests and verifies
+the running image IDs. Previous pins are recorded before mutation and restored
+if deployment fails; restoring images does not reverse database migrations.
+Keep the original verification check required before promotion; workflow YAML
+does not configure branch protection. See the workspace
 [CI verification tiers](../../docs/ci-verification.md) for the event matrix.
 
 VITAL retains full verification on staging and production pushes. Development
