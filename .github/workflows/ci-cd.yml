@@ -26,6 +26,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -34,6 +35,124 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/staging' }}
 
 jobs:
+  verify-premerge:
+    name: Verify pre-merge regression
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/staging' &&
+      startsWith(github.event.head_commit.message, 'Merge pull request #')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+    steps:
+      - name: Verify successful promotion checks
+        id: verify
+        uses: actions/github-script@v7
+        env:
+          REQUIRED_CHECKS: |-
+            Full promotion regression
+            Unit Tests and Linting
+            Isolated EDA PostgreSQL and RabbitMQ
+            Paired Services/Web static route review (not runtime parity)
+        with:
+          script: |
+            const requiredChecks = process.env.REQUIRED_CHECKS.split('\n').map((name) => name.trim()).filter(Boolean);
+            const branch = context.ref.replace('refs/heads/', '');
+            const report = (verified, message) => {
+              core.setOutput('verified', verified ? 'true' : 'false');
+              if (verified) core.info(message);
+              else core.warning(message);
+            };
+            try {
+              const associated = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+              });
+              const mergedPR = associated.data.find((pr) =>
+                pr.merged_at && pr.merge_commit_sha === context.sha && pr.base.ref === branch
+              );
+              if (!mergedPR) {
+                report(false, 'No merged staging PR matches this commit; the full verification suite will run.');
+                return;
+              }
+
+              const mergeCommit = await github.rest.repos.getCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: context.sha,
+              });
+              const mergedHeadSha = mergeCommit.data.parents[1]?.sha;
+              if (!mergedHeadSha) {
+                report(false, 'The staging merge commit has no PR head parent; the full verification suite will run.');
+                return;
+              }
+
+              const workflowList = await github.rest.actions.listRepoWorkflows({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100,
+              });
+              const workflow = (workflowList.data.workflows || []).find((item) =>
+                item.path.endsWith('/ci-cd.yml') && item.state === 'active'
+              );
+              if (!workflow) {
+                report(false, 'The active CI/CD workflow could not be found; the full verification suite will run.');
+                return;
+              }
+
+              const listedRuns = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflow.id,
+                branch: mergedPR.head.ref,
+                event: 'pull_request',
+                head_sha: mergedHeadSha,
+                per_page: 100,
+              });
+              const matchingRuns = (listedRuns.data.workflow_runs || []).filter((run) =>
+                run.event === 'pull_request' &&
+                run.head_branch === mergedPR.head.ref &&
+                run.head_sha === mergedHeadSha
+              );
+              const latestRun = matchingRuns.sort((left, right) =>
+                Date.parse(right.updated_at || right.created_at) - Date.parse(left.updated_at || left.created_at)
+              )[0];
+              if (!latestRun || latestRun.status !== 'completed' || latestRun.conclusion !== 'success') {
+                report(false, 'No successful completed promotion PR workflow run matches this merge; the full verification suite will run.');
+                return;
+              }
+
+              const jobResults = await github.rest.actions.listJobsForWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: latestRun.id,
+                filter: 'latest',
+                per_page: 100,
+              });
+              const missing = requiredChecks.filter((required) => {
+                const matches = jobResults.data.jobs.filter((job) => job.name === required);
+                return matches.length === 0 || matches.some((job) => job.conclusion !== 'success');
+              });
+              const verified = latestRun.event === 'pull_request' &&
+                latestRun.head_sha === mergedHeadSha && missing.length === 0;
+              if (!verified) {
+                report(false, 'Promotion PR jobs are missing or unsuccessful (' +
+                  (missing.length ? missing.join(', ') : 'PR metadata mismatch') +
+                  '); the full verification suite will run.');
+                return;
+              }
+              report(true, 'Verified passing promotion PR #' + mergedPR.number +
+                ' workflow run ' + latestRun.id + '.');
+            } catch (error) {
+              report(false, 'Unable to verify the promotion PR workflow run; the full verification suite will run.');
+            }
   eda-paired-route-review:
     if: >-
       (github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main' || github.base_ref == 'master')) || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref != 'refs/heads/development')
@@ -396,6 +515,7 @@ jobs:
     needs:
       - fast-checks
       - full-regression
+      - verify-premerge
     if: always() && ((github.event_name == 'pull_request' && github.base_ref == 'development') || (github.event_name == 'push' && github.ref == 'refs/heads/development') || (github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main' || github.base_ref == 'master')) || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref != 'refs/heads/development'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -404,12 +524,17 @@ jobs:
         env:
           FAST_RESULT: ${{ needs.fast-checks.result }}
           FULL_RESULT: ${{ needs.full-regression.result }}
-          FULL_REQUIRED: ${{ (github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main' || github.base_ref == 'master')) || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref != 'refs/heads/development') }}
+          PREMERGE_VERIFIED: ${{ needs.verify-premerge.outputs.verified }}
         run: |
-          if [ "$FULL_REQUIRED" = true ]; then
-            test "$FULL_RESULT" = success && test "$FAST_RESULT" = skipped
+          if [ "$FULL_RESULT" = success ]; then
+            test "$FAST_RESULT" = skipped
+          elif [ "$FULL_RESULT" = skipped ] && [ "$FAST_RESULT" = success ]; then
+            test "$PREMERGE_VERIFIED" != true
+          elif [ "$FULL_RESULT" = skipped ] && [ "$FAST_RESULT" = skipped ]; then
+            test "$PREMERGE_VERIFIED" = true
           else
-            test "$FAST_RESULT" = success && test "$FULL_RESULT" = skipped
+            echo 'The selected verification tier did not pass.' >&2
+            exit 1
           fi
     outputs:
       run_ci: ${{ needs.full-regression.result == 'success' }}
@@ -418,8 +543,17 @@ jobs:
     name: Full promotion regression
     outputs:
       run_ci: ${{ steps.ci-gate.outputs.run }}
+    needs: [verify-premerge]
     if: >-
-      (github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main' || github.base_ref == 'master')) || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref != 'refs/heads/development')
+      always() &&
+      (
+        (github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main' || github.base_ref == 'master')) ||
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'push' && (
+          github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' ||
+          (github.ref == 'refs/heads/staging' && needs.verify-premerge.outputs.verified != 'true')
+        ))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -505,9 +639,9 @@ jobs:
 
   publish-staging:
     name: Publish VITAL EDA images to GHCR
-    needs: [lint-and-test, eda-integration, eda-paired-route-review]
+    needs: [lint-and-test, eda-integration, eda-paired-route-review, verify-premerge]
     if: >-
-      !cancelled() && needs.lint-and-test.result == 'success' && needs.eda-integration.result == 'success' && needs.eda-paired-route-review.result == 'success' && (github.event_name == 'push' && github.ref == 'refs/heads/staging')
+      !cancelled() && needs.lint-and-test.result == 'success' && (needs.eda-integration.result == 'success' || (needs.verify-premerge.outputs.verified == 'true' && needs.eda-integration.result == 'skipped')) && needs.eda-paired-route-review.result == 'success' && (github.event_name == 'push' && github.ref == 'refs/heads/staging')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -616,9 +750,21 @@ jobs:
               fi
 
               echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-              trap "docker logout ghcr.io >/dev/null 2>&1 || true" EXIT
+              restore_pins_on_failure() {
+                status=$?
+                if [ "$status" -ne 0 ]; then
+                  sed -i "s|^VITAL_EDA_SERVICES_IMAGE=.*|VITAL_EDA_SERVICES_IMAGE=$previous_api_pin|" .env.compose
+                  sed -i "s|^VITAL_EDA_TOOLS_IMAGE=.*|VITAL_EDA_TOOLS_IMAGE=$previous_tools_pin|" .env.compose
+                  echo "Deployment failed; previous image pins restored. Database migrations may need separate recovery." >&2
+                fi
+                docker logout ghcr.io >/dev/null 2>&1 || true
+              }
+              trap restore_pins_on_failure EXIT
               docker pull "$IMAGE_REF"
               docker pull "$TOOLS_IMAGE_REF"
+              mkdir -p .artifacts/releases/vital-ghcr
+              umask 077
+              printf "VITAL_EDA_SERVICES_IMAGE=%s\nVITAL_EDA_TOOLS_IMAGE=%s\n" "$previous_api_pin" "$previous_tools_pin" > ".artifacts/releases/vital-ghcr/${SOURCE_REVISION}-services-previous.env"
               sed -i "s|^VITAL_EDA_SERVICES_IMAGE=.*|VITAL_EDA_SERVICES_IMAGE=$IMAGE_REF|" .env.compose
               sed -i "s|^VITAL_EDA_TOOLS_IMAGE=.*|VITAL_EDA_TOOLS_IMAGE=$TOOLS_IMAGE_REF|" .env.compose
               docker compose --env-file .env.compose -f compose.yaml -f compose.staging.yaml config --quiet
