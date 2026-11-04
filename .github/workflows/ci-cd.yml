@@ -502,9 +502,7 @@ jobs:
       run_ci: ${{ needs.full-regression.result == 'success' }}
 
   full-regression:
-    name: >-
-      ${{ github.event_name == 'push' && github.ref == 'refs/heads/development' &&
-          'Development full regression (not selected)' || 'Full promotion regression' }}
+    name: ${{ github.event_name == 'push' && github.ref == 'refs/heads/development' && 'Development full regression (not selected)' || 'Full promotion regression' }}
     outputs:
       run_ci: ${{ steps.ci-gate.outputs.run }}
     needs: [verify-premerge]
