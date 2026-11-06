@@ -34,4 +34,4 @@ The complete implementation contract and runbook are in [the implementation brie
 
 ## Audit integration addition
 
-VITAL universal audit publishing, security outcomes, admin history and bounded CSV export are documented in [audit integration](audit-integration.md). This does not activate anomaly detection or change production retention.
+VITAL universal audit publishing, security outcomes, admin history and bounded CSV export are documented in [audit integration](../integrations/audit-integration.md). This does not activate anomaly detection or change production retention.

@@ -21,7 +21,7 @@ Four independent opt-ins default to false:
 
 Enable sandbox, patient normalization and analytics independently according to the rollout stage. Appointment privacy and access codes remain enforced regardless of AI flags. No clinical routing artifact is required or loaded.
 
-Unused routing code, graph/candidate helpers, routing JSON and routing-only tests have been removed. The [routing prototype](routing-prototype.md) remains historical reference only.
+Unused routing code, graph/candidate helpers, routing JSON and routing-only tests have been removed.
 
 Manual doctor selection uses the authenticated TRACE specialty lookup. The [19-specialty catalog](department-mapping.md) remains a validated reference. Legacy candidate analyses require fresh normalization; symptom analytics and the complete BODHI reference remain unchanged.
 

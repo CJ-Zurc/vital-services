@@ -1,4 +1,4 @@
-> **2026-10-28 superseding scope:** Specialty recommendation endpoints are retired (410). The 19-specialty TRACE lookup remains for manual selection. Booking is doctor/slot first, with NLP confirmation in final review. Appointment identity and record access require the separate six-digit-code policy, independently of AI flags. Deploy paired Web/Services contracts and provision dedicated access keys before cutover. See [the current implementation brief](vital-ai-implementation.md).
+> **2026-10-28 superseding scope:** Specialty recommendation endpoints are retired (410). The 19-specialty TRACE lookup remains for manual selection. Booking is doctor/slot first, with NLP confirmation in final review. Appointment identity and record access require the separate six-digit-code policy, independently of AI flags. Deploy paired Web/Services contracts and provision dedicated access keys before cutover. See [the current implementation brief](../intelligence/vital-ai-implementation.md).
 
 # VITAL Services deployment
 
@@ -28,17 +28,14 @@ publication and disposable runtime-acceptance workflows remain separate manual
 operations and do not deploy staging. Production branches do not trigger this
 staging deployment.
 
-See the root [monthly VM runbook](../../docs/deployment/single-azure-vm.md) for
-provisioning, environment setup and recovery.
-
 ## Sprint 6 coordinated migration
 
-The two `202610200001` migrations must run through the existing tools-image migration service before updated API/worker containers start. This release removes doctor `title` and adds S2/signature/document and invoice snapshot storage; compatible Web must follow. Existing doctors return to onboarding. Routine rebuilds do not reset databases. See [Capstone documents](capstone-documents.md).
+The two `202610200001` migrations must run through the existing tools-image migration service before updated API/worker containers start. This release removes doctor `title` and adds S2/signature/document and invoice snapshot storage; compatible Web must follow. Existing doctors return to onboarding. Routine rebuilds do not reset databases. See [Capstone documents](../clinical-workflows/capstone-documents.md).
 
 
 ## S6 appointment migration
 
-The tools image runs committed Core migration `202610210001_s6_appointment_revisions` through the existing locked deployment runner before API/worker startup. Migration failure remains fatal. Apply normally to existing databases; do not reset them. This revision adds no deployment action or environment variables. See [feature contract](eda/sprint6-appointment-revisions.md).
+The tools image runs committed Core migration `202610210001_s6_appointment_revisions` through the existing locked deployment runner before API/worker startup. Migration failure remains fatal. Apply normally to existing databases; do not reset them. This revision adds no deployment action or environment variables. See [feature contract](../eda/sprint6-appointment-revisions.md).
 
 ## CI verification tiers
 
@@ -47,8 +44,7 @@ suites and build checks run on PRs into `staging` and `main`/`master`, and on
 manual dispatch. The original verification job ID and check name aggregate the
 selected tier and fail if it fails or is unexpectedly skipped. Keep that check
 required before promotion; workflow YAML does not configure branch protection.
-Test commands and artifact names remain unchanged. See the workspace
-[CI verification tiers](../../docs/ci-verification.md) for the event matrix.
+Test commands and artifact names remain unchanged.
 
 VITAL retains full verification on staging and production pushes. Development
 events skip the full regression job; Services also skips paired route review
@@ -57,4 +53,4 @@ publication and deployment dependencies remain in place.
 
 ## VITAL intelligence prototype
 
-[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.
+[Intelligent intake and analytics](../intelligence/intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, clinical-review gates and root Compose overlay. Existing runtime behavior stays unchanged with AI disabled. No legacy data is imported.

@@ -47,7 +47,7 @@ save/preview/replacement/replay, branded signed PDF publication, attachment/QR
 publication, owner isolation, stale/hash-mismatched evidence and historical
 reads. Antivirus protocol/malware/outage tests remain in place.
 
-Results and test registration are recorded in `docs/testing.md`. Local simulated
+Results and test registration are recorded in `docs/operations/testing.md`. Local simulated
 storage/database and test-peer HTTP tests do not certify staging issuance.
 Authenticated staging onboarding and issuance must be rerun after a separately
 authorized deployment of this build.

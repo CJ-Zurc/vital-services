@@ -18,7 +18,7 @@ must change only `version` to avoid PostgreSQL `42703` and transaction rollback.
 
 ## Sprint 6 document checks
 
-See [Capstone documents](capstone-documents.md) for strict signing/classification, private signature replacement, immutable issuance, S2 validity, acknowledgment authorization/replay and migration tests. The root test catalog records retained coverage and the temporary S6 suites removed after execution at the user's request. Their historical results remain in the implementation report; the removed migration harness is no longer runnable.
+See [Capstone documents](../clinical-workflows/capstone-documents.md) for strict signing/classification, private signature replacement, immutable issuance, S2 validity, acknowledgment authorization/replay and migration tests. The root test catalog records retained coverage and the temporary S6 suites removed after execution at the user's request. Their historical results remain in the implementation report; the removed migration harness is no longer runnable.
 
 For development PRs with coordinated Web changes, the repository variable
 `VITAL_EDA_PR_<Services PR number>_WEB_SHA` selects the full published companion
@@ -121,7 +121,7 @@ No staging deployment/configuration/database operation was performed.
 Services selects `capstone-validation-only` centrally in `inspection.ts`. ClamAV
 is retained for restoration but is not constructed/contacted by signature,
 attachment/document or payment-QR processing in this build. See
-[policy/evidence and rollback](capstone-file-validation.md). No new .env, public
+[policy/evidence and rollback](../clinical-workflows/capstone-file-validation.md). No new .env, public
 API shape, database migration, Gateway or Capstone_BGH change is included.
 Earlier scanner repairs/results above remain historical; current demo writes
 truthfully record `not_scanned` validation evidence rather than clean scan claims.
@@ -162,7 +162,7 @@ Final Web production build passed (133 pages) after correcting UTF-8 encoding in
 
 ## VITAL intelligence prototype
 
-[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, independent AI feature flags and root Compose overlay. Appointment privacy and access-code controls remain enforced when AI is disabled; specialty recommendations are retired. No legacy analytics data is imported.
+[Intelligent intake and analytics](../intelligence/intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, independent AI feature flags and root Compose overlay. Appointment privacy and access-code controls remain enforced when AI is disabled; specialty recommendations are retired. No legacy analytics data is imported.
 
 
 ## Operator observability revision (2026-10-28)

@@ -7,4 +7,4 @@ effects. Worker synchronization invalidates Auth projections through directional
 contracts. No cross-owner SQL or implicit consent is permitted.
 
 Baseline tools consume the Auth-issued identity manifest enriched by TRACE and
-EHR. Existing correct links are unchanged on repeat runs. See [configuration](configuration.md).
+EHR. Existing correct links are unchanged on repeat runs. See [configuration](../operations/configuration.md).

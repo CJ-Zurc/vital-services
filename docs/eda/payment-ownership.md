@@ -10,8 +10,8 @@ write the outbox; worker effects use idempotent delivery and owner receipts.
 External outcomes must be verified before retrying a mutation. No cross-owner
 database access or synthetic acknowledgement is permitted.
 
-See [architecture](../architecture.md), [integration](../integration_guide.md),
-[configuration](../configuration.md) and [verification](../testing.md). Source
+See [architecture](../architecture/architecture.md), [integration](../integrations/integration_guide.md),
+[configuration](../operations/configuration.md) and [verification](../operations/testing.md). Source
 tests describe contract behavior; live workflow, replay, scanner, load and reset
 acceptance must be recorded against the deployed image IDs.
 

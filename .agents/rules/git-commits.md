@@ -29,14 +29,14 @@ feat(vital): added consolidated /internal/users/:user_id/roles endpoint [VITAL-M
 
 - Added src/routes/internal.js handler returning {system:"vital", roles:[]}
 - Wired trustedGateway middleware in src/index.js
-- Updated docs/api_reference.md and docs/integration_guide.md
+- Updated docs/integrations/api_reference.md and docs/integrations/integration_guide.md
 ```
 
 ```
 fix(gateway): rejected requests missing X-Gateway-Secret with 403 [VITAL-M0-F1]
 
 - Tightened src/middleware/trustedGateway.js
-- Added security note to docs/security.md
+- Added security note to docs/architecture/security.md
 ```
 
 ## 2. Don'ts

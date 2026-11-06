@@ -8,7 +8,7 @@ Before making code changes in this service, you MUST review the local rules and 
 1. `.agents/rules/*`
 2. `.agents/skills/*` (if applicable)
 3. `docs/README.md`
-4. `docs/integration_guide.md` (Gateway/Auth/Audit contract)
+4. `docs/integrations/integration_guide.md` (Gateway/Auth/Audit contract)
 
 **Cross-Service Work:** If your task spans multiple services, refer to the root workspace context:
 
@@ -34,4 +34,4 @@ Local skills:
 
 ## VITAL intelligence
 
-This repository owns VITAL-only NLP, booking guidance and symptom analytics. See `docs/intelligence.md`. Specialty recommendation operations are retired. Patient normalization and synthetic staff preview are separately gated; appointment privacy/code controls are independent of AI flags. AI data lives in Core, Python has no DB credentials, and original clinical text must not enter logs or job messages. Do not import the `vital-ai` snapshot at runtime or alter AIMS/EHR analytics.
+This repository owns VITAL-only NLP, booking guidance and symptom analytics. See `docs/intelligence/intelligence.md`. Specialty recommendation operations are retired. Patient normalization and synthetic staff preview are separately gated; appointment privacy/code controls are independent of AI flags. AI data lives in Core, Python has no DB credentials, and original clinical text must not enter logs or job messages. Do not import the `vital-ai` snapshot at runtime or alter AIMS/EHR analytics.

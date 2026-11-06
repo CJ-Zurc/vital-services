@@ -15,8 +15,8 @@ description: Structural and documentation rules for the VITAL_Services backend. 
 
 1. `README.md` (when present)
 2. `docs/README.md`
-3. `docs/integration_guide.md` — contract with Gateway/Auth/Audit
-4. `docs/architecture.md` — Express layout and route map
+3. `docs/integrations/integration_guide.md` — contract with Gateway/Auth/Audit
+4. `docs/architecture/architecture.md` — Express layout and route map
 5. `.agents/rules/*` (all)
 6. `.agents/skills/*` (when present)
 
@@ -31,11 +31,11 @@ For cross-service work also consult:
 
 | Code area | Doc that must stay in sync |
 |---|---|
-| `src/routes/vital.js` | `docs/api_reference.md`, `docs/flows.md` |
-| `src/middleware/trustedGateway.js` | `docs/security.md`, `docs/integration_guide.md` |
-| `src/middleware/correlationId.js` | `docs/integration_guide.md` |
-| `Dockerfile`, root compose entry | `docs/deployment.md` |
-| Env keys (`.env.example`) | `docs/configuration.md` |
+| `src/routes/vital.js` | `docs/integrations/api_reference.md`, `docs/architecture/flows.md` |
+| `src/middleware/trustedGateway.js` | `docs/architecture/security.md`, `docs/integrations/integration_guide.md` |
+| `src/middleware/correlationId.js` | `docs/integrations/integration_guide.md` |
+| `Dockerfile`, root compose entry | `docs/operations/deployment.md` |
+| Env keys (`.env.example`) | `docs/operations/configuration.md` |
 
 If you add a new route, middleware, or env key, update its parity doc in the same change.
 

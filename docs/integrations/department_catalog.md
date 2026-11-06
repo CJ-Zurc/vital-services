@@ -18,6 +18,3 @@ restore consumes stdin, checks doctor identity/role, increments versions and
 emits doctor mirrors rather than decrementing profile versions. Ordinary API and
 worker processes do not receive migrator credentials. Pause browser writes and
 coordinate mirror draining during recovery.
-
-See the [workspace contract](../../Documents/Department_Catalog_Integration_Guide_v1.md)
-and [cutover runbook](../../docs/deployment/department-catalog-cutover.md).

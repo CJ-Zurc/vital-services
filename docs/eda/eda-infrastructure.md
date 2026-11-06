@@ -7,4 +7,4 @@ Use `scripts/ecosystem.py vital-start`; configure private files first.
 
 The service-owned `compose.eda.yml` and `docker/eda/compose.*.yml` exist only for
 isolated integration tests. Never merge them into the ecosystem topology.
-See [deployment](deployment.md) for actual startup and staging provisioning.
+See [deployment](../operations/deployment.md) for actual startup and staging provisioning.

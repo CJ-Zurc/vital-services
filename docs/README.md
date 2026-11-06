@@ -1,29 +1,44 @@
-# VITAL documentation
+# VITAL Services documentation
 
-- [Architecture](architecture.md): ownership, requests, events and storage.
-- [Deployment](deployment.md): default Compose and process lifecycle.
-- [Configuration](configuration.md): env/secret ownership.
-- [Integration](integration_guide.md): Gateway/Auth/EHR/TRACE/Audit/Notification boundaries.
-- [Testing](testing.md): source suites and staging verification.
-- [Security](security.md): trusted identity and transport requirements.
-- [Capstone documents](capstone-documents.md): S6 signing, controlled medicines,
-  acknowledgments, migrations and verification limits.
-- [Temporary capstone file validation](capstone-file-validation.md): source-owned
-  demo policy, truthful inspection evidence and restoration of antivirus.
+## Architecture
 
-The root [VM runbook](../../docs/deployment/single-azure-vm.md) is authoritative
-for server provisioning and manual staging deployment. Feature contract documents
-describe implemented interfaces; source tests do not certify a deployed workflow.
+- [Service architecture](architecture/architecture.md)
+- [Request and event flows](architecture/flows.md)
+- [Security and trusted transport](architecture/security.md)
 
+## Operations
 
-- [S6 appointment revisions](eda/sprint6-appointment-revisions.md): ratings, complaint history, calendar review, quotas and VITAL inbox contracts.
+- [Deployment and process lifecycle](operations/deployment.md)
+- [Configuration and secret ownership](operations/configuration.md)
+- [Production configuration reference](operations/configuration-reference.md)
+- [Testing and staging verification](operations/testing.md)
 
-- [VITAL intelligent intake and symptom analytics](intelligence.md): gated prototype, contracts, privacy, evaluation and rollout.
-- [AI status and completion report](vital-ai-status-and-completion-report.md): current evidence, deployment requirements and remaining operational steps.
-- [TRACE-aligned 19-specialty mapping](department-mapping.md): accepted BODHI specialties, exact TRACE resolution, unresolved UUIDs and reanalysis compatibility.
+Feature contracts describe implemented interfaces. Source tests establish source behavior, while deployed workflows require runtime verification.
 
-See [department and specialty contracts](department_catalog.md).
+## Integrations
 
-See the [production configuration reference](configuration-reference.md) for every service example variable, feature dependencies and the activation sequence.
+- [Gateway, Auth, EHR, TRACE, Audit, and Notification contracts](integrations/integration_guide.md)
+- [API reference](integrations/api_reference.md)
+- [Audit integration](integrations/audit-integration.md) and [verification](integrations/audit-verification.md)
+- [Department and specialty catalog](integrations/department_catalog.md)
+- [VITAL feedback on the TRACE patient-feedback plan](integrations/trace/patient-feedback/VITAL_Feedback_on_TRACE_Integration_Plan.md)
 
-See [VITAL audit integration](audit-integration.md) for universal metadata, admin history, bounded CSV export and coordinated rollout.
+## Clinical workflows
+
+- [Signing, controlled medicines, and acknowledgments](clinical-workflows/capstone-documents.md)
+- [Temporary capstone file validation](clinical-workflows/capstone-file-validation.md)
+- [Portal consistency and clinical review](clinical-workflows/portal-consistency.md) and [follow-up revisions](clinical-workflows/portal-consistency-v2.md)
+
+## Event-driven architecture
+
+- [EDA documents and baselines](eda/)
+- [Runtime contracts](eda/contracts.md)
+- [Infrastructure](eda/eda-infrastructure.md) and [profiles](eda/eda-profile.md)
+- [Messaging](eda/messaging-ownership.md), [payments](eda/payment-ownership.md), [records](eda/records-ownership.md), and [video](eda/video-ownership.md)
+- [Appointment lifecycle](eda/appointment-lifecycle.md) and [Sprint 6 appointment revisions](eda/sprint6-appointment-revisions.md)
+
+## Intelligence
+
+- [Intelligent intake and symptom analytics](intelligence/intelligence.md)
+- [Implementation brief](intelligence/vital-ai-implementation.md), [verification](intelligence/intelligence-verification.md), and [status report](intelligence/vital-ai-status-and-completion-report.md)
+- [TRACE specialty mapping](intelligence/department-mapping.md)

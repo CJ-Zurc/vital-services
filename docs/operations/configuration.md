@@ -1,8 +1,8 @@
-> **2026-10-28 superseding scope:** Specialty recommendation endpoints are retired (410). The 19-specialty TRACE lookup remains for manual selection. Booking is doctor/slot first, with NLP confirmation in final review. Appointment identity and record access require the separate six-digit-code policy, independently of AI flags. Deploy paired Web/Services contracts and provision dedicated access keys before cutover. See [the current implementation brief](vital-ai-implementation.md).
+> **2026-10-28 superseding scope:** Specialty recommendation endpoints are retired (410). The 19-specialty TRACE lookup remains for manual selection. Booking is doctor/slot first, with NLP confirmation in final review. Appointment identity and record access require the separate six-digit-code policy, independently of AI flags. Deploy paired Web/Services contracts and provision dedicated access keys before cutover. See [the current implementation brief](../intelligence/vital-ai-implementation.md).
 
 # VITAL configuration
 
-The AI booking catalog is packaged at `assets/ai/department-catalog.json`, relative to the Services working directory (`/app` in containers). An environment-specific replacement can pin reviewed TRACE UUIDs at that same path; pins must still match active TRACE records and accepted aliases. No live UUIDs are shipped. See [department mapping](department-mapping.md).
+The AI booking catalog is packaged at `assets/ai/department-catalog.json`, relative to the Services working directory (`/app` in containers). An environment-specific replacement can pin reviewed TRACE UUIDs at that same path; pins must still match active TRACE records and accepted aliases. No live UUIDs are shipped. See [department mapping](../intelligence/department-mapping.md).
 
 The root files are `.env.vital_infra`, `.env.vital_eda_api`,
 `.env.vital_eda_worker`, `.env.vital_eda_web` and `.env.vital_eda_tools`.
@@ -27,9 +27,9 @@ OTP or enable shared sandbox bypasses for normal staging.
 
 ## VITAL intelligence prototype
 
-[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, root Compose overlay and independently enforced appointment privacy. Specialty recommendations are retired. No legacy data is imported.
+[Intelligent intake and analytics](../intelligence/intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, feature flags, root Compose overlay and independently enforced appointment privacy. Specialty recommendations are retired. No legacy data is imported.
 
 See the [production configuration reference](configuration-reference.md) for every service example variable, feature dependencies and the activation sequence.
 
 
-See [portal rollout configuration](portal-consistency.md#admin-dashboard-and-rollout) for paired symptom analytics flags and disabled face verification.
+See [portal rollout configuration](../clinical-workflows/portal-consistency.md#admin-dashboard-and-rollout) for paired symptom analytics flags and disabled face verification.

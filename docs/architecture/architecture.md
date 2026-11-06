@@ -25,7 +25,7 @@ worker and Web have process-specific configuration and bounded resource limits.
 Sprint 6 patient administration adds a separate read-only patient-monitoring
 view and bounded admin summary route. Messaging now follows scheduled 24-hour
 appointment/follow-up windows with retained read-only history. See
-[integration contracts](integration_guide.md#s6-005-patient-monitoring-and-s6-009-messaging)
+[integration contracts](../integrations/integration_guide.md#s6-005-patient-monitoring-and-s6-009-messaging)
 for routes, ownership, response fields and boundary behavior.
 
 
@@ -41,7 +41,7 @@ no migration or domain-policy change is introduced by this routing revision.
 
 ## VITAL intelligence prototype
 
-[Intelligent intake and analytics](intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, independent AI feature flags and root Compose overlay. Appointment privacy and access-code controls remain enforced when AI is disabled; specialty recommendations are retired. No legacy analytics data is imported.
+[Intelligent intake and analytics](../intelligence/intelligence.md) documents the new Core-owned AI tables, private Python/Node job runtimes, scoped APIs, encryption keys, independent AI feature flags and root Compose overlay. Appointment privacy and access-code controls remain enforced when AI is disabled; specialty recommendations are retired. No legacy analytics data is imported.
 
 
 ## Operator observability revision (2026-10-28)
@@ -49,7 +49,7 @@ no migration or domain-policy change is introduced by this routing revision.
 The private API emits api_request metadata at response headers without consuming bodies. Only route templates, method/status, header latency and verified actor correlation enter observations. The worker emits delivery_snapshot counts/ages every thirty seconds for Audit and Notifications; snapshot failure never changes delivery behavior.
 
 
-See [portal consistency and clinical review](portal-consistency.md) for appointment review, name masking, batch slots and the merged dashboard.
+See [portal consistency and clinical review](../clinical-workflows/portal-consistency.md) for appointment review, name masking, batch slots and the merged dashboard.
 
 
-See [portal consistency v2](portal-consistency-v2.md) for anonymous patient ratings and the screenshot-aligned portal changes.
+See [portal consistency v2](../clinical-workflows/portal-consistency-v2.md) for anonymous patient ratings and the screenshot-aligned portal changes.
