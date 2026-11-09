@@ -43,17 +43,23 @@ The tools image runs committed Core migration `202610210001_s6_appointment_revis
 ## CI verification tiers
 
 Development PRs and pushes run fast lint or syntax checks only. Full regression
-suites and build checks run on PRs into `staging` and `main`/`master`, and on
-manual dispatch. The original verification job ID and check name aggregate the
-selected tier and fail if it fails or is unexpectedly skipped. Keep that check
-required before promotion; workflow YAML does not configure branch protection.
-Test commands and artifact names remain unchanged. See the workspace
+suites run on promotion PRs, production pushes, manual dispatch, and direct or
+unverified staging pushes. A staging merge push skips the duplicate regression
+only after the workflow verifies the merged PR's full regression and aggregate
+check.
+Staging deployment verifies paired Web contracts and PostgreSQL/RabbitMQ
+checks, then deploys the build-produced runtime and tools digests and verifies
+the running image IDs. Previous pins are recorded before mutation and restored
+if deployment fails; restoring images does not reverse database migrations.
+Keep the original verification check required before promotion; workflow YAML
+does not configure branch protection. See the workspace
 [CI verification tiers](../../docs/ci-verification.md) for the event matrix.
 
-VITAL retains full verification on staging and production pushes. Development
-events skip the full regression job; Services also skips paired route review
-and isolated database/broker integration on those events. Existing staging
-publication and deployment dependencies remain in place.
+Production pushes and manual dispatch always run full verification. If a staging
+merge cannot be matched to passing PR checks, it also runs full regression.
+Services skips its duplicate isolated database/broker integration only after
+that PR check is verified; paired route review still runs on the staging push to
+resolve the exact Web revision. Both checks remain required on promotion PRs.
 
 ## VITAL intelligence prototype
 
