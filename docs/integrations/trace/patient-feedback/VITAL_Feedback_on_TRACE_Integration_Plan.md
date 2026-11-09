@@ -4,11 +4,11 @@ VITAL team reply for TRACE review · Updated 9 November 2026
 
 We agree that TRACE should own the hospital staff workflow for telemedicine cases escalated for doctor-related concerns. VITAL owns the appointment, patient-facing status, and booking workflows. Accounting issues refunds outside the integration and informs VITAL once a refund has been issued.
 
-Reviewed against the revised [TRACE dispute strategy](https://github.com/Oeubx/TRACE_Backend/blob/0158628/docs/integration/patient-feedback/patient-dispute-resolution-strategy.md) and [patient feedback QR guide](https://github.com/Oeubx/TRACE_Backend/blob/0158628/docs/integration/patient-feedback/trace-patient-qr-guide.md).
+VITAL accepts the revised workflow at TRACE commit `95f032d`, with the contract clarifications below. See the [TRACE dispute strategy](https://github.com/Oeubx/TRACE_Backend/blob/95f032d/docs/integration/patient-feedback/patient-dispute-resolution-strategy.md) and [patient feedback QR guide](https://github.com/Oeubx/TRACE_Backend/blob/95f032d/docs/integration/patient-feedback/trace-patient-qr-guide.md).
 
 ## Intake and routing
 
-Once a response from the designated Google Form is flagged for TRACE, it becomes a TRACE case. TRACE owns ticket creation, HR investigation, staff routing, and returning the disposition to VITAL. VITAL Admin handles patient-only reports. The existing general feedback QR and VITAL’s appointment rating remain separate from the dispute workflow. Please confirm how the designated form is identified, since the public QR endpoint can return a historical or default form.
+Once a response from the designated Google Form is flagged for TRACE, it becomes a TRACE case. TRACE owns ticket creation, HR investigation, staff routing, and returning the disposition to VITAL. VITAL Admin handles patient-only reports. The existing general feedback QR and VITAL’s appointment rating remain separate from the dispute workflow. TRACE sends a verified receipt before staff triage. A designated TRACE reviewer flags doctor-related concerns for ticket creation.
 
 | Case | Proposed handling |
 | --- | --- |
@@ -58,7 +58,7 @@ Keep EHR records, prescriptions, and medical reports out of the dispute workflow
 | Appeal form submission | 24 hours from VITAL accepting **Start appeal**. |
 | Private reschedule offer | Give the patient 24 hours from when VITAL sends the offer. Schedule the replacement slot after the response window. |
 | Advance payment | Cutoff 3 hours before the scheduled start. |
-| Complaint acknowledgment | Immediate receipt and a human acknowledgment target of one business day. |
+| Complaint acknowledgment | Immediate receipt and a human acknowledgment target of one business day from verified form receipt, including time waiting for triage. |
 
 ## VITAL implementation checklist
 
@@ -69,18 +69,11 @@ Keep EHR records, prescriptions, and medical reports out of the dispute workflow
 5. **Lifecycle timing.** Implement the agreed timing table in VITAL. Keep patient-only reports, payment expiry, and private rescheduling in VITAL. Coordinate timer changes across the interactive and background completion paths.
 6. **Verification.** Cover the appeal-versus-completion race, late delivery of a timely form response, abandoned appeals, duplicate or stale dispositions, unavailable replacement slots, and duplicate Accounting confirmation.
 
-## VITAL proposals for TRACE to confirm
+## Final contract clarifications
 
-| Decision | VITAL proposal | Please confirm |
-| --- | --- | --- |
-| Form receipt and ticket routing | TRACE reads the designated Google Form and sends VITAL a verified submission receipt before staff triage. The receipt carries the appeal reference, form ID, response ID, and first submission timestamp. A designated TRACE intake reviewer then flags doctor-related concerns for ticket creation. TRACE owns the flagged case. Patient-only concerns go to VITAL Admin. | Which TRACE role flags responses, how receipts are delivered and retried, and how VITAL can verify that no timely response is pending before releasing an abandoned hold. |
-| Final disposition | An authorized TRACE reviewer sends an explicit **Invalidate**, **Dismiss**, or **Reschedule agreed** disposition. VITAL applies valid final dispositions automatically. VITAL Admin reviews stale, conflicting, or unsupported decisions. | Which TRACE roles can finalize each outcome, which case and decision identifiers VITAL receives, and how TRACE submits a correction that references the earlier decision. |
-| Accounting confirmation | Use a restricted **Confirm Refund Issued** action after Accounting pays externally. The action returns the ticket to the admin and sends VITAL the case ID, issuance date, and reconciliation reference. VITAL updates the refund record separately from the appointment. | The Accounting role, return-to-admin behavior, and confirmation delivery and retry contract. Verify evidence restrictions across ticket views, attachment links, exports, and APIs. |
+1. **Appeal holds.** A verified form submitted within 24 hours of **Start appeal** keeps the hold active. VITAL also keeps the hold while TRACE sync is pending. VITAL releases an abandoned hold only after TRACE confirms its completed sync covers the form deadline and found no timely submission. An explicit intake dismissal clears the hold and resumes the original completion deadline. A redirect keeps the hold active and transfers review to VITAL Admin.
+2. **Disposition corrections.** TRACE sends a new decision ID and references the active decision it supersedes. VITAL applies the correction once if the appointment can still make the requested transition. Stale, conflicting, or no-longer-valid corrections go to VITAL Admin. For example, a correction that requires reversing an already completed appointment goes to admin review.
+3. **Refund confirmation.** Accounting can use **Confirm Refund Issued** only for an approved refund after issuing it externally. Mutual absence remains ineligible even when the appointment is **Invalid**. Standardize both specs on `POST /internal/v1/appointments/appeals/refund-confirmed`. VITAL records the confirmation separately from appointment invalidation.
+4. **Human acknowledgment.** Start the one-business-day target at verified form receipt, including time waiting for triage. TRACE owns acknowledgment for TRACE cases. VITAL displays it to the patient when delivered through VITAL.
 
-Agree on scoped service identities and stable event identifiers for these handoffs. Retries should create one TRACE ticket per flagged case, apply each final disposition once, and record each refund confirmation once. TRACE should use an explicit schema migration or a dedicated case-link table with a uniqueness constraint for the stable case ID.
-
-## Corrections requested in the TRACE draft
-
-- Keep patient-only no-shows with VITAL Admin. Remove the automatic TRACE Clinic Scheduling assignment for that case.
-- Treat a missing session-start timestamp as one signal for HR review. Use the available attendance and incident evidence before confirming doctor absence.
-- Start the 24-hour private reschedule response window when VITAL sends the offer. Set the replacement slot after the window. Include the immediate receipt and one-business-day human acknowledgment target.
+Joint acceptance should cover a timely response delivered late, pending sync, intake dismissal and redirection, a correction after auto-completion, and an invalid mutual-absence case with no refund.
