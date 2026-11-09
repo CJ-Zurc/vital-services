@@ -582,6 +582,7 @@ model Feedback {
 }
 
 model ConsentRecord {
+  agreementVersion String?
   id            String       @id @default(uuid())
   patientId     String
   patient       VitalPatient @relation(fields: [patientId], references: [userId])

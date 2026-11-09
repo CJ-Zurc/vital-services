@@ -42,6 +42,7 @@ export function createCompletionRouter(reads?: CompletionReads) {
     return reads!.consents(actor, Object.fromEntries(query));
   }));
   router.post('/consents', handle((actor, req, command) => reads!.acceptConsent(actor, req.body, command), 201));
+  router.get('/consents/status', handle(actor => reads!.consentStatus(actor)));
   router.get('/analytics/pre-consultations', handle((actor, req) => reads!.exportSubmitted(actor,
     parseCompletionExportQuery(new URL(req.originalUrl, 'https://internal.invalid').searchParams))));
   return router;

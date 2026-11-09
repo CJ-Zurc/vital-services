@@ -6,7 +6,33 @@ import { ArtifactError } from './upload-validation.js';
 import { philippineDate, validatePrescriptionLines, type RecordsFontConfig, type PrescriptionPdf, type CertificatePdf } from './legacy-pdf.js';
 export type SigningFields={templateVersion?:string;signatureBase64?:string;signatureHash?:string;s2License?:string;s2ValidFrom?:string;s2ValidUntil?:string;patientAge?:string;patientSex?:string;patientAddress?:string;doctorContact?:string;doctorAddress?:string;doctorPtr?:string;retrievalUrl?:string;contentHash?:string};
 export type AcknowledgmentPdf={reference:string;patientName:string;doctorName:string;appointmentId:string;paymentReference:string;paymentMethod:string;amountCentavos:number;paidAt:string;completedAt:string;issuedAt:string;sandbox:boolean;service:string;templateVersion:string};
+export type PaymentReceiptPdf = Omit<AcknowledgmentPdf, 'completedAt' | 'issuedAt' | 'templateVersion'>;
 const GREEN='#165b38';
+export async function createPaymentReceiptPdf(args: PaymentReceiptPdf, fonts: RecordsFontConfig) {
+ const date = new Date(args.paidAt);
+ if (!Number.isFinite(+date) || !Number.isSafeInteger(args.amountCentavos) || args.amountCentavos <= 0)
+  throw new ArtifactError('RECEIPT_AMOUNT_INVALID');
+ const { doc, result } = begin('VITAL PAYMENT RECEIPT', date, fonts);
+ try {
+  field(doc, 'Receipt reference', args.reference);
+  field(doc, 'Patient', args.patientName);
+  field(doc, 'Doctor', args.doctorName);
+  field(doc, 'Appointment', args.appointmentId);
+  field(doc, 'Service', args.service);
+  field(doc, 'Payment reference', args.paymentReference);
+  field(doc, 'Payment provider', args.paymentMethod);
+  field(doc, 'Paid', philippineDate(date, true));
+  doc.moveDown().font('bold').fontSize(18).fillColor(GREEN).text(`TOTAL PAID: PHP ${(args.amountCentavos / 100).toFixed(2)}`);
+  doc.moveDown().font('regular').fontSize(10).fillColor('#111827').text('VITAL payment record for the patient. This receipt does not replace a BIR-authorized invoice.');
+  if (args.sandbox) doc.moveDown().font('bold').fillColor('#9b1c1c').text('TEST — NO ACTUAL PAYMENT');
+  finish(doc, args.reference, false);
+  return await result;
+ } catch (error) {
+  doc.destroy();
+  void result.catch(() => {});
+  throw error;
+ }
+}
 function begin(title:string,date:Date,fonts?:RecordsFontConfig){
  const regular=fonts?.regularPath??'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',bold=fonts?.boldPath??'/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
  const logo=resolve('assets/documents/bgh-logo.png');
@@ -48,7 +74,7 @@ export async function bghPrescription(args:PrescriptionPdf&SigningFields,fonts?:
  }catch(error){doc.destroy();void result.catch(()=>{});throw error;}
 }
 export async function bghCertificate(args:CertificatePdf&SigningFields,fonts?:RecordsFontConfig){const{doc,result}=begin('MEDICAL CERTIFICATE',args.issuedAt,fonts);
- try{meta(doc,{...args,lines:[]});field(doc,'Purpose',args.purpose);field(doc,'Findings / diagnosis',args.diagnosis);if(args.consultationDate)field(doc,'Consultation date',philippineDate(args.consultationDate));
+ try{meta(doc,{...args,lines:[]});doc.font('regular').fontSize(11).text('This certifies that the patient named above was seen for a consultation.');doc.moveDown(.6);field(doc,'Purpose',args.purpose);field(doc,'Findings / diagnosis',args.diagnosis);if(args.consultationDate)field(doc,'Consultation date',philippineDate(args.consultationDate));
  if(args.restStartDate||args.restEndDate)field(doc,'Recommended rest',`${args.restStartDate?philippineDate(args.restStartDate):'Not recorded'} to ${args.restEndDate?philippineDate(args.restEndDate):'Not recorded'}`);
  if(args.recommendation)field(doc,'Recommendation',args.recommendation);if(args.remarks)field(doc,'Remarks',args.remarks);sign(doc,{...args,lines:[]});finish(doc,args.accessCode,true);return await result;
  }catch(error){doc.destroy();void result.catch(()=>{});throw error;}
