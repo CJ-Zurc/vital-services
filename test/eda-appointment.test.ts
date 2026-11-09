@@ -189,6 +189,10 @@ test("EDA Appointment rejection atomically commits true prior state command and 
   assert.equal(result.status,"rejected");assert.equal(f.state().logs[0]![2],"pending");
   assert.equal(f.state().events.filter(e=>e.eventType==="vital.audit.requested").length,1);
   await f.module().reject(actor,f.id,meta,{expectedVersion:0,reason:"declined"});assert.equal(f.state().logs.length,1);
+  const notices=f.state().events.filter(e=>e.eventType==="vital.notification.requested");
+  assert.equal(notices.length,1);
+  assert.equal(notices[0]!.data.template,"appointment_rejected");
+  assert.equal(notices[0]!.data.recipientAuthId,f.patientAuthId);
   for(const event of f.state().events)assert.doesNotMatch(JSON.stringify(event),/declined/);
 });
 test("EDA Appointment outbox failure rolls back lifecycle logs and command journal",async()=>{
@@ -317,6 +321,11 @@ test('patient booking derives the full doctor slot duration and replays once wit
  assert.equal(booked.scheduleSlotId,f.scheduleSlotId);assert.equal(booked.proposedEndAt!.getTime()-booked.scheduledAt.getTime(),75*60000);
  const count=f.calls.filter(s=>s.startsWith('INSERT INTO appointments')).length;
  assert.deepEqual(await f.module().book(actor,meta,body),result);assert.equal(f.calls.filter(s=>s.startsWith('INSERT INTO appointments')).length,count);
+ const notices=f.state().events.filter(e=>e.eventType==='vital.notification.requested');
+ assert.equal(notices.length,1);
+ assert.equal(notices[0]!.data.template,'appointment_requested');
+ assert.equal(notices[0]!.data.recipientAuthId,booked.doctorAuthId);
+ assert.equal(notices[0]!.data.appointmentId,result.id);
  assert.ok(f.calls.some(s=>s.startsWith('INSERT INTO pre_consultations')));assert.ok(f.calls.some(s=>s.startsWith('INSERT INTO consent_records')));
 });
 test('patient booking denies missing slot custom overrides and mismatched doctor',async()=>{

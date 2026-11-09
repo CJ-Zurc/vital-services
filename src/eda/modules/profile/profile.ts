@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CURRENT_AGREEMENT_VERSION } from "../../contracts/agreement.js";
 import type { Prisma } from "../../generated/core/client.js";
 import { requireScope, type Actor } from "../../contracts/actor.js";
 import type { CorePrismaClient } from "../../infrastructure/databases.js";
@@ -339,11 +340,12 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
   return {
     workflows,
     async bootstrapRegistration(actor: Actor, body: unknown, metadata?: ProfileCommandMetadata) {
-      let input: { consent_accepted: true; registrationId?: string };
+      let input: { consent_accepted: true; registrationId?: string; agreementVersion?: string };
       if (actor.role === 'service') {
         requireScope(actor, 'profile.registration.receipt', actor.authId);
         if (actor.isSuperAdmin || actor.scopes.length !== 1) throw new ProfileError(403, 'Registration delegation denied.');
-        input = z.object({ consent_accepted: z.literal(true), registrationId: z.uuid() }).strict().parse(body);
+        input = z.object({ consent_accepted: z.literal(true), registrationId: z.uuid(),
+          agreementVersion: z.literal(CURRENT_AGREEMENT_VERSION).optional() }).strict().parse(body);
         if (!commandGuard || !registrationAuthority) throw new ProfileError(503, 'Registration authority unavailable.');
         // Online Auth resolution precedes every transaction/replay, never inside a retried transaction.
         await registrationAuthority(actor.authId, input.registrationId!, actor.correlationId);
@@ -371,7 +373,7 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
           consentType: "registration", appointmentId: null }, orderBy: [{ consentedAt: "desc" }, { id: "desc" }] });
         if (consent && !consent.accepted) throw new ProfileError(409, "Registration consent requires review.");
         if (!consent) await tx.consentRecord.create({ data: { patientId: user.id, consentType: "registration",
-          accepted: true, consentedAt: new Date() } });
+          accepted: true, consentedAt: new Date(), agreementVersion: input.agreementVersion ?? null } });
         if (createdMarker || !consent) await changed(tx, actor, user.id, "registration.bootstrap");
         return tx.vitalUser.findUniqueOrThrow({ where: { id: user.id }, select: userSelect });
       });
