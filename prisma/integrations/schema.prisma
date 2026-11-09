@@ -123,6 +123,8 @@ model Payment {
   rejectionReason String?
   submittedAt     DateTime        @default(now())
   verifiedAt      DateTime?
+  receiptPdf      Bytes?
+  receiptHash     String?
   paidAt          DateTime?
   failedAt        DateTime?
   refundRequestedAt DateTime?

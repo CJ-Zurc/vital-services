@@ -47,7 +47,7 @@ function get(path: string) {
 function method(path: string, verb = 'GET') { return get(path).methods.find((row: any) => row.method === verb); }
 
 test('route contract review maps every current Web route and exported method without claiming runtime parity', () => {
-  assert.equal(current.length, 163, 'A changed route inventory requires explicit source review.');
+  assert.equal(current.length, 165, 'A changed route inventory requires explicit source review.');
   for (const route of current) {
     const result = get(route.path);
     assert.equal(result.reviewed, true, route.path + ': ' + JSON.stringify(result.gates));
@@ -75,7 +75,7 @@ test('route contract review verifies real BFF dispatch policies and method-speci
   assert.equal(method('/api/doctor/patients/[patientId]/record').family, 'records');
   assert.equal(method('/api/patient/appointments/[appointmentId]/payment', 'POST').dispatch.symbol, 'targetPayment');
   assert.equal(method('/api/patient/appointments/[appointmentId]/payment', 'PATCH').dispatch.symbol, 'targetPayment');
-  assert.equal(method('/api/auth/consent', 'GET').requiredRole, 'admin');
+  assert.equal(method('/api/auth/consent', 'GET').requiredRole, 'patient or admin');
   assert.equal(method('/api/auth/consent', 'POST').requiredRole, 'patient');
   assert.match(method('/api/auth/me', 'GET').targetOwner, /Profile/);
   assert.equal(method('/api/auth/me', 'PATCH').targetOwner, 'UHSE_AUTH via Gateway');

@@ -80,7 +80,7 @@ export const eventDataSchemas = {
     requestId: uuid,
     recipientAuthId: uuid,
     appointmentId: uuid,
-    template: z.enum(["appointment.cancelled", "appointment.follow_up", "appointment.reschedule_proposed", "appointment.rescheduled", "appointment.reschedule_declined"]),
+    template: z.enum(["appointment_requested", "appointment_approved", "appointment_rejected", "appointment.cancelled", "appointment.follow_up", "appointment.reschedule_proposed", "appointment.rescheduled", "appointment.reschedule_declined"]),
     parameters: z.object({ scheduledAt: z.iso.datetime().optional() }).strict(),
   }).strict(),
 } as const;

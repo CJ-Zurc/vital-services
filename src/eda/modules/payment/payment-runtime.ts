@@ -1,4 +1,5 @@
 import { createAcknowledgments } from './acknowledgments.js';
+import { createPaymentReceipts } from './payment-receipts.js';
 import { acknowledgmentNames } from './acknowledgment-names.js';
 import type { Pool } from "pg";
 import { createBillingAuthority } from "../appointment/appointment-billing.js";
@@ -20,5 +21,10 @@ export function paymentRuntime(databases: { corePool: Pool; integrationsPool: Po
   const module=createPaymentModule({ enabled: true, appOrigin, billing,acknowledgmentNames:acknowledgmentNames(environment),
     association:createPaymentAssociation(databases.integrationsPool,createRescheduleAuthority(databases.corePool)),
     store: createPaymentStore(databases.integrationsPool), provider: createPaymongoProvider({ secret: environment.PAYMONGO_SECRET_KEY ?? "" }) });
-  return {...module,acknowledgment:createAcknowledgments(databases.integrationsPool,billing,{regularPath:environment.VITAL_RECORDS_FONT_REGULAR_FILE??'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',boldPath:environment.VITAL_RECORDS_FONT_BOLD_FILE??'/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'})};
+  const fonts = {regularPath:environment.VITAL_RECORDS_FONT_REGULAR_FILE??'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',boldPath:environment.VITAL_RECORDS_FONT_BOLD_FILE??'/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'};
+  return {
+    ...module,
+    acknowledgment: createAcknowledgments(databases.integrationsPool, billing, fonts),
+    receipt: createPaymentReceipts(databases.integrationsPool, billing, fonts, acknowledgmentNames(environment)),
+  };
 }
