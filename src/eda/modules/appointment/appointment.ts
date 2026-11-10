@@ -4,7 +4,7 @@ import { accessRow,ensureAppointmentAccess,issueAppointmentCode,revokeAppointmen
 import { consumeIntake, intakeReferenceSchema, approvedHandoff, captureBooking } from '../intelligence/booking.js';
 import { previewDateBlocks, saveDateBlocks } from './appointment-date-blocks.js';
 import { appointmentNotification } from './appointment-notifications.js';
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
@@ -27,6 +27,7 @@ const selectAppointment = `SELECT a.*, p."authId" AS "patientAuthId", d."authId"
 const bookingInput = z.object({ doctorId: z.uuid().optional(), scheduleSlotId: z.uuid(), consultationType: z.enum(["virtual","in_person"]),
   consentVersion:z.literal('appointment-sharing-v1'),consentAccepted: z.literal(true), chiefComplaint: complaintSchema, opqrst: intakeSchema, emergencyContact: emergencyContactSchema,
   intakeSessionBinding:z.string().regex(/^[a-f0-9]{64}$/).optional(),ehrPatientId: z.uuid(), intakeReference:intakeReferenceSchema.optional(), reviewIdentityValues:z.array(z.string().max(400)).max(25).optional(), reviewSex:z.string().max(40).nullable().optional(), aiAgeYears:z.number().int().min(0).max(150).nullable().optional() }).strict();
+const appealInput = z.object({ expectedVersion: versionSchema.optional(), reason: z.string().trim().max(1000).optional() }).strict();
 const proposalInput = z.object({ expectedVersion: versionSchema, reason: z.string().trim().min(1).max(2000),
   slotDate: scheduleInput.shape.slotDate, startTime: scheduleInput.shape.startTime, endTime: scheduleInput.shape.endTime }).strict();
 const patientProposalInput = z.object({ expectedVersion: versionSchema, reason: z.string().trim().min(1).max(2000), scheduleSlotId: z.uuid() }).strict();
@@ -427,7 +428,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       if(row.status!=="confirmed"||row.scheduledAt.getTime()>clock()||!projection||projection.status!=="paid"||projection.reviewRequired||projection.billingLineageId!==row.billingLineageId||projection.associationVersion!==row.associationVersion)fail(409,"APPOINTMENT_COMPLETION_INVALID");
       await financial.verifyPaid(row,projection);
       if(effectiveCompletionDeadline(row).getTime()<=clock())fail(409,"APPOINTMENT_COMPLETION_DEADLINE");
-      const deadline=row.completionDeadlineAt??new Date(clock()+86400000);
+      const deadline=row.completionDeadlineAt??new Date(clock()+172_800_000);
       const context={operationId:meta.operationId,beforeState:row.status,afterState:"confirmed",effectiveAt:new Date(clock()),financialEvidence:projection};
       if(actor.role==="doctor"){
         if(!records.beforeDoctorAcknowledgement)fail(503,"RECORDS_SNAPSHOT_OWNER_UNAVAILABLE");
@@ -442,6 +443,73 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
           data:{auditType:"vital.appointment.completion_acknowledged",actorAuthId:actor.authId,resourceId:row.id,resourceType:"appointment"}});
       }
       return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
+    async startAppeal(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){
+      const input=appealInput.parse(body??{});
+      return mutate(actor,"start_appeal",id,meta,input,async tx=>{
+        const row=await lockAppointment(tx,id);
+        appointmentOwn(actor,row);
+        if(actor.role!=="patient")fail(403,"PATIENT_ROLE_REQUIRED");
+        if(input.expectedVersion!==undefined)expected(row,input.expectedVersion);
+        if(row.status!=="confirmed"||!row.doctorConfirmedAt)fail(409,"APPOINTMENT_APPEAL_INELIGIBLE");
+        if(row.reviewHold||row.status==="in_review")fail(409,"APPEAL_ALREADY_ACTIVE");
+        if(effectiveCompletionDeadline(row).getTime()<=clock())fail(409,"APPOINTMENT_COMPLETION_DEADLINE_EXPIRED");
+
+        const appealRef=`app-ref-${randomBytes(6).toString("hex")}`;
+        const appealDeadline=new Date(clock()+86_400_000);
+        const disputedAt=new Date(clock());
+
+        await tx.query(
+          `UPDATE appointments SET
+            "reviewHold"=true,
+            status='in_review',
+            "appealReference"=$2,
+            "appealDeadlineAt"=$3,
+            "disputedAt"=$4,
+            "disputeReason"=$5,
+            version=version+1,
+            "updatedAt"=NOW()
+          WHERE id=$1`,
+          [id,appealRef,appealDeadline,disputedAt,input.reason??null]
+        );
+        row.version++;
+        row.status="in_review";
+
+        await tx.query(
+          `INSERT INTO appointment_logs (id,"appointmentId","fromStatus","toStatus","changedByRole",note,"changedAt")
+           VALUES ($1,$2,'confirmed','in_review','patient','appeal_started',$3)`,
+          [randomUUID(),id,disputedAt]
+        );
+
+        await appendSqlOutbox(tx,{
+          producer:"appointment",
+          eventType:"vital.appointment.appeal_started",
+          aggregateId:row.id,
+          aggregateVersion:row.version,
+          correlationId:actor.correlationId,
+          causationId:meta.operationId,
+          data:{...appointmentFactData(row,actor.authId,meta.operationId),appealReference:appealRef,appealDeadlineAt:appealDeadline.toISOString()}
+        });
+
+        await appendSqlOutbox(tx,{
+          producer:"appointment",
+          eventType:"vital.audit.requested",
+          aggregateId:row.id,
+          aggregateVersion:row.version,
+          correlationId:actor.correlationId,
+          causationId:meta.operationId,
+          data:{auditType:"vital.appointment.appeal_started",actorAuthId:actor.authId,resourceId:row.id,resourceType:"appointment",appealReference:appealRef}
+        });
+
+        return{
+          id:row.id,
+          version:row.version,
+          status:"in_review",
+          appealReference:appealRef,
+          appealDeadlineAt:appealDeadline.toISOString(),
+          operationStatus:"completed"
+        };
+      });
+    },
     async confirmPayment(tx:PoolClient,evidence:{appointmentId:string;paymentId:string;paymentVersion:number;billingLineageId:string;associationVersion:number;reviewRequired:boolean;status:string;correlationId:string;eventId:string}){
       const row=await lockAppointment(tx,evidence.appointmentId);if(row.billingLineageId!==evidence.billingLineageId||row.associationVersion!==evidence.associationVersion)fail(409,"PAYMENT_ASSOCIATION_CHANGED");
       if(evidence.status!=="paid"||evidence.reviewRequired||!["approved","pending_payment_verification"].includes(row.status)||appointmentExpired(row,clock()))return;
