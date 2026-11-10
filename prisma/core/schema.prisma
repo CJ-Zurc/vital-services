@@ -59,6 +59,9 @@ enum AppointmentStatus {
   rescheduled
   cancelled
   completed
+  in_review
+  invalid
+  no_show
 }
 
 enum MessageSenderRole {
@@ -369,6 +372,20 @@ model Appointment {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
+  traceTicketId            String?       @db.Uuid
+  traceCaseId              String?       @db.Uuid
+  reviewHold               Boolean       @default(false)
+  appealReference          String?       @unique @db.VarChar(64)
+  appealDeadlineAt         DateTime?     @db.Timestamptz
+  disputeReason            String?
+  disputedAt               DateTime?     @db.Timestamptz
+  activeDecisionId         String?       @db.Uuid
+  accountingRef            String?
+  accountingRefundIssuedAt DateTime?     @db.Timestamptz
+  doctorProofScreenshotUrl String?
+  doctorDeliverableType    String?
+  doctorDeliverableRef     String?
+
   statusLogs          AppointmentLog[]
   preConsultation     PreConsultation?
   consultation        Consultation?
@@ -382,6 +399,9 @@ model Appointment {
 
   @@index([followUpOfAppointmentId])
   @@index([completionDeadlineAt])
+  @@index([appealReference])
+  @@index([reviewHold])
+  @@index([traceCaseId])
   @@map("appointments")
   version Int @default(0)
   billingLineageId String @default(uuid())
