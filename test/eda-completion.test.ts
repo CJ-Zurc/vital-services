@@ -62,32 +62,46 @@ test('consent aliases preserve registration-only patient filter and overflow fai
   assert.deepEqual(call.args, [patientId]); assert.match(call.sql, /"consentType"='registration'/); assert.match(call.sql, /ORDER BY "consentedAt" DESC,id DESC LIMIT 1/);
   await assert.rejects(profile.consents(admin, { cursor: 'invalid' }), e => e instanceof DomainError && e.code === 'COMPLETION_CONSENT_CURSOR_INVALID');
 });
-test('consent writes default off, require explicit acceptance, insert once and roll back duplicates', async () => {
+test('consent writes default off, require explicit acceptance, renew unknown versions and deduplicate current acceptance', async () => {
   const patient = actor('patient', 'profile.consent.accept'), patientId = randomUUID(), consentId = randomUUID();
-  let exists = false;
+  let agreementVersion: string | null = null;
   const db = sqlPool(sql => sql.includes('FROM vital_patients p') ? [{ userId: patientId }]
-    : sql.startsWith('SELECT id FROM consent_records') ? exists ? [{ id: consentId }] : []
-      : sql.startsWith('INSERT INTO consent_records') ? (exists = true, [{ consentId, accepted: true, consentType: 'registration', consentedAt: new Date() }])
+    : sql.startsWith('SELECT id AS "consentId"') ? [{ consentId, accepted: true, consentType: 'registration', agreementVersion, consentedAt: new Date() }]
+      : sql.startsWith('INSERT INTO consent_records') ? (agreementVersion = '1.0-2026', [{ consentId, accepted: true, consentType: 'registration', agreementVersion, consentedAt: new Date() }])
         : sql.startsWith('UPDATE vital_users') ? [{ version: 1 }] : []);
   const disabled = createCompletionProfileOwner(db.pool);
   await assert.rejects(disabled.acceptConsent(patient, { accepted: false }), e => e instanceof DomainError && e.status === 400);
-  await assert.rejects(disabled.acceptConsent(patient, { accepted: true }), e => e instanceof DomainError && e.status === 503);
+  await assert.rejects(disabled.acceptConsent(patient, { accepted: true, agreementVersion: '1.0-2026' }), e => e instanceof DomainError && e.status === 503);
   assert.equal(db.calls.length, 0);
   const profile = createCompletionProfileOwner(db.pool, { consentWrites: true });
   await assert.rejects(profile.acceptConsent(patient, { accepted: true, injected: 'denied' }, command()));
-  assert.equal((await profile.acceptConsent(patient, { accepted: true }, command()) as { consentId: string })?.consentId, consentId);
-  await assert.rejects(profile.acceptConsent(patient, { accepted: true }, command()), e => e instanceof DomainError && e.status === 409 && e.message === 'Registration consent already recorded');
+  assert.equal((await profile.acceptConsent(patient, { accepted: true, agreementVersion: '1.0-2026' }, command()) as { consentId: string })?.consentId, consentId);
+  assert.equal((await profile.acceptConsent(patient, { accepted: true, agreementVersion: '1.0-2026' }, command()) as { consentId: string })?.consentId, consentId);
   assert.equal(db.calls.filter(row => row.sql.startsWith('INSERT INTO consent_records')).length, 1);
-  assert.equal(db.calls.filter(row => row.sql === 'ROLLBACK').length, 1);
+  assert.equal(db.calls.filter(row => row.sql === 'ROLLBACK').length, 0);
   assert.ok(db.calls.some(row => row.sql === 'BEGIN ISOLATION LEVEL SERIALIZABLE'));
   assert.ok(db.calls.every(row => !/UPDATE consent_records|DELETE FROM consent_records/.test(row.sql)));
+});
+test('patient consent status distinguishes missing, unknown, older and current versions', async () => {
+  const patient = actor('patient', 'profile.consent.status'), patientId = randomUUID();
+  for (const version of [undefined, null, '0.9-2025', '1.0-2026']) {
+    const db = sqlPool(sql => sql.includes('FROM vital_patients p') ? [{ userId: patientId }]
+      : sql.includes('FROM consent_records') && version !== undefined ? [{ accepted: true, agreementVersion: version }] : []);
+    const owner = createCompletionProfileOwner(db.pool);
+    assert.deepEqual(await owner.consentStatus(patient), {
+      agreementVersion: '1.0-2026',
+      acceptedAgreementVersion: version ?? null,
+      requiresConsent: version !== '1.0-2026',
+    });
+    await assert.rejects(owner.consentStatus(actor('doctor', 'profile.consent.status')));
+  }
 });
 test('consent serializable retry is bounded and rechecks missing patient after rollback', async () => {
   const patient = actor('patient', 'profile.consent.accept'); let attempts = 0;
   const db = sqlPool(sql => { if (sql.includes('FOR UPDATE')) { attempts++; throw Object.assign(new Error('safe test'), { code: '40001' }); } return []; });
-  await assert.rejects(createCompletionProfileOwner(db.pool, { consentWrites: true }).acceptConsent(patient, { accepted: true }, command()));
+  await assert.rejects(createCompletionProfileOwner(db.pool, { consentWrites: true }).acceptConsent(patient, { accepted: true, agreementVersion: '1.0-2026' }, command()));
   assert.equal(attempts, 3); assert.equal(db.calls.filter(row => row.sql === 'ROLLBACK').length, 3);
-  await assert.rejects(createCompletionProfileOwner(sqlPool(() => []).pool, { consentWrites: true }).acceptConsent(patient, { accepted: true }, command()), e => e instanceof DomainError && e.status === 404);
+  await assert.rejects(createCompletionProfileOwner(sqlPool(() => []).pool, { consentWrites: true }).acceptConsent(patient, { accepted: true, agreementVersion: '1.0-2026' }, command()), e => e instanceof DomainError && e.status === 404);
 });
 
 test('consent command replay rechecks current patient and cannot repeat effects or change hash', async () => {
@@ -97,11 +111,11 @@ test('consent command replay rechecks current patient and cannot repeat effects 
   const db = sqlPool(sql => sql.includes('FROM vital_patients p') ? member ? [{ userId: patientId }] : []
     : sql.includes('FROM command_operations') ? [{ action: 'profile.consent.accept', resourceId: patient.authId, requestHash: meta.requestHash, result: receipt }] : []);
   const profile = createCompletionProfileOwner(db.pool, { consentWrites: true });
-  assert.deepEqual(await profile.acceptConsent(patient, { accepted: true }, meta), receipt);
+  assert.deepEqual(await profile.acceptConsent(patient, { accepted: true, agreementVersion: '1.0-2026' }, meta), receipt);
   assert.equal(db.calls.some(row => /INSERT|UPDATE vital_users/.test(row.sql)), false);
-  await assert.rejects(profile.acceptConsent(patient, { accepted: true }, { ...meta, requestHash: 'b'.repeat(64) }), e => e instanceof DomainError && e.code === 'COMMAND_REPLAY_CONFLICT');
+  await assert.rejects(profile.acceptConsent(patient, { accepted: true, agreementVersion: '1.0-2026' }, { ...meta, requestHash: 'b'.repeat(64) }), e => e instanceof DomainError && e.code === 'COMMAND_REPLAY_CONFLICT');
   member = false;
-  await assert.rejects(profile.acceptConsent(patient, { accepted: true }, meta), e => e instanceof DomainError && e.status === 404);
+  await assert.rejects(profile.acceptConsent(patient, { accepted: true, agreementVersion: '1.0-2026' }, meta), e => e instanceof DomainError && e.status === 404);
   assert.equal(db.calls.filter(row => row.sql === 'ROLLBACK').length, 2);
 });
 test('domain adapters use owner-local queries and derive only scoped appointment reads', async () => {

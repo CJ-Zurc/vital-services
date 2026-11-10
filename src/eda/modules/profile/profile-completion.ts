@@ -4,13 +4,14 @@ import { z } from 'zod';
 import { DomainError, type Actor } from '../../contracts/actor.js';
 import { completionCount, completionRole, completionUnavailable } from '../../contracts/completion.js';
 import { appendProfileSqlEffects } from './profile-sql-effects.js';
+import { CURRENT_AGREEMENT_VERSION } from '../../contracts/agreement.js';
 
 const consentPosition = z.object({ consentedAt: z.iso.datetime({ offset: true }), id: z.uuid() }).strict();
 
 const consentCursor = z.object({ after: consentPosition, upper: consentPosition, patientId: z.string().max(256).nullable() }).strict();
 
 export interface CompletionConsentRow { id: string; patientId: string; appointmentId: string | null;
-  consentType: 'registration'; accepted: boolean; consentedAt: Date }
+  consentType: 'registration'; accepted: boolean; consentedAt: Date; agreementVersion: string | null }
 
 // Profile owns membership, account counts and immutable registration consent only.
 export function createCompletionProfileOwner(pool: Pool, options: { consentWrites?: boolean } = {}) {
@@ -28,6 +29,19 @@ export function createCompletionProfileOwner(pool: Pool, options: { consentWrite
   }
   return {
     patient, admin,
+    async consentStatus(actor: Actor) {
+      completionRole(actor, 'patient', 'profile.consent.status');
+      const patientId = await patient(actor);
+      const receipt = (await pool.query<{ accepted: boolean; agreementVersion: string | null }>(
+        `SELECT accepted,"agreementVersion" FROM consent_records
+          WHERE "patientId"=$1 AND "consentType"='registration' AND "appointmentId" IS NULL
+          ORDER BY "consentedAt" DESC,id DESC LIMIT 1`, [patientId])).rows[0];
+      return {
+        agreementVersion: CURRENT_AGREEMENT_VERSION,
+        acceptedAgreementVersion: receipt?.accepted ? receipt.agreementVersion : null,
+        requiresConsent: !receipt?.accepted || receipt.agreementVersion !== CURRENT_AGREEMENT_VERSION,
+      };
+    },
     async accounts() {
       const row = (await pool.query<{ patients: string; doctors: string }>(`SELECT
         (SELECT COUNT(*) FROM vital_patients) AS patients,(SELECT COUNT(*) FROM vital_doctors) AS doctors`)).rows[0]!;
@@ -57,7 +71,7 @@ export function createCompletionProfileOwner(pool: Pool, options: { consentWrite
         const predicate = `"consentType"='registration' AND ($1::text IS NULL OR "patientId"=$1)
           AND ("consentedAt",id)<=($2::timestamp,$3::text)`;
         const total = upper ? completionCount((await tx.query<{ total: string }>(`SELECT COUNT(*) AS total FROM consent_records WHERE ${predicate}`, args.slice(0, 3))).rows[0]!.total) : 0;
-        const rows = upper ? (await tx.query<CompletionConsentRow>(`SELECT id,"patientId","appointmentId","consentType",accepted,"consentedAt"
+        const rows = upper ? (await tx.query<CompletionConsentRow>(`SELECT id,"patientId","appointmentId","consentType",accepted,"consentedAt","agreementVersion"
           FROM consent_records WHERE ${predicate} AND ($4::timestamp IS NULL OR ("consentedAt",id)<($4::timestamp,$5::text))
           ORDER BY "consentedAt" DESC,id DESC LIMIT $6`, [...args, query.limit + 1])).rows : [];
         const data = rows.slice(0, query.limit), last = data.at(-1);
@@ -73,7 +87,7 @@ export function createCompletionProfileOwner(pool: Pool, options: { consentWrite
       if (!(input && typeof input === 'object' && 'accepted' in input && input.accepted === true))
         throw new DomainError(400, 'PROFILE_CONSENT_REQUIRED', 'Consent must be explicitly accepted to proceed');
       if (!options.consentWrites) completionUnavailable('CONSENT_WRITES');
-      z.object({ accepted: z.literal(true) }).strict().parse(input);
+      z.object({ accepted: z.literal(true), agreementVersion: z.literal(CURRENT_AGREEMENT_VERSION) }).strict().parse(input);
       if (!command) throw new DomainError(401, 'COMMAND_METADATA_REQUIRED', 'Signed command required.');
       const meta = z.object({ operationId: z.uuid(), requestHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(command);
       for (let attempt = 0; ; attempt++) {
@@ -92,12 +106,14 @@ export function createCompletionProfileOwner(pool: Pool, options: { consentWrite
             await tx.query('COMMIT');
             return replay.result;
           }
-          const existing = await tx.query(`SELECT id FROM consent_records WHERE "patientId"=$1 AND "consentType"='registration' LIMIT 1`, [patientId]);
-          if (existing.rows.length) throw new DomainError(409, 'PROFILE_CONSENT_EXISTS', 'Registration consent already recorded');
-          const row = (await tx.query(`INSERT INTO consent_records (id,"patientId","consentType",accepted,"consentedAt")
-            VALUES (gen_random_uuid()::text,$1,'registration',true,NOW())
-            RETURNING id AS "consentId","consentType",accepted,"consentedAt"`, [patientId])).rows[0];
-          await appendProfileSqlEffects(tx, { userId: patientId, authId: actor.authId, role: 'patient', correlationId: actor.correlationId });
+          const existing = (await tx.query(`SELECT id AS "consentId","consentType",accepted,"consentedAt","agreementVersion"
+            FROM consent_records WHERE "patientId"=$1 AND "consentType"='registration' AND "appointmentId" IS NULL
+            ORDER BY "consentedAt" DESC,id DESC LIMIT 1`, [patientId])).rows[0];
+          const current = existing?.accepted && existing.agreementVersion === CURRENT_AGREEMENT_VERSION;
+          const row = current ? existing : (await tx.query(`INSERT INTO consent_records (id,"patientId","consentType",accepted,"consentedAt","agreementVersion")
+            VALUES (gen_random_uuid()::text,$1,'registration',true,NOW(),$2)
+            RETURNING id AS "consentId","consentType",accepted,"consentedAt","agreementVersion"`, [patientId, CURRENT_AGREEMENT_VERSION])).rows[0];
+          if (!current) await appendProfileSqlEffects(tx, { userId: patientId, authId: actor.authId, role: 'patient', correlationId: actor.correlationId });
           await tx.query(`INSERT INTO command_operations (id,"actorId",action,"resourceId","operationId","requestHash",status,result,"createdAt","updatedAt")
             VALUES($1,$2,'profile.consent.accept',$2,$3,$4,'completed',$5::jsonb,NOW(),NOW())`,
           [randomUUID(), actor.authId, meta.operationId, meta.requestHash, JSON.stringify(row)]);

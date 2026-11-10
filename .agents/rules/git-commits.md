@@ -45,3 +45,8 @@ fix(gateway): rejected requests missing X-Gateway-Secret with 403 [VITAL-M0-F1]
 - Do not reference absolute paths in the body — keep them relative to repo root.
 - Do not amend already-pushed commits unless explicitly requested.
 - Do not bypass hooks (`--no-verify`) unless explicitly requested.
+
+
+## Current backlog resolution
+
+Use the root `docs/backlogs/UHSE_Sprint_Backlogs_Commit_Reference.md` for explicit Sprint 0–8 relationships and the owning team's approved VITAL ticket for local work. The general VITAL-M0-F0 example above is a maintenance fallback. Do not invent a feature or translate UHSE module numbers into a VITAL ticket. Keep qualified local codes in PR metadata when no workbook counterpart exists. Test documentation uses separate sheet/executable identifiers and retains developer-added tests absent from the sheet.

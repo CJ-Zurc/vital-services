@@ -35,6 +35,7 @@ export function createCompletionReads(profile: ReturnType<typeof createCompletio
       return { summary: { ...accounts, paidVolume: financial.paidVolume }, statusCounts, paymentCounts: financial.paymentCounts };
     },
     consents: profile.consents,
+    consentStatus: profile.consentStatus,
     acceptConsent: profile.acceptConsent,
     async exportSubmitted(actor: Actor, query: ExportQuery) {
       authorizeExport(actor);

@@ -1,4 +1,4 @@
-import { rescheduleNotification } from './appointment-notifications.js';
+import { appointmentNotification } from './appointment-notifications.js';
 import { randomUUID,createHash } from "node:crypto";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -102,7 +102,7 @@ export function createAppointmentSaga(pool:Pool,owners:AppointmentOwners,clock=D
         const records=requireOwner(owners.records,"records");
         const source=await readAppointment(tx,current.sourceAppointmentId,true),replacement=await readAppointment(tx,current.replacementAppointmentId,true);
         await records.finalizeReschedule?.(tx,source,replacement,{operationId:id,beforeState:source.status,afterState:replacement.status,replacement,effectiveAt:new Date(clock())});
-        await rescheduleNotification(tx,replacement,{authId:current.actorAuthId,role:current.actorRole,correlationId:current.correlationId} as Actor,
+        await appointmentNotification(tx,replacement,{authId:current.actorAuthId,role:current.actorRole,correlationId:current.correlationId} as Actor,
           id,'appointment.rescheduled',current.targetRequest.initiator==='doctor'?replacement.patientAuthId:replacement.doctorAuthId);
         await tx.query('UPDATE saga_operations SET status=\'completed\',"completedAt"=NOW(),"leaseOwner"=NULL,"leaseUntil"=NULL WHERE id=$1',[id]);});
     }catch(error){
