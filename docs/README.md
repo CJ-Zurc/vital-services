@@ -11,7 +11,7 @@
 - [Temporary capstone file validation](capstone-file-validation.md): source-owned
   demo policy, truthful inspection evidence and restoration of antivirus.
 
-The root [VM runbook](../../docs/deployment/single-azure-vm.md) is authoritative
+The root [VM runbook](../../docs/deployment/single-contabo-vm.md) is authoritative
 for server provisioning and manual staging deployment. Feature contract documents
 describe implemented interfaces; source tests do not certify a deployed workflow.
 
