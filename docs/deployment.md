@@ -28,7 +28,7 @@ publication and disposable runtime-acceptance workflows remain separate manual
 operations and do not deploy staging. Production branches do not trigger this
 staging deployment.
 
-See the root [monthly VM runbook](../../docs/deployment/single-azure-vm.md) for
+See the root [monthly VM runbook](../../docs/deployment/single-contabo-vm.md) for
 provisioning, environment setup and recovery.
 
 ## Sprint 6 coordinated migration
