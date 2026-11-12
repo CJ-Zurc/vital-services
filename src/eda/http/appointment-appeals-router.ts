@@ -4,14 +4,13 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { DomainError } from "../contracts/actor.js";
 import { appendSqlOutbox } from "../infrastructure/outbox.js";
-import { effectiveCompletionDeadline } from "../modules/appointment/appointment-contracts.js";
 
 const receiptInput = z.object({
   appeal_reference: z.string().min(5).max(64),
   case_id: z.string().uuid(),
   form_id: z.string().uuid().nullable().optional(),
   response_id: z.string().nullable().optional(),
-  submitted_at: z.string().datetime().optional()
+  submitted_at: z.string().datetime({ offset: true })
 }).strict();
 
 const dispositionInput = z.object({
@@ -22,8 +21,9 @@ const dispositionInput = z.object({
   decision_id: z.string().uuid(),
   supersedes_decision_id: z.string().uuid().nullable().optional(),
   disposition: z.enum(["appointment_invalidated", "appeal_dismissed", "reschedule_agreed"]),
+  refund_approved: z.boolean().default(false),
   decided_by_role: z.string().optional(),
-  decided_at: z.string().datetime().optional()
+  decided_at: z.string().datetime({ offset: true }).optional()
 }).strict();
 
 const refundConfirmedInput = z.object({
@@ -32,7 +32,7 @@ const refundConfirmedInput = z.object({
   appeal_reference: z.string().min(5).max(64),
   appointment_id: z.string().uuid(),
   reconciliation_reference: z.string().min(1).max(255),
-  issuance_date: z.string().datetime().optional(),
+  issuance_date: z.string().datetime({ offset: true }).optional(),
   refund_amount: z.number().nullable().optional()
 }).strict();
 
@@ -42,7 +42,15 @@ const redirectInput = z.object({
   appeal_reference: z.string().min(5).max(64),
   appointment_id: z.string().uuid().nullable().optional(),
   notes: z.string().optional(),
-  redirected_at: z.string().datetime().optional()
+  redirected_at: z.string().datetime({ offset: true }).optional()
+}).strict();
+
+const acknowledgmentInput = z.object({
+  event_id: z.string().uuid(),
+  case_id: z.string().uuid(),
+  appeal_reference: z.string().min(5).max(64),
+  appointment_id: z.string().uuid(),
+  acknowledged_at: z.string().datetime({ offset: true }),
 }).strict();
 
 export function createAppointmentAppealsRouter(pool: Pool) {
@@ -53,13 +61,13 @@ export function createAppointmentAppealsRouter(pool: Pool) {
     try {
       const input = receiptInput.parse(req.body);
       const correlationId = (req.get("X-Correlation-ID") as string) || randomUUID();
-      const submittedAt = input.submitted_at ? new Date(input.submitted_at) : new Date();
+      const submittedAt = new Date(input.submitted_at);
 
       const tx = await pool.connect();
       try {
         await tx.query("BEGIN");
         const rows = (await tx.query(
-          `SELECT id, status, version, "reviewHold", "appealDeadlineAt"
+          `SELECT id, status, version, "reviewHold", "appealDeadlineAt", "disputedAt", "traceCaseId"
            FROM appointments WHERE "appealReference" = $1 FOR UPDATE`,
           [input.appeal_reference]
         )).rows;
@@ -70,7 +78,17 @@ export function createAppointmentAppealsRouter(pool: Pool) {
         }
 
         const appt = rows[0];
-        const timely = !appt.appealDeadlineAt || submittedAt.getTime() <= (appt.appealDeadlineAt.getTime() + 60000); // 1m grace
+        const timely = appt.appealDeadlineAt && appt.disputedAt &&
+          submittedAt >= appt.disputedAt && submittedAt <= appt.appealDeadlineAt;
+        if (!timely || appt.status !== "in_review" || !appt.reviewHold ||
+            (appt.traceCaseId && appt.traceCaseId !== input.case_id)) {
+          throw new DomainError(409, "APPEAL_RECEIPT_INELIGIBLE", "Receipt does not match a timely active appeal.");
+        }
+        if (appt.traceCaseId === input.case_id) {
+          await tx.query("COMMIT");
+          return res.json({ success: true, contractVersion: 1,
+            data: { appointment_id: appt.id, appeal_reference: input.appeal_reference, case_id: input.case_id, status: "locked", timely: true } });
+        }
 
         await tx.query(
           `UPDATE appointments SET
@@ -96,14 +114,14 @@ export function createAppointmentAppealsRouter(pool: Pool) {
           aggregateVersion: appt.version + 1,
           correlationId,
           causationId: correlationId,
-          data: { appointmentId: appt.id, appealReference: input.appeal_reference, traceCaseId: input.case_id, timely }
+          data: { appointmentId: appt.id, traceCaseId: input.case_id }
         });
 
         await tx.query("COMMIT");
         res.status(200).json({
           success: true,
           contractVersion: 1,
-          data: { appeal_reference: input.appeal_reference, case_id: input.case_id, status: "locked", timely }
+          data: { appointment_id: appt.id, appeal_reference: input.appeal_reference, case_id: input.case_id, status: "locked", timely }
         });
       } catch (err) {
         await tx.query("ROLLBACK");
@@ -111,6 +129,23 @@ export function createAppointmentAppealsRouter(pool: Pool) {
       } finally {
         tx.release();
       }
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/acknowledged", async (req, res, next) => {
+    try {
+      const input = acknowledgmentInput.parse(req.body);
+      const result = await pool.query(
+        `UPDATE appointments SET
+           "appealAcknowledgedAt" = COALESCE("appealAcknowledgedAt", $4),
+           version = version + CASE WHEN "appealAcknowledgedAt" IS NULL THEN 1 ELSE 0 END
+         WHERE id = $1 AND "appealReference" = $2 AND "traceCaseId" = $3 RETURNING id`,
+        [input.appointment_id, input.appeal_reference, input.case_id, new Date(input.acknowledged_at)],
+      );
+      if (!result.rowCount) throw new DomainError(404, "APPEAL_CASE_NOT_FOUND", "No linked appeal case.");
+      res.json({ success: true, contractVersion: 1, data: { status: "acknowledged" } });
     } catch (err) {
       next(err);
     }
@@ -126,10 +161,9 @@ export function createAppointmentAppealsRouter(pool: Pool) {
       try {
         await tx.query("BEGIN");
         const rows = (await tx.query(
-          `SELECT id, status, version, "reviewHold", "activeDecisionId", "doctorConfirmedAt", "patientConfirmedAt",
-                  "completionDeadlineAt", "scheduledAt", "proposedEndAt"
-           FROM appointments WHERE id = $1 OR "appealReference" = $2 FOR UPDATE`,
-          [input.appointment_id, input.appeal_reference]
+          `SELECT id, status, version, "reviewHold", "activeDecisionId"
+           FROM appointments WHERE id = $1 AND "appealReference" = $2 AND "traceCaseId" = $3 FOR UPDATE`,
+          [input.appointment_id, input.appeal_reference, input.case_id]
         )).rows;
 
         if (!rows.length) {
@@ -139,8 +173,15 @@ export function createAppointmentAppealsRouter(pool: Pool) {
 
         const appt = rows[0];
 
-        // Decision revision / conflict check
-        if (appt.activeDecisionId && input.supersedes_decision_id && appt.activeDecisionId !== input.supersedes_decision_id) {
+        if (appt.activeDecisionId === input.decision_id) {
+          await tx.query("COMMIT");
+          return res.json({ success: true, contractVersion: 1,
+            data: { appointment_id: appt.id, applied: true, status: "already_applied" } });
+        }
+
+        const predecessorMatches = (appt.activeDecisionId ?? null) === (input.supersedes_decision_id ?? null);
+        const activeReview = appt.status === "in_review" && appt.reviewHold;
+        if (!predecessorMatches || !activeReview || input.disposition === "reschedule_agreed") {
           // Conflicting or stale decision; route to VITAL Admin review
           await tx.query(
             `UPDATE appointments SET
@@ -165,34 +206,22 @@ export function createAppointmentAppealsRouter(pool: Pool) {
           });
         }
 
-        let nextStatus = appt.status;
-        let note = `disposition_${input.disposition}`;
-
-        if (input.disposition === "appointment_invalidated") {
-          nextStatus = "invalid";
-        } else if (input.disposition === "appeal_dismissed") {
-          // Clear hold and evaluate whether completion deadline has already passed
-          const deadline = effectiveCompletionDeadline(appt);
-          if (appt.doctorConfirmedAt && Date.now() >= deadline.getTime()) {
-            nextStatus = "completed";
-            note = "disposition_dismissed_autocompleted";
-          } else {
-            nextStatus = "confirmed";
-          }
-        } else if (input.disposition === "reschedule_agreed") {
-          nextStatus = "confirmed";
-          note = "disposition_reschedule_offered";
+        if (input.refund_approved && input.disposition !== "appointment_invalidated") {
+          throw new DomainError(422, "TRACE_REFUND_APPROVAL_INELIGIBLE", "Invalidation is required for refund approval.");
         }
+        const nextStatus = input.disposition === "appointment_invalidated" ? "invalid" : "confirmed";
+        const note = "disposition_" + input.disposition;
 
         await tx.query(
           `UPDATE appointments SET
             status = $2::"AppointmentStatus",
             "reviewHold" = false,
             "activeDecisionId" = $3,
+            "traceRefundApproved" = $4,
             version = version + 1,
             "updatedAt" = NOW()
           WHERE id = $1`,
-          [appt.id, nextStatus, input.decision_id]
+          [appt.id, nextStatus, input.decision_id, input.refund_approved]
         );
 
         await tx.query(
@@ -203,12 +232,12 @@ export function createAppointmentAppealsRouter(pool: Pool) {
 
         await appendSqlOutbox(tx, {
           producer: "appointment",
-          eventType: `vital.appointment.disposition_${input.disposition}`,
+          eventType: "vital.appointment.disposition_applied",
           aggregateId: appt.id,
           aggregateVersion: appt.version + 1,
           correlationId,
           causationId: correlationId,
-          data: { appointmentId: appt.id, disposition: input.disposition, decisionId: input.decision_id, nextStatus }
+          data: { appointmentId: appt.id, disposition: input.disposition, decisionId: input.decision_id }
         });
 
         await tx.query("COMMIT");
@@ -239,9 +268,9 @@ export function createAppointmentAppealsRouter(pool: Pool) {
       try {
         await tx.query("BEGIN");
         const rows = (await tx.query(
-          `SELECT id, status, version, "accountingRef" FROM appointments
-           WHERE id = $1 OR "appealReference" = $2 FOR UPDATE`,
-          [input.appointment_id, input.appeal_reference]
+          `SELECT id, status, version, "accountingRef", "traceRefundApproved" FROM appointments
+           WHERE id = $1 AND "appealReference" = $2 AND "traceCaseId" = $3 FOR UPDATE`,
+          [input.appointment_id, input.appeal_reference, input.case_id]
         )).rows;
 
         if (!rows.length) {
@@ -251,7 +280,16 @@ export function createAppointmentAppealsRouter(pool: Pool) {
 
         const appt = rows[0];
 
-        // Idempotently record refund confirmation
+        if (appt.accountingRef === input.reconciliation_reference) {
+          await tx.query("COMMIT");
+          return res.json({ success: true, contractVersion: 1,
+            data: { appointment_id: appt.id, status: "refund_recorded" } });
+        }
+        if (appt.status !== "invalid" || !appt.traceRefundApproved || appt.accountingRef) {
+          throw new DomainError(409, "TRACE_REFUND_CONFIRMATION_INELIGIBLE", "Refund approval or reconciliation reference does not match.");
+        }
+
+        // Record Accounting's confirmation independently of the appointment disposition.
         await tx.query(
           `UPDATE appointments SET
             "accountingRef" = $2,
@@ -260,15 +298,6 @@ export function createAppointmentAppealsRouter(pool: Pool) {
             "updatedAt" = NOW()
           WHERE id = $1`,
           [appt.id, input.reconciliation_reference, issuanceDate]
-        );
-
-        // Update payment projections / intents to refunded if exists
-        await tx.query(
-          `UPDATE appointment_payment_projections SET
-            status = 'refunded',
-            "updatedAt" = NOW()
-          WHERE "appointmentId" = $1`,
-          [appt.id]
         );
 
         await tx.query(
@@ -284,12 +313,7 @@ export function createAppointmentAppealsRouter(pool: Pool) {
           aggregateVersion: appt.version + 1,
           correlationId,
           causationId: correlationId,
-          data: {
-            appointmentId: appt.id,
-            reconciliationReference: input.reconciliation_reference,
-            issuanceDate: issuanceDate.toISOString(),
-            refundAmount: input.refund_amount
-          }
+          data: { appointmentId: appt.id }
         });
 
         await tx.query("COMMIT");
@@ -324,8 +348,9 @@ export function createAppointmentAppealsRouter(pool: Pool) {
         await tx.query("BEGIN");
         const rows = (await tx.query(
           `SELECT id, status, version FROM appointments
-           WHERE "appealReference" = $1 ${input.appointment_id ? 'OR id = $2' : ''} FOR UPDATE`,
-          input.appointment_id ? [input.appeal_reference, input.appointment_id] : [input.appeal_reference]
+           WHERE "appealReference" = $1 AND "traceCaseId" = $2
+             AND ($3::text IS NULL OR id::text = $3) AND status = 'in_review' AND "reviewHold" FOR UPDATE`,
+          [input.appeal_reference, input.case_id, input.appointment_id ?? null]
         )).rows;
 
         if (!rows.length) {

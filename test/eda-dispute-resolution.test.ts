@@ -11,26 +11,15 @@ import { DomainError } from "../src/eda/contracts/actor.js";
 import { createAppointmentModule } from "../src/eda/modules/appointment/appointment.js";
 import type { AppointmentRow } from "../src/eda/modules/appointment/appointment-contracts.js";
 import { createAppointmentMaintenance } from "../src/eda/modules/appointment/appointment-maintenance.js";
-import { createAppealsRouter } from "../src/eda/http/appointment-appeals-router.js";
+import express from "express";
+import { createAppointmentAppealsRouter } from "../src/eda/http/appointment-appeals-router.js";
 
-function patientActor(patientAuthId: string): Actor {
+function patientActor(patientAuthId: string, appointmentId: string): Actor {
   return {
     authId: patientAuthId,
     role: "patient",
-    scopes: ["appointment.patient.manage"],
-    resource: patientAuthId,
-    serviceId: "vital-web",
-    isSuperAdmin: false,
-    correlationId: randomUUID(),
-  };
-}
-
-function doctorActor(doctorAuthId: string): Actor {
-  return {
-    authId: doctorAuthId,
-    role: "doctor",
-    scopes: ["appointment.doctor.manage"],
-    resource: doctorAuthId,
+    scopes: ["appointments.appeal"],
+    resource: appointmentId,
     serviceId: "vital-web",
     isSuperAdmin: false,
     correlationId: randomUUID(),
@@ -99,7 +88,7 @@ function createTestFixture() {
         return { rows: [structuredClone(state.row)], rowCount: 1 };
       }
 
-      if (sql.includes("SELECT p.*,u.version,u.role FROM vital_patients")) {
+      if (sql.includes("SELECT p.* FROM vital_patients")) {
         return { rows: [{ userId: patientId, ehrPatientId: patientId, isOnboardingComplete: true }], rowCount: 1 };
       }
 
@@ -123,12 +112,12 @@ function createTestFixture() {
       }
 
       if (sql.includes("UPDATE appointments") && sql.includes('"reviewHold"')) {
-        state.row.reviewHold = Boolean(args[1]);
-        state.row.status = String(args[2]) as any;
-        state.row.appealReference = String(args[3]);
-        state.row.appealDeadlineAt = args[4] as Date;
-        state.row.disputeReason = String(args[5]);
-        state.row.disputedAt = args[6] as Date;
+        state.row.reviewHold = true;
+        state.row.status = "in_review";
+        state.row.appealReference = String(args[1]);
+        state.row.appealDeadlineAt = args[2] as Date;
+        state.row.disputedAt = args[3] as Date;
+        state.row.disputeReason = String(args[4]);
         state.row.version++;
         return { rows: [{ version: state.row.version }], rowCount: 1 };
       }
@@ -141,7 +130,7 @@ function createTestFixture() {
       }
 
       if (sql.includes("INSERT INTO outbox_events")) {
-        state.events.push({ topic: args[1], type: args[2], payload: JSON.parse(String(args[4])) });
+        state.events.push({ topic: args[1], type: args[2], payload: JSON.parse(String(args[8])) });
         return { rows: [], rowCount: 1 };
       }
 
@@ -169,22 +158,24 @@ function createTestFixture() {
   return { state, pool, patientAuthId, doctorAuthId, appointmentId };
 }
 
+test.beforeEach(() => { process.env.VITAL_TRACE_DISPUTES_ENABLED = "true"; });
+
 test("startAppeal initializes review hold, generates appeal reference and pauses auto-completion", async () => {
   const fixture = createTestFixture();
   const appointmentModule = createAppointmentModule(fixture.pool);
-  const patient = patientActor(fixture.patientAuthId);
+  const patient = patientActor(fixture.patientAuthId, fixture.appointmentId);
 
   const result = await appointmentModule.startAppeal(
     patient,
     fixture.appointmentId,
-    { operationId: randomUUID(), requestHash: "hash-001" },
+    { operationId: randomUUID(), requestHash: "a".repeat(64) },
     { reason: "Doctor was absent during scheduled consultation." }
   );
 
   assert.equal(result.status, "in_review");
   assert.equal(result.reviewHold, true);
   assert.ok(result.appealReference.startsWith("app-ref-"));
-  assert.ok(result.appealDeadlineAt instanceof Date);
+  assert.ok(Number.isFinite(Date.parse(result.appealDeadlineAt)));
 
   // Verify internal state in fixture
   assert.equal(fixture.state.row.reviewHold, true);
@@ -199,13 +190,13 @@ test("startAppeal rejects duplicate appeals when reviewHold is already active", 
   fixture.state.row.appealReference = "app-ref-existing123";
 
   const appointmentModule = createAppointmentModule(fixture.pool);
-  const patient = patientActor(fixture.patientAuthId);
+  const patient = patientActor(fixture.patientAuthId, fixture.appointmentId);
 
   await assert.rejects(
     appointmentModule.startAppeal(
       patient,
       fixture.appointmentId,
-      { operationId: randomUUID(), requestHash: "hash-002" },
+      { operationId: randomUUID(), requestHash: "a".repeat(64) },
       { reason: "Duplicate appeal attempt." }
     ),
     (err: unknown) => err instanceof DomainError && err.status === 409 && err.code === "APPEAL_ALREADY_ACTIVE"
@@ -215,13 +206,13 @@ test("startAppeal rejects duplicate appeals when reviewHold is already active", 
 test("startAppeal fails if caller is not the owning patient", async () => {
   const fixture = createTestFixture();
   const appointmentModule = createAppointmentModule(fixture.pool);
-  const foreignPatient = patientActor(randomUUID());
+  const foreignPatient = patientActor(randomUUID(), fixture.appointmentId);
 
   await assert.rejects(
     appointmentModule.startAppeal(
       foreignPatient,
       fixture.appointmentId,
-      { operationId: randomUUID(), requestHash: "hash-003" },
+      { operationId: randomUUID(), requestHash: "a".repeat(64) },
       { reason: "Unauthorized attempt" }
     ),
     (err: unknown) => err instanceof DomainError && err.status === 403
@@ -233,50 +224,61 @@ test("appointment maintenance freezes auto-completion candidates when reviewHold
   fixture.state.row.reviewHold = true;
   fixture.state.row.status = "in_review";
 
-  const maintenance = createAppointmentMaintenance(fixture.pool);
-  const count = await maintenance.run();
+  const maintenance = createAppointmentMaintenance(fixture.pool, {}, undefined);
+  const { processed } = await maintenance.lifecycle();
 
-  assert.equal(count, 0);
+  assert.equal(processed, 0);
   assert.notEqual(fixture.state.row.status, "completed");
 });
 
-test("checkTraceAppealStatus correctly discriminates tri-state response", async () => {
-  const fixture = createTestFixture();
-  const maintenance = createAppointmentMaintenance(fixture.pool);
-
-  // Test confirmed_no_response
-  const mockFetchNoResponse = async () =>
-    new Response(JSON.stringify({ status: "confirmed_no_response", reference: "app-ref-123" }), { status: 200 });
-  const status1 = await maintenance.checkTraceAppealStatus("app-ref-123", mockFetchNoResponse as any);
-  assert.equal(status1, "confirmed_no_response");
-
-  // Test submitted
-  const mockFetchSubmitted = async () =>
-    new Response(JSON.stringify({ status: "submitted", reference: "app-ref-123" }), { status: 200 });
-  const status2 = await maintenance.checkTraceAppealStatus("app-ref-123", mockFetchSubmitted as any);
-  assert.equal(status2, "submitted");
-
-  // Test sync_pending
-  const mockFetchPending = async () =>
-    new Response(JSON.stringify({ status: "sync_pending", reference: "app-ref-123" }), { status: 200 });
-  const status3 = await maintenance.checkTraceAppealStatus("app-ref-123", mockFetchPending as any);
-  assert.equal(status3, "sync_pending");
-});
-
-test("appeals router updates hold on receipt confirmation", async () => {
-  const fixture = createTestFixture();
-  let updatedCaseId = "";
-
-  const mockPool = {
-    query: async (sql: string, args: unknown[]) => {
-      if (sql.includes('UPDATE appointments SET "traceCaseId"')) {
-        updatedCaseId = String(args[0]);
-        return { rowCount: 1, rows: [{ id: fixture.appointmentId, reviewHold: true, traceCaseId: updatedCaseId }] };
+test("TRACE callbacks enforce receipt timing, deduplication and refund approval", async (t) => {
+  const appointmentId = randomUUID();
+  const caseId = randomUUID();
+  const appealReference = "app-ref-test";
+  let linkedCase: string | null = null;
+  let writes = 0;
+  let status = "in_review";
+  const tx = {
+    async query(sql: string, args: unknown[] = []) {
+      if (sql.includes("SELECT id, status")) {
+        return { rows: [{ id: appointmentId, status, version: 1, reviewHold: status === "in_review", traceRefundApproved: false,
+          disputedAt: new Date("2026-11-10T00:00:00Z"), appealDeadlineAt: new Date("2026-11-11T00:00:00Z"),
+          traceCaseId: linkedCase }] };
       }
-      return { rowCount: 0, rows: [] };
+      if (sql.includes("UPDATE appointments SET")) {
+        linkedCase = String(args[1]);
+        writes++;
+      }
+      return { rows: [] };
     },
-  } as unknown as Pool;
+    release() {},
+  };
+  const app = express();
+  app.use(express.json(), createAppointmentAppealsRouter({ connect: async () => tx } as unknown as Pool));
+  app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    res.sendStatus(error instanceof DomainError ? error.status : 500);
+  });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
+  t.after(() => server.close());
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const post = (timestamp: string) => fetch("http://127.0.0.1:" + address.port + "/receipt", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ appeal_reference: appealReference, case_id: caseId, submitted_at: timestamp }),
+  });
+  assert.equal((await post("2026-11-11T00:00:01Z")).status, 409);
+  assert.equal(writes, 0);
+  assert.equal((await post("2026-11-10T23:59:59+00:00")).status, 200);
+  assert.equal((await post("2026-11-10T23:59:59+00:00")).status, 200);
+  assert.equal(writes, 1);
 
-  const router = createAppealsRouter(mockPool);
-  assert.ok(router, "Appeals router successfully constructed");
+  status = "invalid";
+  const refund = await fetch("http://127.0.0.1:" + address.port + "/refund-confirmed", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ appointment_id: appointmentId, appeal_reference: appealReference,
+      case_id: caseId, reconciliation_reference: "cashier-123" }),
+  });
+  assert.equal(refund.status, 409);
+  assert.equal(writes, 1);
 });

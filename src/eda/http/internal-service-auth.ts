@@ -1,4 +1,5 @@
 import { type RequestHandler } from "express";
+import type { TLSSocket } from "node:tls";
 import { timingSafeEqual } from "node:crypto";
 import { DomainError } from "../contracts/actor.js";
 
@@ -21,9 +22,16 @@ export function createInternalServiceAuth(expectedService = "trace"): RequestHan
         res.set("X-Correlation-ID", correlationId);
       }
 
-      const expectedKey = process.env.VITAL_INTERNAL_SERVICE_KEY || "BGH_LOCAL_INTERNAL_API_KEY_2026";
+      if (process.env.VITAL_TRACE_DISPUTES_ENABLED !== "true") {
+        throw new DomainError(503, "TRACE_DISPUTES_DISABLED", "TRACE disputes are disabled.");
+      }
 
-      if (service !== expectedService || !safeCompare(key, expectedKey)) {
+      const peer = req.socket as TLSSocket;
+      const expectedKey = process.env.VITAL_INTERNAL_SERVICE_KEY;
+      const expectedPeer = process.env.VITAL_TRACE_PEER_CN;
+      const peerName = peer.getPeerCertificate?.().subject?.CN;
+
+      if (service !== expectedService || !expectedPeer || !peer.authorized || peerName !== expectedPeer || !safeCompare(key, expectedKey)) {
         throw new DomainError(403, "FORBIDDEN_UNTRUSTED_INTERNAL_SERVICE", "Untrusted internal service caller.");
       }
 

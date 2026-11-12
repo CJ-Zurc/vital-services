@@ -56,6 +56,12 @@ export const eventDataSchemas = {
   "vital.appointment.cancelled": appointmentData,
   "vital.appointment.completed": appointmentData,
   "vital.appointment.completion_acknowledged": appointmentData,
+  "vital.appointment.in_review": appointmentData,
+  "vital.appointment.appeal_started": appointmentData,
+  "vital.appointment.appeal_receipt_locked": z.object({ appointmentId: uuid, traceCaseId: uuid }).strict(),
+  "vital.appointment.appeal_hold_released": z.object({ appointmentId: uuid }).strict(),
+  "vital.appointment.disposition_applied": z.object({ appointmentId: uuid, decisionId: uuid, disposition: z.enum(["appointment_invalidated", "appeal_dismissed"]) }).strict(),
+  "vital.appointment.refund_confirmed": z.object({ appointmentId: uuid }).strict(),
   "vital.appointment.participant.requested": appointmentData.extend({phase:z.enum(["prepare","abort","finalize"]),participants:z.array(z.enum(["payment","video"])).min(1).max(2)}),
   "vital.messaging.changed": z.object({
     appointmentId: uuid,
@@ -108,6 +114,12 @@ const producers: Record<EventType, readonly Producer[]> = {
   "vital.appointment.cancelled": ["appointment"],
   "vital.appointment.completed": ["appointment"],
   "vital.appointment.completion_acknowledged": ["appointment"],
+  "vital.appointment.in_review": ["appointment"],
+  "vital.appointment.appeal_started": ["appointment"],
+  "vital.appointment.appeal_receipt_locked": ["appointment"],
+  "vital.appointment.appeal_hold_released": ["appointment"],
+  "vital.appointment.disposition_applied": ["appointment"],
+  "vital.appointment.refund_confirmed": ["appointment"],
   "vital.appointment.participant.requested": ["appointment"],
   "vital.messaging.changed": ["messaging"],
   "vital.video.changed": ["video"],
@@ -134,7 +146,7 @@ export function parseEvent(input: unknown): EventEnvelope {
   const envelope = envelopeSchema.parse(input);
   if (!producers[envelope.eventType].includes(envelope.producer)) throw new Error("Event producer does not own this fact.");
   const data = eventDataSchemas[envelope.eventType].parse(envelope.data);
-  if ("paymentId" in data && (data.paymentId !== envelope.aggregateId || data.paymentVersion !== envelope.aggregateVersion)) {
+  if ("paymentId" in data && (data.paymentId !== envelope.aggregateId || !("paymentVersion" in data) || data.paymentVersion !== envelope.aggregateVersion)) {
     throw new Error("Payment fact must bind its aggregate identity and source version.");
   }
   if (envelope.eventType.startsWith("vital.appointment.") && "appointmentId" in data && "appointmentVersion" in data &&

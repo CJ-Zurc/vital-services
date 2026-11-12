@@ -9,11 +9,11 @@ import { DomainError, requireScope, type Actor } from '../../contracts/actor.js'
 import { appendSqlOutbox } from '../../infrastructure/outbox.js';
 import { requestHash } from '../../infrastructure/security.js';
 import { appointmentOwn, lockAppointment, membership, readAppointment } from './appointment.js';
-import { effectiveCompletionDeadline, type AppointmentCommand, type AppointmentRow } from './appointment-contracts.js';
+import { effectivePaperworkDeadline, type AppointmentCommand, type AppointmentRow } from './appointment-contracts.js';
 
 export function complaintEditable(row: AppointmentRow, now: number) {
   return ['pending', 'approved', 'confirmed'].includes(row.status) && !(row.sourceAppointmentId && row.status === 'pending') && !row.paperworkLockedAt && !row.doctorConfirmedAt &&
-    now < effectiveCompletionDeadline({ ...row, proposedEndAt: row.slotEndsAt ?? row.proposedEndAt }).getTime();
+    now < effectivePaperworkDeadline({ ...row, proposedEndAt: row.slotEndsAt ?? row.proposedEndAt }).getTime();
 }
 
 export async function complaintHistory(tx: PoolClient, actor: Actor, id: string, raw: unknown, now: number) {

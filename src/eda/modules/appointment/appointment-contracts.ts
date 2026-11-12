@@ -25,6 +25,9 @@ export function appointmentExpired(row: { scheduledAt: Date; proposedEndAt?: Dat
 export function effectiveCompletionDeadline(row:{scheduledAt:Date;proposedEndAt:Date|null;completionDeadlineAt:Date|null}) {
   return row.completionDeadlineAt??new Date((row.proposedEndAt??row.scheduledAt).getTime()+172_800_000);
 }
+export function effectivePaperworkDeadline(row: { scheduledAt: Date; proposedEndAt: Date | null; completionDeadlineAt: Date | null }) {
+  return row.completionDeadlineAt ?? new Date((row.proposedEndAt ?? row.scheduledAt).getTime() + 86_400_000);
+}
 export const reasonInput = z.object({ expectedVersion: versionSchema, reason: z.string().trim().min(1).max(2000) }).strict();
 export const acknowledgementInput = z.object({ expectedVersion: versionSchema }).strict();
 export const dateBlockInput = z.object({ startDate: dateOnly, endDate: dateOnly, weekday: z.number().int().min(0).max(6).nullable().default(null),
@@ -41,6 +44,7 @@ export interface AppointmentRow {
   reviewHold?: boolean; appealReference?: string | null; appealDeadlineAt?: Date | null;
   traceTicketId?: string | null; traceCaseId?: string | null; disputeReason?: string | null;
   disputedAt?: Date | null; activeDecisionId?: string | null; accountingRef?: string | null;
+  appealAcknowledgedAt?: Date | null;
   accountingRefundIssuedAt?: Date | null; doctorProofScreenshotUrl?: string | null;
   doctorDeliverableType?: string | null; doctorDeliverableRef?: string | null;
 }

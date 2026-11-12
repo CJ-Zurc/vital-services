@@ -7,6 +7,8 @@ export const auditCatalog:Record<string,{owner:string;entity:string;trigger:stri
  "vital.appointment.cancelled":{"owner":"appointment","entity":"appointment","trigger":"cancelled","outcome":"success"},
  "vital.appointment.complaint_updated":{"owner":"appointment","entity":"appointment","trigger":"complaint_updated","outcome":"success","changedFields":["chief_complaint"]},
  "vital.appointment.completed":{"owner":"appointment","entity":"appointment","trigger":"completed","outcome":"success"},
+ "vital.appointment.appeal_started":{"owner":"appointment","entity":"appointment","trigger":"appeal_started","outcome":"attempted"},
+ "vital.appointment.in_review":{"owner":"appointment","entity":"appointment","trigger":"in_review","outcome":"success"},
  "vital.appointment.completion_acknowledged":{"owner":"appointment","entity":"appointment","trigger":"completion_acknowledged","outcome":"success"},
  "vital.appointment.confirmed":{"owner":"appointment","entity":"appointment","trigger":"confirmed","outcome":"success"},
  "vital.appointment.date_block_created":{"owner":"appointment","entity":"appointment","trigger":"date_block_created","outcome":"success"},

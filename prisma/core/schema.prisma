@@ -380,6 +380,8 @@ model Appointment {
   disputeReason            String?
   disputedAt               DateTime?     @db.Timestamptz
   activeDecisionId         String?       @db.Uuid
+  appealAcknowledgedAt     DateTime?     @db.Timestamptz
+  traceRefundApproved      Boolean       @default(false)
   accountingRef            String?
   accountingRefundIssuedAt DateTime?     @db.Timestamptz
   doctorProofScreenshotUrl String?

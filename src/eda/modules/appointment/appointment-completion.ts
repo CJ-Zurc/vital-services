@@ -77,6 +77,10 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
           statusLogs: r.statusLogs.map(l => ({ ...l, changedAt: new Date(l.changedAt).toISOString() })) });
         appointments.push({ access:await appointmentAccessState(pool,row as unknown as Parameters<typeof appointmentAccessState>[1],clock()),id: row.id, version: row.version, patientId: row.patientId, doctorId: row.doctorId, patientAuthId: row.patientAuthId, doctorAuthId: row.doctorAuthId,
           rating: null, canRate: false,
+          reviewHold: row.reviewHold ?? false, appealAcknowledgedAt: row.appealAcknowledgedAt ?? null, appealReference: row.appealReference ?? null,
+          appealDeadlineAt: row.appealDeadlineAt ?? null, traceCaseId: row.traceCaseId ?? null,
+          disputedAt: row.disputedAt ?? null, disputeReason: row.disputeReason ?? null,
+          accountingRef: row.accountingRef ?? null, accountingRefundIssuedAt: row.accountingRefundIssuedAt ?? null,
           specialty: row.specialty, status: row.status, consultationType: row.consultationType, scheduleSlotId: row.scheduleSlotId, scheduleSlot: row.scheduleSlot,
           sourceAppointmentId: row.sourceAppointmentId, appointmentKind: row.appointmentKind, followUpOfAppointmentId: row.followUpOfAppointmentId,
           patientRescheduleCount: row.patientRescheduleCount, doctorRescheduleCount: row.doctorRescheduleCount, cancellationReason: row.cancellationReason, rejectionReason: row.rejectionReason,

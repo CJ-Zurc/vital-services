@@ -11,11 +11,13 @@ export function completionDue(row:{scheduledAt:Date;proposedEndAt:Date|null;slot
   return effectiveCompletionDeadline(row).getTime()<=now;
 }
 
-async function checkTraceAppealStatus(appealReference: string): Promise<{ status: "submitted" | "confirmed_no_response" | "sync_pending"; caseId?: string | null }> {
-  const traceUrl = (process.env.TRACE_BASE_URL || process.env.TRACE_URL || "http://trace-backend-api:8004").replace(/\/$/, "");
-  const traceKey = process.env.TRACE_INTERNAL_SERVICE_KEY || process.env.VITAL_INTERNAL_SERVICE_KEY || "BGH_LOCAL_INTERNAL_API_KEY_2026";
+async function checkTraceAppealStatus(appealReference: string, deadline: Date): Promise<{ status: "submitted" | "confirmed_no_response" | "sync_pending"; caseId?: string | null; submittedAt?: string; watermark?: string }> {
+  const traceUrl = process.env.TRACE_BASE_URL?.replace(/\/$/, "");
+  const traceKey = process.env.TRACE_INTERNAL_SERVICE_KEY;
+  if (!traceUrl || !traceKey) return { status: "sync_pending" };
   try {
-    const res = await fetch(`${traceUrl}/trace/api/patient-forms/responses/check?appeal_reference=${encodeURIComponent(appealReference)}`, {
+    const query = new URLSearchParams({ appeal_reference: appealReference, deadline: deadline.toISOString() });
+    const res = await fetch(traceUrl + "/api/patient-forms/responses/check?" + query, {
       method: "GET",
       headers: {
         "X-Internal-Service": "vital",
@@ -25,8 +27,8 @@ async function checkTraceAppealStatus(appealReference: string): Promise<{ status
       signal: AbortSignal.timeout(3000)
     });
     if (!res.ok) return { status: "sync_pending" };
-    const json = (await res.json()) as { status: "submitted" | "confirmed_no_response" | "sync_pending"; case_id?: string | null };
-    return { status: json.status, caseId: json.case_id };
+    const json = (await res.json()) as { status: "submitted" | "confirmed_no_response" | "sync_pending"; case_id?: string | null; submitted_at?: string; sync_watermark?: string };
+    return { status: json.status, caseId: json.case_id, submittedAt: json.submitted_at, watermark: json.sync_watermark };
   } catch {
     return { status: "sync_pending" };
   }
@@ -34,12 +36,13 @@ async function checkTraceAppealStatus(appealReference: string): Promise<{ status
 export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,payment:PaymentModule|undefined,clock=Date.now){
   async function lifecycle(){
     if(!owners.records)return{processed:0,blocked:"RECORDS_OWNER_UNAVAILABLE"};
+    const cutoffEnabled = process.env.VITAL_TRACE_DISPUTES_ENABLED === "true";
     const candidates=(await core.query<{id:string}>(`SELECT a.id FROM appointments a LEFT JOIN schedules s ON s.id=a."scheduleSlotId"
       WHERE a.status IN ('pending','approved','confirmed','pending_patient_confirmation') AND a."maintenanceDueAt"<=NOW() AND (
         (a.status='confirmed' AND NOT a."reviewHold" AND COALESCE(a."completionDeadlineAt",COALESCE(a."proposedEndAt",a."scheduledAt")+INTERVAL '48 hours')<=NOW()) OR
         (a."expiryProcessedAt" IS NULL AND COALESCE((s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila',a."proposedEndAt",a."scheduledAt")<=NOW()) OR
-        (a.status IN ('pending','approved','pending_patient_confirmation') AND a."expiryProcessedAt" IS NULL AND a."scheduledAt"-INTERVAL '3 hours'<=NOW()))
-      ORDER BY a."maintenanceDueAt",a.id LIMIT 20`)).rows;
+        ($1::boolean AND a.status IN ('pending','approved','pending_patient_confirmation') AND a."expiryProcessedAt" IS NULL AND a."scheduledAt"-INTERVAL '3 hours'<=NOW()))
+      ORDER BY a."maintenanceDueAt",a.id LIMIT 20`,[cutoffEnabled])).rows;
     let processed=0;
     for(const candidate of candidates){const tx=await core.connect();try{
       await tx.query("BEGIN");const row=await lockAppointment(tx,candidate.id);
@@ -60,8 +63,18 @@ export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,
           await tx.query('UPDATE appointments SET "recordsBlockCode"=\'RECORD_SNAPSHOT_REQUIRED\' WHERE id=$1',[row.id]);await tx.query("COMMIT");continue;}throw error;}
         await tx.query('UPDATE appointments SET "completedAt"=$2,"autoCompletedAt"=$2,"paperworkLockedAt"=COALESCE("paperworkLockedAt",$2) WHERE id=$1',[row.id,new Date(clock())]);
         const receipt=await appointmentTransition(tx,row,'completed',null,operationId,operationId);logId=receipt.logId;committedAt=receipt.changedAt;kind='complete';
-      }else if(['pending','approved','confirmed','pending_patient_confirmation'].includes(row.status)&&(appointmentExpired(row,clock())||(['pending','approved','pending_patient_confirmation'].includes(row.status)&&(row.scheduledAt.getTime()-10800000)<=clock()))){
+      }else if(['pending','approved','confirmed','pending_patient_confirmation'].includes(row.status)&&(appointmentExpired(row,clock())||(cutoffEnabled&&['pending','approved','pending_patient_confirmation'].includes(row.status)&&(row.scheduledAt.getTime()-10800000)<=clock()))){
         const isCutoff=!appointmentExpired(row,clock());
+        if (isCutoff) {
+          const activePayment = await tx.query(
+            'SELECT 1 FROM appointment_payment_projections WHERE "appointmentId" = $1 AND status IN ($2, $3)',
+            [row.id, "pending", "paid"],
+          );
+          if (activePayment.rows.length) {
+            await tx.query("COMMIT");
+            continue;
+          }
+        }
         const terminal=row.sourceAppointmentId?'rejected':isCutoff?'cancelled':row.status;
         await owners.records.apply(tx,row,"expire",{operationId,beforeState:row.status,afterState:terminal,effectiveAt:new Date(clock())});committedAt=new Date(clock());logId=randomUUID();kind='expire';
         const prior=row.status;
@@ -73,7 +86,7 @@ export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,
         await resolveOpenProposals(tx,row,null,operationId,operationId,isCutoff?'source_cancelled':'source_expired');
         await appendSqlOutbox(tx,{producer:"appointment",eventType:isCutoff?"vital.appointment.cancelled":"vital.appointment.expired",aggregateId:row.id,aggregateVersion:row.version,correlationId:operationId,causationId:operationId,data:appointmentFactData(row,null,operationId)});
         await appendSqlOutbox(tx,{producer:"appointment",eventType:"vital.audit.requested",aggregateId:row.id,aggregateVersion:row.version,correlationId:operationId,
-          data:{auditType:isCutoff?"vital.appointment.cancelled":"vital.appointment.expired",actorAuthId:null,resourceId:row.id,resourceType:"appointment",reason:cancelReason}});
+          data:{auditType:isCutoff?"vital.appointment.cancelled":"vital.appointment.expired",actorAuthId:null,resourceId:row.id,resourceType:"appointment"}});
       }
       if(kind&&logId&&committedAt){
         const quote=(await tx.query('SELECT "billingLineageId" FROM appointment_billing_quotes WHERE "billingLineageId"=$1',[row.billingLineageId])).rows[0];
@@ -85,27 +98,34 @@ export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,
     }catch(error){await tx.query("ROLLBACK");if(!(error instanceof DomainError))throw error;}finally{tx.release();}}
 
     try {
-      const expiredHolds = (await core.query<{ id: string; appealReference: string; version: number }>(
-        `SELECT id, "appealReference", version FROM appointments
+      const expiredHolds = (await core.query<{ id: string; appealReference: string; appealDeadlineAt: Date; disputedAt: Date | null; version: number }>(
+        `SELECT id, "appealReference", "appealDeadlineAt", "disputedAt", version FROM appointments
          WHERE status = 'in_review' AND "reviewHold" = true AND "traceCaseId" IS NULL AND "appealDeadlineAt" <= NOW()
          LIMIT 10`
       )).rows;
 
       for (const hold of expiredHolds) {
         if (!hold.appealReference) continue;
-        const traceCheck = await checkTraceAppealStatus(hold.appealReference);
-        if (traceCheck.status === "submitted" && traceCheck.caseId) {
+        const traceCheck = await checkTraceAppealStatus(hold.appealReference, hold.appealDeadlineAt);
+        const submittedAt = Date.parse(traceCheck.submittedAt ?? "");
+        if (traceCheck.status === "submitted" && traceCheck.caseId && hold.disputedAt &&
+            submittedAt >= hold.disputedAt.getTime() && submittedAt <= hold.appealDeadlineAt.getTime()) {
           await core.query(
-            `UPDATE appointments SET "traceCaseId" = $2, "updatedAt" = NOW() WHERE id = $1`,
-            [hold.id, traceCheck.caseId]
+            `UPDATE appointments SET "traceCaseId" = $2, "updatedAt" = NOW() WHERE id = $1 AND "appealReference" = $3 AND "reviewHold" AND "traceCaseId" IS NULL`,
+            [hold.id, traceCheck.caseId, hold.appealReference]
           );
-        } else if (traceCheck.status === "confirmed_no_response") {
+        } else if (traceCheck.status === "confirmed_no_response" &&
+                   Date.parse(traceCheck.watermark ?? "") >= hold.appealDeadlineAt.getTime()) {
           const tx = await core.connect();
           try {
             await tx.query("BEGIN");
             const row = await lockAppointment(tx, hold.id);
-            const deadlinePassed = effectiveCompletionDeadline(row).getTime() <= clock();
-            const nextStatus = deadlinePassed ? "completed" : "confirmed";
+            if (!row.reviewHold || row.status !== "in_review" || row.traceCaseId ||
+                row.appealReference !== hold.appealReference || row.version !== hold.version) {
+              await tx.query("COMMIT");
+              continue;
+            }
+            const nextStatus = "confirmed";
 
             await tx.query(
               `UPDATE appointments SET
@@ -120,7 +140,7 @@ export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,
             await tx.query(
               `INSERT INTO appointment_logs (id, "appointmentId", "fromStatus", "toStatus", "changedByRole", note, "changedAt")
                VALUES ($1, $2, 'in_review', $3, 'service', $4, NOW())`,
-              [randomUUID(), hold.id, nextStatus, deadlinePassed ? "abandoned_appeal_autocompleted" : "abandoned_appeal_hold_released"]
+              [randomUUID(), hold.id, nextStatus, "abandoned_appeal_hold_released"]
             );
 
             await appendSqlOutbox(tx, {
@@ -130,7 +150,7 @@ export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,
               aggregateVersion: row.version + 1,
               correlationId: randomUUID(),
               causationId: randomUUID(),
-              data: { appointmentId: hold.id, appealReference: hold.appealReference, nextStatus }
+              data: { appointmentId: hold.id }
             });
 
             await tx.query("COMMIT");

@@ -428,7 +428,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       if(row.status!=="confirmed"||row.scheduledAt.getTime()>clock()||!projection||projection.status!=="paid"||projection.reviewRequired||projection.billingLineageId!==row.billingLineageId||projection.associationVersion!==row.associationVersion)fail(409,"APPOINTMENT_COMPLETION_INVALID");
       await financial.verifyPaid(row,projection);
       if(effectiveCompletionDeadline(row).getTime()<=clock())fail(409,"APPOINTMENT_COMPLETION_DEADLINE");
-      const deadline=row.completionDeadlineAt??new Date(clock()+172_800_000);
+      const deadline=actor.role==="doctor" ? new Date(clock()+172_800_000) : row.completionDeadlineAt;
       const context={operationId:meta.operationId,beforeState:row.status,afterState:"confirmed",effectiveAt:new Date(clock()),financialEvidence:projection};
       if(actor.role==="doctor"){
         if(!records.beforeDoctorAcknowledgement)fail(503,"RECORDS_SNAPSHOT_OWNER_UNAVAILABLE");
@@ -443,18 +443,47 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
           data:{auditType:"vital.appointment.completion_acknowledged",actorAuthId:actor.authId,resourceId:row.id,resourceType:"appointment"}});
       }
       return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
-    async startAppeal(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){
+    async reportNoShow(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {
+      if (process.env.VITAL_TRACE_DISPUTES_ENABLED !== "true") fail(503, "TRACE_DISPUTES_DISABLED");
+      const input = z.object({ note: z.string().trim().max(1000).optional() }).strict().parse(body);
+      return mutate(actor, "report-no-show", id, meta, input, async tx => {
+        if (actor.role !== "doctor") fail(403, "DOCTOR_ROLE_REQUIRED");
+        const row = await lockAppointment(tx, id);
+        appointmentOwn(actor, row);
+        if (clock() < row.scheduledAt.getTime() + 900_000) fail(409, "NO_SHOW_TOO_EARLY");
+        if (row.status !== "confirmed" || row.doctorConfirmedAt || row.patientConfirmedAt || row.reviewHold) {
+          fail(409, "NO_SHOW_REPORT_INELIGIBLE");
+        }
+        await noTransition(tx, row);
+        await noProposal(tx, row);
+        await tx.query(
+          'UPDATE appointments SET "reviewHold" = true, "recordsBlockCode" = $2 WHERE id = $1',
+          [id, "PATIENT_NO_SHOW_REVIEW"],
+        );
+        await appointmentTransition(tx, row, "in_review", actor, meta.operationId, actor.correlationId,
+          input.note ? "patient_no_show: " + input.note : "patient_no_show");
+        return { id, version: row.version, status: row.status };
+      });
+    },
+    async startAppeal(actor:Actor,id:string,meta:AppointmentCommand,body:unknown, doctorNoShow = false){
+      if (process.env.VITAL_TRACE_DISPUTES_ENABLED !== "true") fail(503, "TRACE_DISPUTES_DISABLED");
       const input=appealInput.parse(body??{});
-      return mutate(actor,"start_appeal",id,meta,input,async tx=>{
+      return mutate(actor,doctorNoShow ? "report-doctor-no-show" : "appeal",id,meta,input,async tx=>{
         const row=await lockAppointment(tx,id);
         appointmentOwn(actor,row);
         if(actor.role!=="patient")fail(403,"PATIENT_ROLE_REQUIRED");
         if(input.expectedVersion!==undefined)expected(row,input.expectedVersion);
-        if(row.status!=="confirmed"||!row.doctorConfirmedAt)fail(409,"APPOINTMENT_APPEAL_INELIGIBLE");
         if(row.reviewHold||row.status==="in_review")fail(409,"APPEAL_ALREADY_ACTIVE");
+        if (row.status !== "confirmed" || (doctorNoShow ? row.doctorConfirmedAt : !row.doctorConfirmedAt)) {
+          fail(409, "APPOINTMENT_APPEAL_INELIGIBLE");
+        }
+        if (doctorNoShow && clock() < row.scheduledAt.getTime() + 900_000) fail(409, "NO_SHOW_TOO_EARLY");
+        await noTransition(tx, row);
+        await noProposal(tx, row);
+        if(row.traceCaseId)fail(409,"APPEAL_CASE_ALREADY_EXISTS");
         if(effectiveCompletionDeadline(row).getTime()<=clock())fail(409,"APPOINTMENT_COMPLETION_DEADLINE_EXPIRED");
 
-        const appealRef=`app-ref-${randomBytes(6).toString("hex")}`;
+        const appealRef=`app-ref-${randomBytes(24).toString("hex")}`;
         const appealDeadline=new Date(clock()+86_400_000);
         const disputedAt=new Date(clock());
 
@@ -469,7 +498,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
             version=version+1,
             "updatedAt"=NOW()
           WHERE id=$1`,
-          [id,appealRef,appealDeadline,disputedAt,input.reason??null]
+          [id,appealRef,appealDeadline,disputedAt,doctorNoShow ? "doctor_no_show" : input.reason??null]
         );
         row.version++;
         row.status="in_review";
@@ -487,7 +516,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
           aggregateVersion:row.version,
           correlationId:actor.correlationId,
           causationId:meta.operationId,
-          data:{...appointmentFactData(row,actor.authId,meta.operationId),appealReference:appealRef,appealDeadlineAt:appealDeadline.toISOString()}
+          data:appointmentFactData(row,actor.authId,meta.operationId)
         });
 
         await appendSqlOutbox(tx,{
@@ -497,13 +526,14 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
           aggregateVersion:row.version,
           correlationId:actor.correlationId,
           causationId:meta.operationId,
-          data:{auditType:"vital.appointment.appeal_started",actorAuthId:actor.authId,resourceId:row.id,resourceType:"appointment",appealReference:appealRef}
+          data:{auditType:"vital.appointment.appeal_started",actorAuthId:actor.authId,resourceId:row.id,resourceType:"appointment"}
         });
 
         return{
           id:row.id,
           version:row.version,
           status:"in_review",
+          reviewHold:true,
           appealReference:appealRef,
           appealDeadlineAt:appealDeadline.toISOString(),
           operationStatus:"completed"

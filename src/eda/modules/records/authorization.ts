@@ -2,11 +2,11 @@ import type { PoolClient } from "pg";
 import { DomainError, type Actor } from "../../contracts/actor.js";
 import type { AppointmentRow } from "../appointment/appointment-contracts.js";
 import type { AppointmentOwners } from "../appointment/appointment-contracts.js";
-import { effectiveCompletionDeadline } from "../appointment/appointment-contracts.js";
+import { effectivePaperworkDeadline } from "../appointment/appointment-contracts.js";
 
 export function recordsDenied(status:number,code:string):never {throw new DomainError(status,code,"Records operation is unavailable.");}
 export function paperworkDeadline(row:Pick<AppointmentRow,"completionDeadlineAt"|"scheduledAt"|"proposedEndAt">) {
-  return effectiveCompletionDeadline(row);
+  return effectivePaperworkDeadline(row);
 }
 export function assertPaperwork(row:AppointmentRow, now:number) {
   if(row.status!=="confirmed"||row.doctorConfirmedAt||row.paperworkLockedAt||paperworkDeadline(row).getTime()<=now)

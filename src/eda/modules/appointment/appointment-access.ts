@@ -7,7 +7,7 @@ import type { Pool,PoolClient } from 'pg';
 import { z } from 'zod';
 import { DomainError,requireScope,type Actor } from '../../contracts/actor.js';
 import type { AppointmentRow,AppointmentCommand,AppointmentOwners } from './appointment-contracts.js';
-import { effectiveCompletionDeadline } from './appointment-contracts.js';
+import { effectivePaperworkDeadline } from './appointment-contracts.js';
 import { accessCrypto,appointmentPayloadCrypto,patientReference,displayReference } from './access-crypto.js';
 
 type DB=Pick<PoolClient,'query'>;
@@ -38,12 +38,12 @@ export async function revokeAppointmentAccess(db:DB,id:string){await db.query('U
 export async function hasLiveAppointmentAccess(db:DB,row:AppointmentRow,now=Date.now()){
   const a=await accessRow(db,row.id);
   const consent=(await db.query(`SELECT accepted FROM consent_records WHERE "patientId"=$1 AND "consentType"='medical_record' AND ("appointmentId" IS NULL OR "appointmentId"=$2) ORDER BY "consentedAt" DESC,id DESC LIMIT 1`,[row.patientId,row.id])).rows[0];
-  return Boolean(consent?.accepted&&a&&a.patientId===row.patientId&&a.doctorId===row.doctorId&&a.grantedAt&&!a.revokedAt&&a.grantUntil&&a.grantUntil.getTime()>now&&row.status==='confirmed'&&!row.paperworkLockedAt&&!row.doctorConfirmedAt&&effectiveCompletionDeadline(row).getTime()>now);
+  return Boolean(consent?.accepted&&a&&a.patientId===row.patientId&&a.doctorId===row.doctorId&&a.grantedAt&&!a.revokedAt&&a.grantUntil&&a.grantUntil.getTime()>now&&row.status==='confirmed'&&!row.paperworkLockedAt&&!row.doctorConfirmedAt&&effectivePaperworkDeadline(row).getTime()>now);
 }
 export async function requireLiveAppointmentAccess(db:DB,row:AppointmentRow,now=Date.now()){if(!await hasLiveAppointmentAccess(db,row,now))deny(403,'APPOINTMENT_CODE_REQUIRED');}
 export async function appointmentAccessState(db:DB,row:AppointmentRow,now=Date.now()){
  const a=await accessRow(db,row.id),live=await hasLiveAppointmentAccess(db,row,now);
- const closed=['cancelled','rejected','rescheduled','completed'].includes(row.status)||row.paperworkLockedAt||row.doctorConfirmedAt||effectiveCompletionDeadline(row).getTime()<=now;
+ const closed=['cancelled','rejected','rescheduled','completed'].includes(row.status)||row.paperworkLockedAt||row.doctorConfirmedAt||effectivePaperworkDeadline(row).getTime()<=now;
  const state=live?'unlocked':closed||a?.revokedAt?(a?.grantedAt?'historical_only':'locked'):a&&a.attempts>=5?'locked':row.status==='confirmed'&&a?.digest?'unlock_available':'review_only';
  return{contractVersion:2 as const,appointmentVersion:row.version,state,reference:a?displayReference(a.reference):'Patient #Unavailable',generation:a?.generation??0,ageYears:a?.ageYears??null,sex:a?.sex??null,identityUnlocked:live};
 }
@@ -72,7 +72,7 @@ export function createAppointmentAccess(pool:Pool,read:(db:DB,id:string,lock?:bo
    if(!consent?.accepted||a.revokedAt||!['approved','confirmed'].includes(row.status))deny(403,'APPOINTMENT_ACCESS_INELIGIBLE');
    if(action==='code'||action==='reissue'){
     if(actor.role!=='patient')deny(403,'APPOINTMENT_ACCESS_PATIENT_REQUIRED');
-    if(a.consumedAt||a.grantedAt||effectiveCompletionDeadline(row).getTime()<=clock())deny(409,'APPOINTMENT_ACCESS_ALREADY_USED');
+    if(a.consumedAt||a.grantedAt||effectivePaperworkDeadline(row).getTime()<=clock())deny(409,'APPOINTMENT_ACCESS_ALREADY_USED');
     let replay=false;
     if(action==='reissue'&&meta){
       const old=(await db.query('SELECT action,"resourceId",result FROM command_operations WHERE "actorId"=$1 AND "operationId"=$2',[actor.authId,meta.operationId])).rows[0];
@@ -99,7 +99,7 @@ export function createAppointmentAccess(pool:Pool,read:(db:DB,id:string,lock?:bo
    const end=row.slotEndsAt??row.proposedEndAt??row.scheduledAt;
    if(clock()<row.scheduledAt.getTime()-1800000||clock()>end.getTime()+7200000)deny(403,'APPOINTMENT_CODE_OUTSIDE_WINDOW');
    const paid=(await db.query(`SELECT 1 FROM appointment_payment_projections WHERE "appointmentId"=$1 AND status='paid' AND NOT "reviewRequired" AND "billingLineageId"=$2 AND "associationVersion"=$3`,[id,row.billingLineageId,row.associationVersion])).rowCount;
-   if(row.status!=='confirmed'||!paid||row.paperworkLockedAt||row.doctorConfirmedAt||effectiveCompletionDeadline(row).getTime()<=clock())deny(403,'APPOINTMENT_CODE_PAYMENT_REQUIRED');
+   if(row.status!=='confirmed'||!paid||row.paperworkLockedAt||row.doctorConfirmedAt||effectivePaperworkDeadline(row).getTime()<=clock())deny(403,'APPOINTMENT_CODE_PAYMENT_REQUIRED');
    await assertRecordsIdle(db,row);await currentPaid(db,row,financial);
    const rate=(await db.query(`SELECT COUNT(*) FILTER(WHERE "doctorId"=$2)::int AS doctor,COUNT(*) FILTER(WHERE "appointmentId"=$1)::int AS booking FROM appointment_access_attempts WHERE kind='redeem' AND "createdAt">NOW()-INTERVAL '1 hour' AND ("appointmentId"=$1 OR "doctorId"=$2)`,[id,row.doctorId])).rows[0];
    if(rate.doctor>=30||rate.booking>=10)deny(429,'APPOINTMENT_CODE_RATE_LIMIT');
@@ -109,7 +109,7 @@ export function createAppointmentAccess(pool:Pool,read:(db:DB,id:string,lock?:bo
     if(a.attempts+1>=5)await securityIntent(db,actor,'code_locked',id);
     await db.query('UPDATE appointment_access SET attempts=attempts+1 WHERE "appointmentId"=$1',[id]);await db.query('COMMIT');return{state:a.attempts+1>=5?'locked':'review_only',error:'APPOINTMENT_CODE_INCORRECT',attemptsRemaining:4-a.attempts};
    }
-   await db.query('UPDATE appointment_access SET "consumedAt"=NOW(),"grantedAt"=NOW(),"grantUntil"=$2,digest=NULL,ciphertext=NULL WHERE "appointmentId"=$1',[id,effectiveCompletionDeadline(row)]);
+   await db.query('UPDATE appointment_access SET "consumedAt"=NOW(),"grantedAt"=NOW(),"grantUntil"=$2,digest=NULL,ciphertext=NULL WHERE "appointmentId"=$1',[id,effectivePaperworkDeadline(row)]);
    await changed('redeemed');await db.query('COMMIT');return{state:'unlocked'};
   }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
  }};

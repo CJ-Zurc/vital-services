@@ -43,7 +43,7 @@ export function createEdaApp(core: CorePrismaClient, assertion: AssertionConfig,
   app.set("trust proxy", false);
   app.use(createProfileQrUploadIngress(assertion));
   if (corePool) {
-    app.use('/internal/v1/appointments/appeals', createInternalServiceAuth('trace'), createAppointmentAppealsRouter(corePool));
+    app.use('/internal/v1/appointments/appeals', createInternalServiceAuth('trace'), express.json({ limit: '64kb', strict: true }), createAppointmentAppealsRouter(corePool));
   }
   let activeUploads=0;
   app.post('/internal/v1/records/uploads',(req,res,next)=>{

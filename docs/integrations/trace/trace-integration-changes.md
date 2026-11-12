@@ -2,8 +2,25 @@
 
 > **Target Services:** `vital-services`, `vital-web`  
 > **TRACE Reference Commits:** `1e7b451`, `e2d005d`, `417a5f6`, `f1afdbf`, `95f032d`  
-> **Status:** Active Cross-Service Integration Ledger  
+> **Status:** Integration branch under verification. Keep disabled in deployment.
 > **Last Updated:** 10 November 2026  
+
+## November 12 implementation review
+
+The phase ledger below describes the original implementation at VITAL Services `9c38ab2`, VITAL Web `df8b9ad`, and TRACE Backend `8ea30e3`. The current branch includes the following follow-up changes. The phase list is historical and does not certify rollout readiness.
+
+| Area | Follow-up change | Outstanding |
+|---|---|---|
+| TRACE callbacks | Dedicated client TLS material and scoped VITAL authentication, aligned payloads, and a transactional TRACE outbox with ordered retries. | Provision and mount the TRACE certificate, key, and CA. Verify the HTTPS route and retries across both deployed processes. |
+| Form intake | TRACE accepts the designated form registration, response ID, and timezone-aware first submission time from trusted intake. VITAL resolves the opaque reference and returns the appointment link. VITAL rejects late receipts. Patients can reopen the active form from VITAL. | Deploy a trusted Google Forms reader. It must persist every response through the scan boundary before posting that boundary to TRACE. TRACE keeps verification pending until that designated-form boundary covers the appeal deadline. |
+| Holds and dispositions | VITAL resumes normal completion after dismissal or expiry. It matches the case, appointment, and appeal, checks correction eligibility, and routes conflicting decisions to admin review. TRACE queues explicit intake dismissals and redirects. | Wire admin review and a real private reschedule action for `reschedule_agreed`. |
+| Refunds | TRACE requires explicit approval, excludes mutual absence, and reports issuance separately. VITAL records the confirmation once against the approved case. Accounting case responses exclude the narrative and evidence. | Reconcile the confirmation through the payment owner and verify the staff controls and all access paths. |
+| No-show | Both parties have dedicated reporting actions with a 15-minute server-side threshold. A doctor reporting a patient absence enters VITAL review without starting a cancellation or refund. A patient reporting a doctor absence can start intake before doctor acknowledgment. | Complete the VITAL Admin queue and private 24-hour offer. |
+| Staff acknowledgment and other timers | TRACE records staff acknowledgment from verified receipt, calculates a next-weekday target, and delivers the acknowledgment to VITAL for display. The 48-hour duration has focused test coverage. | Wire the acknowledgment action into the TRACE staff UI. Verify the calendar, reminders, paperwork escalation, reconnect timing, and checkout reconciliation at the cutoff. |
+
+The trusted importer uses `POST /api/patient-forms/disputes/intake` with the configured TRACE form registration ID, Google's response ID, the first submission timestamp, and the opaque appeal reference. After importing all responses through a scan boundary, it posts `{form_id, synced_through}` to `POST /api/patient-forms/disputes/sync-complete`. VITAL checks the direct TRACE service using the reference and its appeal deadline. TRACE dispatches callbacks over HTTPS with a dedicated client certificate whose common name matches `VITAL_TRACE_PEER_CN` in Services.
+
+Set `VITAL_TRACE_DISPUTES_ENABLED` on Services and Web only after the remaining implementation, deployment wiring, and paired acceptance are complete. No real Google Form or live service certificates were used for the focused tests.
 
 ---
 
@@ -48,7 +65,7 @@ To resolve dispute failure modes (doctor/patient no-shows, missing paperwork, au
 
 ## 4. Phase-by-Phase Change Ledger
 
-### Phase 1: Database Schema & Migration (Completed)
+### Phase 1: Database Schema & Migration (Baseline implementation)
 - **`prisma/core/schema.prisma`**:
   - Extended `AppointmentStatus` enum with:
     - `in_review`: Pauses auto-completion worker while dispute investigation is active.
@@ -72,7 +89,7 @@ To resolve dispute failure modes (doctor/patient no-shows, missing paperwork, au
 - **`prisma/core/migrations/202611100001_patient_dispute_resolution/migration.sql`**:
   - Incremental SQL migration deploying enum updates and column additions.
 
-### Phase 2: Core State Machine & 48h Lifecycle Alignment (Completed)
+### Phase 2: Core State Machine & 48h Lifecycle Alignment (Baseline implementation)
 - **`src/eda/modules/appointment/appointment-contracts.ts`**:
   - Updated `effectiveCompletionDeadline` default calculation from 24h to **48 hours** (`+172_800_000` ms) from doctor completion submission.
   - Extended `AppointmentRow` TypeScript interface with dispute fields (`reviewHold`, `appealReference`, `appealDeadlineAt`, `traceTicketId`, `traceCaseId`, `disputeReason`, `disputedAt`, `activeDecisionId`, `accountingRef`, etc.).
@@ -91,7 +108,7 @@ To resolve dispute failure modes (doctor/patient no-shows, missing paperwork, au
 - **`src/eda/modules/appointment/appointment-reads.ts`**:
   - Projected dispute fields (`reviewHold`, `appealReference`, `appealDeadlineAt`, `traceCaseId`, `disputedAt`, `disputeReason`, `accountingRef`, `accountingRefundIssuedAt`) in read and list responses.
 
-### Phase 3: TRACE Integration Endpoints & Tri-State Sync Client (Completed)
+### Phase 3: TRACE Integration Endpoints & Tri-State Sync Client (Baseline implementation)
 - **`src/eda/http/internal-service-auth.ts`**:
   - Implemented `createInternalServiceAuth("trace")` middleware validating `X-Internal-Service: trace` and constant-time match with `VITAL_INTERNAL_SERVICE_KEY` while preserving `X-Correlation-ID`.
 - **`src/eda/http/appointment-appeals-router.ts`**:
@@ -116,7 +133,7 @@ To resolve dispute failure modes (doctor/patient no-shows, missing paperwork, au
 - **`.env.vital_eda_api.example`**:
   - Documented `VITAL_INTERNAL_SERVICE_KEY`, `TRACE_BASE_URL`, and `TRACE_INTERNAL_SERVICE_KEY`.
 
-### Phase 4: BFF Route Handlers in `vital-web` (Completed)
+### Phase 4: BFF Route Handlers in `vital-web` (Baseline implementation)
 - **`app/api/patient/appointments/[appointmentId]/appeal/route.ts`**:
   - Implemented `POST /api/patient/appointments/:id/appeal`:
     - Validates patient session via `requireBffSession(req)`.
@@ -134,7 +151,7 @@ To resolve dispute failure modes (doctor/patient no-shows, missing paperwork, au
 - **`lib/eda/appointment-paths.ts`**:
   - Registered `appeal` and `report-no-show` actions in `appointmentDelegation` matrix.
 
-### Phase 5: Patient Appeal UI & Dialogs in `vital-web` (Completed)
+### Phase 5: Patient Appeal UI & Dialogs in `vital-web` (Baseline implementation)
 - **`components/ui/PatientAppealModal.tsx`**:
   - Implemented patient dispute initiation and progress dialog conforming to BGH One UI standard.
   - Explains the dispute process, pauses auto-completion notice, displays single-use `appealReference` with copy-to-clipboard button, and provides 24-hour countdown timer.
@@ -151,7 +168,7 @@ To resolve dispute failure modes (doctor/patient no-shows, missing paperwork, au
   - Added "Start Appeal" button alongside "Confirm Done" during the 48-hour completion window.
   - Mounted `DisputeStatusBanner` and `PatientAppealModal` on appointment detail view.
 
-### Phase 6: Doctor & Admin Dispute Management in `vital-web` (Completed)
+### Phase 6: Doctor & Admin Dispute Management in `vital-web` (Baseline implementation)
 - **`components/ui/DoctorNoShowModal.tsx`**:
   - Implemented doctor dialog to declare patient absence after the mandatory 15-minute grace period (`now >= scheduledAt + 15m`).
   - Provides option to submit absence as an unexcused absence (voiding consultation fee per policy) or offer a private reschedule slot (>24h in the future).
@@ -162,7 +179,7 @@ To resolve dispute failure modes (doctor/patient no-shows, missing paperwork, au
   - Registered `in_review` (In Review / Dispute Hold), `invalid` (Invalid Dispute), and `no_show` (No-Show) status styles with designated brand colors in operations `StatusBars`.
   - Ensures administrative dashboard accurately aggregates active dispute holds and resolved outcomes.
 
-### Phase 7: Verification, Test Suite & Documentation (Completed)
+### Phase 7: Verification, Test Suite & Documentation (Baseline implementation)
 - **`vital-services/test/eda-dispute-resolution.test.ts`**:
   - Validates `startAppeal` hold creation, single-use `appealReference` formatting, and 24h deadline calculation.
   - Validates duplicate appeal rejection (409 `APPEAL_ALREADY_ACTIVE`) and caller authorization check (403 Forbidden).
