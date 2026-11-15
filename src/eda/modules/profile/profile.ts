@@ -218,7 +218,7 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
     return result;
   }
 
-  function doctorData(input: DoctorPatch, doctor?: { s2License?: string | null; s2ValidFrom?: Date | null; s2ValidUntil?: Date | null; signatureAssetId?: string | null; specialty: string | null;
+  function doctorData(input: DoctorPatch, doctor?: { s2License?: string | null; s2ValidFrom?: Date | null; s2ValidUntil?: Date | null; signatureAssetId?: string | null; specialty: string | null; departmentExternalId?: string | null;
     prcLicense: string | null; bio: string | null; availabilityType: string | null; isDoctorOnboardingComplete: boolean },
     verified?: ProfileVerification, admin = false): Prisma.VitalDoctorUpdateInput {
     const { terms_accepted: _terms, ...fields } = input;
@@ -227,7 +227,7 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
       ...(input.s2ValidUntil ? {s2ValidUntil:new Date(input.s2ValidUntil+'T00:00:00Z')} : {}),changedAt: new Date() };
     const from=input.s2ValidFrom??doctor?.s2ValidFrom?.toISOString().slice(0,10),until=input.s2ValidUntil??doctor?.s2ValidUntil?.toISOString().slice(0,10);
     if(from&&until&&from>until)throw new ProfileError(400,'S2 validity end must follow its start.');
-    if (input.specialty !== undefined) {
+    if (input.specialty !== undefined && !input.isDoctorOnboardingComplete) {
       if (!admin && doctor?.isDoctorOnboardingComplete && input.specialty !== doctor.specialty) {
         throw new ProfileError(403, "Specialty is locked after verification. Please contact an admin to update it.");
       }
@@ -241,14 +241,15 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
       if (doctor?.isDoctorOnboardingComplete) throw new ProfileError(409, "Onboarding already completed.");
       requiredText(80).parse(input.s2License ?? doctor?.s2License);
       if(!from||!until||!doctor?.signatureAssetId)throw new ProfileError(400,'S2 validity dates and saved signature are required.');
-      requiredText(160).parse(input.specialty ?? doctor?.specialty);
+      if (!doctor?.specialty || !doctor.departmentExternalId || input.specialty !== doctor.specialty
+        || verified?.department?.id !== doctor.departmentExternalId || verified.department.name !== doctor.specialty) {
+        throw new ProfileError(409, "Doctor specialty assignment changed or is missing.");
+      }
+      // The workflow binds the assigned specialty without writing it back.
+      delete data.specialty;
       requiredText(80).parse(input.prcLicense ?? doctor?.prcLicense);
       requiredText(5000).parse(input.bio ?? doctor?.bio);
       z.enum(["virtual", "in_person", "both"]).parse(input.availabilityType ?? doctor?.availabilityType);
-      if (!verified?.department) throw new ProfileError(409, "Prepared doctor onboarding receipt required.");
-      data.specialty = verified.department.name;
-      data.departmentExternalId = verified.department.id;
-      data.departmentName = verified.department.name;
       data.termsAgreedAt = new Date();
     }
     return data;
@@ -309,7 +310,8 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
         if (kind !== "patient.onboarding" && user.doctor) {
           const specialty = (fields as DoctorPatch).specialty!;
           // Validate prerequisites without writing or contacting TRACE in the transaction.
-          doctorData(fields as DoctorPatch, user.doctor, { department: { id: "validated-at-commit", name: specialty } }, actor.role === "admin");
+          const departmentId = kind === "doctor.onboarding" ? user.doctor.departmentExternalId ?? "" : "validated-at-commit";
+          doctorData(fields as DoctorPatch, user.doctor, { department: { id: departmentId, name: specialty } }, actor.role === "admin");
         }
       }
       return user.version;

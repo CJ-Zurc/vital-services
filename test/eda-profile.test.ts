@@ -369,12 +369,24 @@ test("profile: doctor fees and onboarding prerequisites are validated, specialty
   const verified = createProfileModule(stub.db, async (_tx, _command, execute) => execute({ specialty: "Cardiology" }));
   await assert.rejects(verified.patchDoctor(actor("doctor"), input));
   const durable = createProfileModule(stub.db, createProfileCommandGuard());
+  const prepare = (input: unknown, workflowId = randomUUID()) =>
+    durable.workflows.prepare(actor("doctor"), { workflowId, kind: "doctor.onboarding", input }, metadata());
+  await assert.rejects(prepare(input), /specialty assignment changed or is missing/);
+  Object.assign(stub.rows().vitalDoctor[0]!, { specialty: "Cardiology", departmentExternalId: "trace-cardio", departmentName: "Cardiology" });
+  await assert.rejects(prepare({ ...input, specialty: "Neurology" }), /specialty assignment changed or is missing/);
   const workflowId = randomUUID();
   await durable.workflows.prepare(actor("doctor"), { workflowId, kind: "doctor.onboarding", input }, metadata());
+  const assignment = stub.rows().vitalDoctor[0]!;
+  assignment.departmentExternalId = "replacement-cardio-id";
+  await assert.rejects(durable.workflows.commit(actor("doctor"), workflowId,
+    { input, receipt: receipt("doctor.onboarding", workflowId, input) }, metadata()), /specialty assignment changed or is missing/);
+  stub.rows().vitalDoctor[0]!.departmentExternalId = "trace-cardio";
   const result = await durable.workflows.commit(actor("doctor"), workflowId,
     { input, receipt: receipt("doctor.onboarding", workflowId, input) }, metadata());
   const completed = result.data as Row;
   assert.equal(completed.isDoctorOnboardingComplete, true);
+  assert.equal(completed.departmentExternalId, "trace-cardio");
+  assert.equal(completed.specialty, "Cardiology");
   assert.ok(completed.termsAgreedAt instanceof Date);
   await assert.rejects(verified.patchDoctor(actor("doctor"), { specialty: "Neurology" }),
     (error: unknown) => error instanceof ProfileError && error.status === 409);
@@ -775,6 +787,7 @@ test("profile registration: outbox failure rolls back marker consent and command
 
 test('S6 onboarding denies missing signature, missing S2, reversed dates and removed honorific',async()=>{
  const stub=databaseStub();await createProfileModule(stub.db,permit).materialize(actor('doctor'));
+ Object.assign(stub.rows().vitalDoctor[0]!, { specialty: "Cardiology", departmentExternalId: "trace-cardio" });
  const profile=createProfileModule(stub.db,createProfileCommandGuard());
  const prepare=(input:unknown)=>profile.workflows.prepare(actor('doctor'),{workflowId:randomUUID(),kind:'doctor.onboarding',input},metadata());
  stub.rows().vitalDoctor[0]!.signatureAssetId=null;
