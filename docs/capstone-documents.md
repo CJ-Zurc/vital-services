@@ -32,7 +32,9 @@ Existing Records prepare/evidence/issue workflows retain membership, assignment,
 consent, payment, appointment version and paperwork-window checks. Commands require
 `signingConfirmed:true`. Each prescription line requires `isControlled:boolean`
 and a generic `medicineName`; brand, strength and form are optional. Classification
-is explicitly selected by the clinician, never inferred from the name. Existing
+uses EHR's `is_controlled` as its minimum. Clinicians may additionally mark other
+or free-text medicines controlled, but cannot clear a controlled catalog entry.
+Classification is never inferred from the name. Existing
 dosage, frequency, route, duration, quantity and instructions fields are retained.
 
 Encrypted canonical documents use `payloadSchemaVersion:2` and
@@ -90,8 +92,18 @@ Core migration `202610200001_signed_documents` creates signature versions, adds 
 and document correction fields, removes doctor title and resets existing doctors
 to onboarding-incomplete without manufacturing credentials. Integrations migration
 `202610200001_payment_acknowledgments` adds snapshot/PDF/hash columns to invoices.
-Controlled line data remains in the existing protected Records payload, so no EHR
-table or Alembic migration is needed. EHR treatment evidence contracts are unchanged.
+Controlled line snapshots remain in the protected Records payload. EHR migration
+`202611160001` adds the catalog boolean with default false. Treatment receipts
+optionally include signed `medicineClassifications`, requested by the BFF using
+at most 50 distinct `medicineIds`. Services requires exact ID coverage for new
+catalog-backed prescriptions and rejects missing evidence or a controlled-to-
+ordinary downgrade with `RECORDS_MEDICINE_CLASSIFICATION_CHANGED` (409).
+Duplicate signed IDs are invalid evidence. Free-text lines retain clinician
+classification. Existing S2 date checks follow classification verification.
+Catalog IDs on new lines must be UUIDs (empty/null means free text).
+Deploy the EHR migration/API first, then compatible Services and Web. During
+rollout, old clients missing required classifications fail closed. No VITAL
+database migration, historical-document rewrite or credential is added.
 
 Use matching API/worker/tools/Web images for this coordinated contract release.
 The existing deployment runner acquires the lock, selects images, provisions scoped

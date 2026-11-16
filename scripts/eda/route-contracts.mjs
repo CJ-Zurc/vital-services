@@ -13,8 +13,8 @@ const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIO
 const hash = text => createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex');
 // A review snapshot, not a parity certificate. Changes require a fresh source review.
 const reviewedHashes = Object.freeze({
-  'tests/audit-bff.test.ts': '57a00c784277565115d9b2503321e75a9cf3969cfae0cd2275c2662a3160e72f',
-  'lib/eda/audit-bff.ts': '1d8d084e1b85051e5423e3db5fa4dfc31d961297e70cfa69c21e4344adec9a1d',
+  'tests/audit-bff.test.ts': '6f14ea6f62b3b70fafa2fef80410420f6c45dc2c977d3a03f42daa20abb73a6d',
+  'lib/eda/audit-bff.ts': 'c25f2fbd4a532a83d750a792de1f950eee2821b29e4078ab0001a53676e182b1',
   'app/api/admin/audit-logs/export/route.ts': 'a5e810c29912b92829c124dc619f9bfa382f41043131cba8afa09f98f8459a49',
   'app/api/admin/audit-logs/route.ts': '60c155976ad3e852c31dddadea4a2ea76f5060c1839076f1e2277bf442cef74e',
   'lib/eda/intelligence-bff.ts': '054bf8aea1bcdaf0ee8d44f2eb20c28cc1f59fca28503bac4dbfb08f8c1f9fed',
@@ -247,7 +247,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/profile-registration.ts': '07ca27c21521d8a57ea3937d1081688e5719d82be92ab678d2d5b0afccde69f3',
   'lib/eda/profile.ts': '23b71089cd6f9e91448f3dd19fa61d86c329f882559c2785f3823f34e2f8cfb0',
   'lib/eda/public-registration.ts': '7edf5c637ab3916e182693b9fd7b02e4173c61b775a36fb62bd5524e3d64ce6b',
-  'lib/eda/records-bff.ts': '4fee7051cbf75742d23977fc3db6946138d88c0367f4f032421d6b8278a5e7e0',
+  'lib/eda/records-bff.ts': 'c564c96ebccd692b3672ebb53ccee39fae94b8fb053b5bb8c7da4955fa28666b',
   'lib/eda/records-composition.ts': 'd6d1fbd8c967eabea562ed1288a3023478043c426be99bfacdddec9259005aee',
   'lib/eda/records-dto.ts': 'a3bb99ac73bd619682d4bb127bef7af8cea1f1c5fb3480761cfad9c36394d060',
   'lib/eda/records-pages.ts': 'f2388350181fda90fad0d33a3ad9876dc69d4ff082cb6845c7bc8295ecbe3f18',
@@ -268,7 +268,7 @@ const reviewedHashes = Object.freeze({
   'lib/ehr-biometric.ts': 'ba0188af749c9f22b46aefb9d6807d2497459f3f73f73d0dc99338226babfaf6',
   'lib/ehr-integration.ts': '42653855fc0680810d0e7db09338f615de7a51bb586a937b69bc9bc06b333231',
   'lib/env.ts': '0731baabb0d884e77bde3c9f00e3a15597c8f78bbf86db7a19343053a1b5be70',
-  'lib/errors.ts': 'afab04d00a16f4812ff140dbe49648322e4bad1cfbeb3f9b1e4d0a244a9a22ae',
+  'lib/errors.ts': '4aa3b87ab94f1429138152cbd6318f1c26c62fec93f783a4de4ac45ef5308635',
   'lib/form-validation.ts': '9f7ae3115b8c8d8f2fd5d9920eb57fe434c967f3993813bb26d5ba9a1e3469c5',
   'lib/gateway-actor.ts': '620521eeac45bd4b96ed0512b214bf46dc730d83aac4258a10fad6041c651cbe',
   'lib/gateway.ts': '1d580fa61e5e33d53b8f704c02810eda5fe7104da29d504d77eb6a32fb71cf19',
@@ -317,7 +317,7 @@ const reviewedHashes = Object.freeze({
   'tests/eda-profile.test.ts': '30591454d873e6bc16c81d8dfa88be48e7e9ec3c2c02875f8a16aa75a61e01a6',
   'tests/eda-public-registration.test.ts': '9337759ae24ce0551a5e0d94987a23923732577924368377e9ab9a9c870783f2',
   'tests/eda-records-pagination.test.ts': '18a990da29ef3ef05cb9c1cc7ae2f846bcd5bc20a827a3c51d8262411d4cd2db',
-  'tests/eda-records.test.ts': '03103dea537461fd952b59126ff3c08867a78f1d28dd05eb6b6ffdbc6aaa6a91',
+  'tests/eda-records.test.ts': '28f48820b68ecef6d979e3f3acf5160d40d1d84c870babadc3583199a9c7a126',
   'tests/eda-remaining-owners.test.ts': '7636d90da065ad7830294bc4c0494c34e0323f5dbda6a4730eb5eece418c4bd8',
   'tests/eda-sse.test.ts': '1fb489e045e2b0a4b57bd48071ee92b22a32a421107dd7042036aeedae69c2d2',
   'tests/eda-transport.test.ts': '4729710eba9746300ddcb0ca3b954972dd4874c0fe7538c06febd7926b5ea6fd',

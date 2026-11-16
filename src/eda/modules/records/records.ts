@@ -13,7 +13,7 @@ import { assertPaperwork,assertRecordsIdle,assignedDoctor,currentPaid,medicalCon
 import { recordsCommand } from "./commands.js";
 import { certificateData,documentPrepare,prescriptionData,snapshotPrepare,type RecordsConfig,type RecordsWorkflowRow } from "./contracts.js";
 import { clinicalHash,protectPayload,unprotectPayload } from "./protection.js";
-import { verifyEhrEvidence } from "./ehr-evidence.js";
+import { verifyEhrEvidence,verifyMedicineClassifications } from "./ehr-evidence.js";
 import { createRecordsCollections } from './collection-reads.js';
 import { publicDocument } from './document-view.js';
 
@@ -177,6 +177,7 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
         const current=await patient(tx,w.patientId,true);if(current.ehrPatientId!==w.ehrPatientId)recordsDenied(409,"RECORDS_EHR_LINK_CHANGED");
         if(!w.appointmentId&&current.version!==w.expectedVersion)recordsDenied(409,'RECORDS_PROFILE_VERSION_CHANGED');
         const evidence=verifyEhrEvidence(input.receipt,config.evidence,{kind:"treatment",workflowId:w.id,actorAuthId:actor.authId,patientId:w.ehrPatientId,caseId:w.ehrCaseId,payloadHash:w.inputHash},Math.floor(clock()/1000));
+        if(w.kind==='prescription')verifyMedicineClassifications(prescriptionData.parse(data).lines,evidence.claims);
         let appointmentId=w.appointmentId;let appointment:AppointmentRow|null=null;
         if(!appointmentId){
           // Omitting the browser appointment ID cannot hide a VITAL-linked case.

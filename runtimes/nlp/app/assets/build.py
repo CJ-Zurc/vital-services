@@ -168,9 +168,32 @@ def _build_minilm(dataset: BodhiDataset, output_dir: Path) -> tuple[Path, Path, 
     return model_dir, matrix_path, _hash_tree(model_dir), _hash_file(matrix_path)
 
 
+def _asset_output_path(source: Path, output: Path) -> Path:
+    absolute = output.absolute()
+    if ".." in absolute.parts:
+        raise ValueError("Asset output must not contain parent path segments")
+    for path in (absolute, *absolute.parents):
+        if path.is_symlink() or path.is_junction():
+            raise ValueError("Asset output must not traverse a filesystem link")
+    target = absolute.resolve()
+    source = source.resolve()
+    if (source.is_relative_to(target) or target.is_relative_to(source)
+            or Path.cwd().resolve().is_relative_to(target)
+            or Path.home().resolve().is_relative_to(target)
+            or Path(__file__).resolve().is_relative_to(target)):
+        raise ValueError("Asset output overlaps a protected directory")
+    if target.exists() and not target.is_dir():
+        raise ValueError("Asset output must be a directory")
+    if target.exists() and any(target.iterdir()):
+        manifest = target / "model_manifest.json"
+        if manifest.is_symlink() or not manifest.is_file():
+            raise ValueError("Nonempty asset output must contain a model manifest")
+    return target
+
+
 def build_assets(source_dir: str | Path, output_dir: str | Path) -> dict[str, Any]:
     source = Path(source_dir)
-    output = Path(output_dir)
+    output = _asset_output_path(source, Path(output_dir))
     dataset = load_and_validate_bodhi(source)
     if output.exists():
         shutil.rmtree(output)
