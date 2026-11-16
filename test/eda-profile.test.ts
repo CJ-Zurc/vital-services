@@ -369,12 +369,24 @@ test("profile: doctor fees and onboarding prerequisites are validated, specialty
   const verified = createProfileModule(stub.db, async (_tx, _command, execute) => execute({ specialty: "Cardiology" }));
   await assert.rejects(verified.patchDoctor(actor("doctor"), input));
   const durable = createProfileModule(stub.db, createProfileCommandGuard());
+  const prepare = (input: unknown, workflowId = randomUUID()) =>
+    durable.workflows.prepare(actor("doctor"), { workflowId, kind: "doctor.onboarding", input }, metadata());
+  await assert.rejects(prepare(input), /specialty assignment changed or is missing/);
+  Object.assign(stub.rows().vitalDoctor[0]!, { specialty: "Cardiology", departmentExternalId: "trace-cardio", departmentName: "Cardiology" });
+  await assert.rejects(prepare({ ...input, specialty: "Neurology" }), /specialty assignment changed or is missing/);
   const workflowId = randomUUID();
   await durable.workflows.prepare(actor("doctor"), { workflowId, kind: "doctor.onboarding", input }, metadata());
+  const assignment = stub.rows().vitalDoctor[0]!;
+  assignment.departmentExternalId = "replacement-cardio-id";
+  await assert.rejects(durable.workflows.commit(actor("doctor"), workflowId,
+    { input, receipt: receipt("doctor.onboarding", workflowId, input) }, metadata()), /specialty assignment changed or is missing/);
+  stub.rows().vitalDoctor[0]!.departmentExternalId = "trace-cardio";
   const result = await durable.workflows.commit(actor("doctor"), workflowId,
     { input, receipt: receipt("doctor.onboarding", workflowId, input) }, metadata());
   const completed = result.data as Row;
   assert.equal(completed.isDoctorOnboardingComplete, true);
+  assert.equal(completed.departmentExternalId, "trace-cardio");
+  assert.equal(completed.specialty, "Cardiology");
   assert.ok(completed.termsAgreedAt instanceof Date);
   await assert.rejects(verified.patchDoctor(actor("doctor"), { specialty: "Neurology" }),
     (error: unknown) => error instanceof ProfileError && error.status === 409);
@@ -773,8 +785,45 @@ test("profile registration: outbox failure rolls back marker consent and command
 });
 
 
+test("doctor profile maps each license index conflict to a distinct public code", async () => {
+  for (const [index, code] of [
+    ["vital_doctors_prc_normalized_uidx", "PROFILE_PRC_DUPLICATE"],
+    ["vital_doctors_s2_normalized_uidx", "PROFILE_S2_DUPLICATE"],
+  ]) {
+    const stub = databaseStub();
+    await createProfileModule(stub.db, permit).materialize(actor("doctor"));
+    const guard: ProfileCommandGuard = async () => {
+      throw Object.assign(new Error("Unique conflict"), {
+        code: "P2002", meta: { driverAdapterError: { cause: { constraint: { index } } } },
+      });
+    };
+    const profile = createProfileModule(stub.db, guard);
+    await assert.rejects(profile.patchDoctor(actor("doctor"), { prcLicense: "00123" }, metadata()), { status: 409, code });
+  }
+});
+
+test("doctor onboarding and profile updates accept absent S-2 and clear the complete credential", async () => {
+  const stub = databaseStub();
+  await createProfileModule(stub.db, permit).materialize(actor("doctor"));
+  Object.assign(stub.rows().vitalDoctor[0]!, { specialty: "Cardiology", departmentExternalId: "trace-cardio" });
+  const profile = createProfileModule(stub.db, createProfileCommandGuard());
+  const absent = { s2License: null, s2ValidFrom: null, s2ValidUntil: null };
+  const input = { ...doctorOnboarding, ...absent };
+  const workflowId = randomUUID();
+  await profile.workflows.prepare(actor("doctor"), { workflowId, kind: "doctor.onboarding", input }, metadata());
+  await profile.workflows.commit(actor("doctor"), workflowId, { input, receipt: receipt("doctor.onboarding", workflowId, input) }, metadata());
+  assert.equal(stub.rows().vitalDoctor[0]!.isDoctorOnboardingComplete, true);
+  await assert.rejects(profile.patchDoctor(actor("doctor"), { s2License: "DEMO-S2" }, metadata()), { code: "PROFILE_S2_INCOMPLETE" });
+  const credentials = { s2License: "DEMO-S2", s2ValidFrom: "2026-01-01", s2ValidUntil: "2027-01-01" };
+  await profile.patchDoctor(actor("doctor"), credentials, metadata());
+  await assert.rejects(profile.patchDoctor(actor("doctor"), { s2ValidFrom: null }, metadata()), { code: "PROFILE_S2_INCOMPLETE" });
+  await profile.patchDoctor(actor("doctor"), absent, metadata());
+  for (const key of Object.keys(absent)) assert.equal(stub.rows().vitalDoctor[0]![key], null);
+});
+
 test('S6 onboarding denies missing signature, missing S2, reversed dates and removed honorific',async()=>{
  const stub=databaseStub();await createProfileModule(stub.db,permit).materialize(actor('doctor'));
+ Object.assign(stub.rows().vitalDoctor[0]!, { specialty: "Cardiology", departmentExternalId: "trace-cardio" });
  const profile=createProfileModule(stub.db,createProfileCommandGuard());
  const prepare=(input:unknown)=>profile.workflows.prepare(actor('doctor'),{workflowId:randomUUID(),kind:'doctor.onboarding',input},metadata());
  stub.rows().vitalDoctor[0]!.signatureAssetId=null;
