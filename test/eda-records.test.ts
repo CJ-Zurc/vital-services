@@ -376,6 +376,30 @@ test('S6 ordinary, mixed and controlled issuance snapshots flags, signature and 
  }
 });
 
+test('catalog classification evidence prevents controlled medicine downgrades',async()=>{
+  for(const scenario of ['ordinary','controlled','manual-upgrade','downgrade','missing','extra','duplicate','repeated-id','free-text','expired-s2'] as const){
+    const f=fixture(),medicineId=randomUUID(),workflowId=randomUUID();
+    const controlled=['controlled','manual-upgrade','repeated-id','expired-s2'].includes(scenario);
+    const line={medicineId:scenario==='free-text'?'':medicineId,medicineName:'SYNTHETIC MEDICINE',isControlled:controlled,dosageAmount:'1',dosageUnit:'mg',frequency:'Daily'};
+    const data={signingConfirmed:true,lines:scenario==='repeated-id'?[line,{...line}]:[line]};
+    const catalogControlled=!['ordinary','manual-upgrade'].includes(scenario);
+    const rows=scenario==='free-text'?[]:[{medicineId,isControlled:catalogControlled}];
+    if(scenario==='extra')rows.push({medicineId:randomUUID(),isControlled:false});
+    if(scenario==='duplicate')rows.push({...rows[0]!});
+    if(scenario==='expired-s2')f.signature.s2ValidUntil=new Date('2020-01-01Z');
+    const p=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
+    const body={workflowId,inputHash:p.inputHash,data,receipt:f.receipt(workflowId,data,'treatment',scenario==='missing'?{}:{medicineClassifications:rows})};
+    const issue=()=>f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),body);
+    const failure=scenario==='duplicate'?'EHR_RECORDS_EVIDENCE_INVALID':scenario==='expired-s2'?'S2_VALIDITY_REQUIRED':
+      ['downgrade','missing','extra'].includes(scenario)?'RECORDS_MEDICINE_CLASSIFICATION_CHANGED':null;
+    if(failure){await assert.rejects(issue(),isCode(failure));assert.equal(f.state().documents.size,0);continue;}
+    const issued=await issue(),saved=f.state().documents.get(issued.id);
+    const snapshot=unprotectPayload<any>(keyring,{patientId:f.patientId,resourceId:issued.id,schema:'document.v1'},saved.protectedPayload);
+    assert.deepEqual(snapshot.lines.map((row:any)=>row.isControlled),data.lines.map(row=>row.isControlled));
+    assert.equal((await issue()).id,issued.id);
+  }
+});
+
 function signingFixture(failure?: string, inspector?: FileInspector) {
   const owner=randomUUID(),rows:Array<Record<string,any>>=[],events:unknown[]=[],queries:string[]=[];
   let pointer:string|null=null, scans=0;

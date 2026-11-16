@@ -4,10 +4,20 @@ import { z } from "zod";
 import { DomainError } from "../../contracts/actor.js";
 
 export interface EhrEvidenceConfig { keys: Readonly<Record<string,string>> }
+const classifications=z.array(z.object({medicineId:z.uuid(),isControlled:z.boolean()}).strict()).max(50)
+  .refine(rows=>new Set(rows.map(row=>row.medicineId)).size===rows.length);
 export const evidenceClaims=z.object({kind:z.enum(["snapshot","treatment"]),workflowId:z.uuid(),actorAuthId:z.uuid(),patientId:z.uuid(),caseId:z.uuid(),
   payloadHash:z.string().regex(/^[a-f0-9]{64}$/),externalSystemRef:z.string().max(128).nullable(),
+  medicineClassifications:classifications.optional(),
   iss:z.literal("uhse-ehr"),aud:z.literal("vital-services.records"),iat:z.number().int(),exp:z.number().int(),jti:z.uuid() }).strict();
 export type EhrEvidence = z.infer<typeof evidenceClaims>;
+export function verifyMedicineClassifications(lines:readonly {medicineId?:string|null;isControlled:boolean}[],claims:EhrEvidence){
+  const ids=new Set(lines.flatMap(line=>line.medicineId?[line.medicineId]:[]));
+  const rows=claims.medicineClassifications??[];
+  const catalog=new Map(rows.map(row=>[row.medicineId,row.isControlled]));
+  if(catalog.size!==ids.size||[...ids].some(id=>!catalog.has(id))||lines.some(line=>line.medicineId&&catalog.get(line.medicineId)&&!line.isControlled))
+    throw new DomainError(409,'RECORDS_MEDICINE_CLASSIFICATION_CHANGED','Refresh the medicine catalog and review the prescription.');
+}
 export function verifyEhrEvidence(token:string,config:EhrEvidenceConfig,expected:Pick<EhrEvidence,"kind"|"workflowId"|"actorAuthId"|"patientId"|"payloadHash"> & {caseId?:string|null},now=Math.floor(Date.now()/1000)) {
   try{
     if(token.length>8192)throw new Error("LIMIT");
