@@ -85,7 +85,7 @@ export function createProfileRouter(core: CorePrismaClient, options: { commandGu
   const errors: ErrorRequestHandler = (error: unknown, _req, res, next) => {
     if (res.headersSent) return next(error);
     if (error instanceof ProfileError || error instanceof DomainError) {
-      res.status(error.status).json({ success: false, message: error.message });
+      res.status(error.status).json({ success: false, message: error.message, ...(error instanceof DomainError && { code: error.code }) });
     } else if (error instanceof ZodError) {
       res.status(400).json({ success: false, message: "Invalid profile fields." });
     } else {

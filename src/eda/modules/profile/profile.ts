@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { CURRENT_AGREEMENT_VERSION } from "../../contracts/agreement.js";
 import type { Prisma } from "../../generated/core/client.js";
-import { requireScope, type Actor } from "../../contracts/actor.js";
+import { DomainError, requireScope, type Actor } from "../../contracts/actor.js";
 import type { CorePrismaClient } from "../../infrastructure/databases.js";
 import { recordProfileEffects } from "./profile-effects.js";
 import { createProfileWorkflows } from "./profile-workflows.js";
@@ -72,8 +72,8 @@ const fee = z.union([
 
 export const doctorPatchSchema = z.object({
   s2License: nullableText(80),
-  s2ValidFrom: z.iso.date().optional(),
-  s2ValidUntil: z.iso.date().optional(),
+  s2ValidFrom: z.iso.date().nullable().optional(),
+  s2ValidUntil: z.iso.date().nullable().optional(),
   specialty: nullableText(160),
   prcLicense: nullableText(80),
   availabilityType: z.enum(["virtual", "in_person", "both"]).optional(),
@@ -174,6 +174,15 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
           return commandGuard(tx, command, (verified) => run(tx, verified));
         }, { isolationLevel: "Serializable" });
       } catch (error: unknown) {
+        if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002" && "meta" in error) {
+          const constraint = JSON.stringify(error.meta);
+          if (constraint?.includes("vital_doctors_prc_normalized_uidx")) {
+            throw new DomainError(409, "PROFILE_PRC_DUPLICATE", "This PRC license number is already assigned.");
+          }
+          if (constraint?.includes("vital_doctors_s2_normalized_uidx")) {
+            throw new DomainError(409, "PROFILE_S2_DUPLICATE", "This PDEA S-2 license number is already assigned.");
+          }
+        }
         const retryable = typeof error === "object" && error !== null && "code" in error
           && (error.code === "P2034" || error.code === "P2002");
         if (!retryable || attempt >= 2) throw error;
@@ -218,16 +227,28 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
     return result;
   }
 
-  function doctorData(input: DoctorPatch, doctor?: { s2License?: string | null; s2ValidFrom?: Date | null; s2ValidUntil?: Date | null; signatureAssetId?: string | null; specialty: string | null;
+  function doctorData(input: DoctorPatch, doctor?: { s2License?: string | null; s2ValidFrom?: Date | null; s2ValidUntil?: Date | null; signatureAssetId?: string | null; specialty: string | null; departmentExternalId?: string | null;
     prcLicense: string | null; bio: string | null; availabilityType: string | null; isDoctorOnboardingComplete: boolean },
     verified?: ProfileVerification, admin = false): Prisma.VitalDoctorUpdateInput {
-    const { terms_accepted: _terms, ...fields } = input;
-    const data: Prisma.VitalDoctorUpdateInput = { ...fields,
-      ...(input.s2ValidFrom ? {s2ValidFrom:new Date(input.s2ValidFrom+'T00:00:00Z')} : {}),
-      ...(input.s2ValidUntil ? {s2ValidUntil:new Date(input.s2ValidUntil+'T00:00:00Z')} : {}),changedAt: new Date() };
-    const from=input.s2ValidFrom??doctor?.s2ValidFrom?.toISOString().slice(0,10),until=input.s2ValidUntil??doctor?.s2ValidUntil?.toISOString().slice(0,10);
-    if(from&&until&&from>until)throw new ProfileError(400,'S2 validity end must follow its start.');
-    if (input.specialty !== undefined) {
+    const { terms_accepted: _terms, s2ValidFrom, s2ValidUntil, ...fields } = input;
+    const from = s2ValidFrom === undefined ? doctor?.s2ValidFrom?.toISOString().slice(0, 10) : s2ValidFrom;
+    const until = s2ValidUntil === undefined ? doctor?.s2ValidUntil?.toISOString().slice(0, 10) : s2ValidUntil;
+    const license = input.s2License === undefined ? doctor?.s2License : input.s2License;
+    const data: Prisma.VitalDoctorUpdateInput = {
+      ...fields,
+      ...(s2ValidFrom !== undefined && { s2ValidFrom: s2ValidFrom === null ? null : new Date(s2ValidFrom + "T00:00:00Z") }),
+      ...(s2ValidUntil !== undefined && { s2ValidUntil: s2ValidUntil === null ? null : new Date(s2ValidUntil + "T00:00:00Z") }),
+      changedAt: new Date(),
+    };
+    if (input.isDoctorOnboardingComplete || input.s2License !== undefined || s2ValidFrom !== undefined || s2ValidUntil !== undefined) {
+      if ([license, from, until].some(value => value != null) && (!license?.trim() || !from || !until)) {
+        throw new DomainError(400, "PROFILE_S2_INCOMPLETE", "Enter the PDEA S-2 number and both validity dates.");
+      }
+      if (from && until && from > until) {
+        throw new DomainError(400, "PROFILE_S2_DATES_INVALID", "The S-2 validity end date must be on or after the start date.");
+      }
+    }
+    if (input.specialty !== undefined && !input.isDoctorOnboardingComplete) {
       if (!admin && doctor?.isDoctorOnboardingComplete && input.specialty !== doctor.specialty) {
         throw new ProfileError(403, "Specialty is locked after verification. Please contact an admin to update it.");
       }
@@ -236,19 +257,19 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
       data.departmentExternalId = verified.department.id;
       data.departmentName = verified.department.name;
     }
-    if(doctor?.isDoctorOnboardingComplete&&(input.prcLicense===null||input.s2License===null))throw new ProfileError(400,'Required credentials cannot be cleared.');
+    if(doctor?.isDoctorOnboardingComplete&&input.prcLicense !== undefined && !input.prcLicense?.trim())throw new ProfileError(400,'Required credentials cannot be cleared.');
     if (input.isDoctorOnboardingComplete) {
       if (doctor?.isDoctorOnboardingComplete) throw new ProfileError(409, "Onboarding already completed.");
-      requiredText(80).parse(input.s2License ?? doctor?.s2License);
-      if(!from||!until||!doctor?.signatureAssetId)throw new ProfileError(400,'S2 validity dates and saved signature are required.');
-      requiredText(160).parse(input.specialty ?? doctor?.specialty);
-      requiredText(80).parse(input.prcLicense ?? doctor?.prcLicense);
+      if (!doctor?.signatureAssetId) throw new ProfileError(400, "A saved signature is required.");
+      if (!doctor?.specialty || !doctor.departmentExternalId || input.specialty !== doctor.specialty
+        || verified?.department?.id !== doctor.departmentExternalId || verified.department.name !== doctor.specialty) {
+        throw new ProfileError(409, "Doctor specialty assignment changed or is missing.");
+      }
+      // The workflow binds the assigned specialty without writing it back.
+      delete data.specialty;
+      requiredText(80).parse(input.prcLicense === undefined ? doctor?.prcLicense : input.prcLicense);
       requiredText(5000).parse(input.bio ?? doctor?.bio);
       z.enum(["virtual", "in_person", "both"]).parse(input.availabilityType ?? doctor?.availabilityType);
-      if (!verified?.department) throw new ProfileError(409, "Prepared doctor onboarding receipt required.");
-      data.specialty = verified.department.name;
-      data.departmentExternalId = verified.department.id;
-      data.departmentName = verified.department.name;
       data.termsAgreedAt = new Date();
     }
     return data;
@@ -309,7 +330,8 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
         if (kind !== "patient.onboarding" && user.doctor) {
           const specialty = (fields as DoctorPatch).specialty!;
           // Validate prerequisites without writing or contacting TRACE in the transaction.
-          doctorData(fields as DoctorPatch, user.doctor, { department: { id: "validated-at-commit", name: specialty } }, actor.role === "admin");
+          const departmentId = kind === "doctor.onboarding" ? user.doctor.departmentExternalId ?? "" : "validated-at-commit";
+          doctorData(fields as DoctorPatch, user.doctor, { department: { id: departmentId, name: specialty } }, actor.role === "admin");
         }
       }
       return user.version;
