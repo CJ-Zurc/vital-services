@@ -44,13 +44,13 @@ function fixture(){
   let prior=structuredClone(state),revoked=false,consented=true,busy=false,outboxFail=false,paymentStale=false,partyCalls=0,objectWrites=0,profileVersion=0;
   const signatureId=randomUUID(),signatureBytes=Buffer.from('synthetic signature');
   const signature={id:signatureId,contentHash:sha256(signatureBytes),s2License:'DEMO-S2',s2ValidFrom:new Date('2026-01-01Z'),s2ValidUntil:new Date('2027-01-01Z'),protectedPayload:protectPayload(keyring,{patientId:doctorAuthId,resourceId:signatureId,schema:'doctor-signature.v1'},{base64:signatureBytes.toString('base64')})};
-  let prcLicense:string|null='TEST-LICENSE';
+  let prcLicense:string|null='TEST-LICENSE', hasSignature=true;
   const calls:Array<{sql:string;args:unknown[]}>=[];
   const tx={release(){},async query(sql:string,args:unknown[]=[]):Promise<{rows:any[];rowCount:number}>{
     const privacy=accessFixtureSql(sql,args,state.appointment);if(privacy&&!sql.startsWith('SELECT accepted'))return privacy;
     calls.push({sql,args});const done=(rows:any[]=[],rowCount=rows.length)=>({rows,rowCount});
     if(sql.startsWith('BEGIN')){prior=structuredClone(state);return done();}if(sql==='ROLLBACK'){state=prior;return done();}if(sql==='COMMIT'||sql.includes('pg_advisory_xact_lock'))return done();
-    if(sql.includes('FROM vital_doctors d JOIN doctor_signatures'))return done([signature]);
+    if(sql.includes('FROM vital_doctors d JOIN doctor_signatures'))return done(hasSignature?[signature]:[]);
     if(sql.startsWith('SELECT "signatureAssetId"'))return done([{signatureAssetId:signatureId,...signature}]);
     if(sql.startsWith('SELECT s.id,s."protectedPayload"'))return done([]);
     if(sql.includes(' AS revision,COUNT(*)'))return done([{revision:String(consented),total:consented?'1':'0'}]);
@@ -90,6 +90,8 @@ function fixture(){
       const docs=[...state.documents.values()].filter(d=>(!args[0]||d.patientId===args[0])&&(!args[1]||d.doctorId===args[1])&&(!args[7]||consented));
       return sql.includes('COUNT(*)')?done([{total:docs.length}]):done(docs.map(d=>({...d,state:'processing',assetVersion:0})));
     }
+    if(sql.includes('FROM records_documents WHERE "supersedesId"'))return done([...state.documents.values()].filter(row=>row.supersedesId===args[0]));
+    if(sql.startsWith('UPDATE records_documents SET "supersedesId"')){state.documents.get(String(args[0])).supersedesId=args[1];return done([],1);}
     if(sql.includes('FROM records_documents')&&sql.includes('SELECT'))return done(args[0]===patientId?[...state.documents.values()].filter(d=>!args[1]||d.issuedAt<=args[1]):state.documents.has(String(args[0]))?[state.documents.get(String(args[0]))]:[]);
     if(sql.includes('FROM records_file_assets')&&sql.includes('SELECT'))return done(sql.includes('WHERE id=')?(state.assets.has(String(args[0]))?[state.assets.get(String(args[0]))]:[]):[...state.assets.values()].filter(a=>a.kind==='upload'&&a.state==='ready'&&a.createdAt<=(args[1] as Date)));
     if(sql.includes('INSERT INTO records_documents')){state.documents.set(String(args[0]),{id:args[0],patientId:args[1],doctorId:args[2],appointmentId:args[3],kind:args[4],accessCode:args[5],protectedPayload:JSON.parse(String(args[6])),assetId:args[7],issuedAt:args[8]});return done([],1);}
@@ -111,7 +113,7 @@ function fixture(){
   const receipt=(workflowId:string,payload:unknown,kind='snapshot',overrides:Record<string,unknown>={})=>jwt.sign({kind,workflowId,actorAuthId:doctorAuthId,patientId:ehrPatientId,caseId:ehrCaseId,payloadHash:clinicalHash(payload),externalSystemRef:'vital:appointment:'+id,
     iss:'uhse-ehr',aud:'vital-services.records',iat:Math.floor(now/1000),exp:Math.floor(now/1000)+60,jti:randomUUID(),...overrides},privateKey,{algorithm:'RS256',keyid:'ehr'});
   const storage={key:(area:string,assetId:string,hash:string,mime:string)=>area+'/'+assetId+'/'+hash+(mime==='application/pdf'?'.pdf':'.png'),putQuarantine:async()=>{objectWrites++;},readQuarantine:async()=>Buffer.alloc(0),ensureFinal:async()=>{},inspectFinal:async()=>false,signedLink:async()=>'https://gateway.invalid/media?signature=private'};
-  return{prc:(value:string|null)=>{prcLicense=value;},signature,now,id,patientId,patientAuthId,doctorId,doctorAuthId,ehrPatientId,ehrCaseId,pool,tx,config,actor,meta,receipt,state:()=>state,calls,module:createRecordsModule(pool,config,()=>now),files:createRecordsFiles(pool,config,storage,()=>now),lifecycle:createRecordsLifecycle(keyring,()=>now),
+  return{prc:(value:string|null)=>{prcLicense=value;},removeSignature:()=>{hasSignature=false;},signature,now,id,patientId,patientAuthId,doctorId,doctorAuthId,ehrPatientId,ehrCaseId,pool,tx,config,actor,meta,receipt,state:()=>state,calls,module:createRecordsModule(pool,config,()=>now),files:createRecordsFiles(pool,config,storage,()=>now),lifecycle:createRecordsLifecycle(keyring,()=>now),
     revoked:()=>{revoked=true;},consent:(v:boolean)=>{consented=v;},busy:()=>{busy=true;},stale:()=>{paymentStale=true;},fail:()=>{outboxFail=true;},profileVersion:(v:number)=>{profileVersion=v;},partyCalls:()=>partyCalls,objectWrites:()=>objectWrites};
 }
 
@@ -212,9 +214,21 @@ test('EDA Records evidence collection bounds fail atomically instead of truncati
   }
 });
 
+function catalogLine() {
+  return {medicineId:randomUUID(),medicineName:'SYNTHETIC MEDICINE',
+    isControlled:false,dosageAmount:'1',dosageUnit:'mg',frequency:'Daily'};
+}
+function catalogClaims(lines: ReturnType<typeof catalogLine>[]) {
+  const unique = [...new Map(lines.map(line => [line.medicineId, line])).values()];
+  return {
+    medicineClassifications: unique.map(line => ({ medicineId: line.medicineId, isControlled: false })),
+
+  };
+}
+
 test('EDA Records document commits once before rendering and unresolved reschedules prevent issuance',async()=>{
-  const f=fixture(),workflowId=randomUUID(),data={signingConfirmed:true,lines:[{medicineName:'SYNTHETIC MEDICINE',isControlled:false,dosageAmount:'1',dosageUnit:'mg',frequency:'Daily'}]},p=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
-  const meta=f.meta(),body={workflowId,inputHash:p.inputHash,data,receipt:f.receipt(workflowId,data,'treatment')},actor=f.actor('document.issue',workflowId);
+  const f=fixture(),workflowId=randomUUID(),data={signingConfirmed:true,lines:[catalogLine()]},p=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
+  const meta=f.meta(),body={workflowId,inputHash:p.inputHash,data,receipt:f.receipt(workflowId,data,'treatment',catalogClaims(data.lines))},actor=f.actor('document.issue',workflowId);
   const result=await f.module.issueDocument(actor,meta,body);assert.equal(result.operationStatus,'pending');assert.deepEqual(await f.module.issueDocument(actor,meta,body),result);
   assert.equal(f.state().documents.size,1);assert.equal(f.state().operations.size,1);assert.equal(f.objectWrites(),0);assert.equal(f.partyCalls(),1);
   assert.doesNotMatch(JSON.stringify([...f.state().documents.values(),...f.state().events,...f.state().workflows.values()]),/SYNTHETIC MEDICINE|SYNTHETIC PATIENT/);
@@ -349,54 +363,90 @@ test('EDA Records actual HTTP binary hop rejects header forgery byte substitutio
 });
 
 
-test('S6 ordinary, mixed and controlled issuance snapshots flags, signature and current S2 dates',async()=>{
- const missing=fixture();missing.prc(null);const workflowId=randomUUID(),data={signingConfirmed:true,lines:[{medicineName:'DEMO Generic',isControlled:false,dosageAmount:'1',dosageUnit:'tablet',frequency:'Daily'}]};
- const prepared=await missing.module.prepareDocument(missing.actor('document.prepare'),missing.meta(),{workflowId,kind:'prescription',patientId:missing.patientId,appointmentId:missing.id,expectedVersion:1,data});
- await assert.rejects(missing.module.issueDocument(missing.actor('document.issue',workflowId),missing.meta(),{workflowId,inputHash:prepared.inputHash,data,receipt:missing.receipt(workflowId,data,'treatment')}),isCode('SIGNING_PROFILE_REQUIRED'));
- assert.equal(missing.state().documents.size,0);
-
- for(const flags of [[false],[true],[false,true]]){
-  const f=fixture(),workflowId=randomUUID(),data={signingConfirmed:true,lines:flags.map(isControlled=>({medicineName:'DEMO Generic',isControlled,dosageAmount:'1',dosageUnit:'tablet',frequency:'Daily'}))};
-  const prepared=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
-  const issued=await f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),{workflowId,inputHash:prepared.inputHash,data,receipt:f.receipt(workflowId,data,'treatment')});
-  const saved=f.state().documents.get(issued.id),binding={patientId:f.patientId,resourceId:issued.id,schema:'document.v1'};
-  const snapshot=unprotectPayload<Record<string,any>>(keyring,binding,saved.protectedPayload);
-  assert.deepEqual(snapshot.lines.map((line:any)=>line.isControlled),flags);assert.equal(snapshot.templateVersion,'bgh-capstone-v1');
-  const retrieval=new URL(snapshot.retrievalUrl);
-  assert.equal(retrieval.origin,'https://web.example.test');assert.equal(retrieval.pathname,'/documents/prescription/'+issued.id);assert.equal(retrieval.search,'');
-  const{contentHash,...unsigned}=snapshot;assert.equal(contentHash,clinicalHash(unsigned));
-  const before=JSON.stringify(saved.protectedPayload);f.signature.s2License='CHANGED-DEMO';assert.equal(JSON.stringify(saved.protectedPayload),before);
- }
- for(const until of ['2020-01-01','2030-01-01']){
-  const f=fixture();f.signature.s2ValidFrom=new Date(until==='2020-01-01'?'2019-01-01Z':'2029-01-01Z');f.signature.s2ValidUntil=new Date(until+'Z');
-  const workflowId=randomUUID(),data={signingConfirmed:true,lines:[{medicineName:'DEMO Generic',isControlled:true,dosageAmount:'1',dosageUnit:'tablet',frequency:'Daily'}]};
-  const prepared=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
-  await assert.rejects(f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),{workflowId,inputHash:prepared.inputHash,data,receipt:f.receipt(workflowId,data,'treatment')}),isCode('S2_VALIDITY_REQUIRED'));
-  assert.equal(f.state().documents.size,0);
- }
+test('non-controlled prescription requires PRC and saved signature and omits historical S-2 values from new snapshots', async () => {
+  for (const missing of ['PRC', 'signature', 'S-2', null]) {
+    const f=fixture(),workflowId=randomUUID(),data={signingConfirmed:true,lines:[catalogLine()]};
+    if (missing==='PRC') f.prc(null);
+    if (missing==='signature') f.removeSignature();
+    if (missing==='S-2') Object.assign(f.signature, { s2License: null, s2ValidFrom: null, s2ValidUntil: null });
+    const prepared=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{
+      workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data,
+    });
+    const issue=()=>f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),{
+      workflowId,inputHash:prepared.inputHash,data,receipt:f.receipt(workflowId,data,'treatment',catalogClaims(data.lines)),
+    });
+    if (missing==='PRC' || missing==='signature') {
+      await assert.rejects(issue(), isCode('SIGNING_PROFILE_REQUIRED'));
+      assert.equal(f.state().documents.size,0);
+      continue;
+    }
+    const issued=await issue();
+    const snapshot=unprotectPayload<Record<string,unknown>>(keyring,
+      {patientId:f.patientId,resourceId:issued.id,schema:'document.v1'},f.state().documents.get(issued.id).protectedPayload);
+    for (const field of ['s2License','s2ValidFrom','s2ValidUntil']) assert.equal(snapshot[field],undefined);
+    const {contentHash,...unsigned}=snapshot;
+    assert.equal(contentHash,clinicalHash(unsigned));
+  }
 });
 
-test('catalog classification evidence prevents controlled medicine downgrades',async()=>{
-  for(const scenario of ['ordinary','controlled','manual-upgrade','downgrade','missing','extra','duplicate','repeated-id','free-text','expired-s2'] as const){
-    const f=fixture(),medicineId=randomUUID(),workflowId=randomUUID();
-    const controlled=['controlled','manual-upgrade','repeated-id','expired-s2'].includes(scenario);
-    const line={medicineId:scenario==='free-text'?'':medicineId,medicineName:'SYNTHETIC MEDICINE',isControlled:controlled,dosageAmount:'1',dosageUnit:'mg',frequency:'Daily'};
-    const data={signingConfirmed:true,lines:scenario==='repeated-id'?[line,{...line}]:[line]};
-    const catalogControlled=!['ordinary','manual-upgrade'].includes(scenario);
-    const rows=scenario==='free-text'?[]:[{medicineId,isControlled:catalogControlled}];
-    if(scenario==='extra')rows.push({medicineId:randomUUID(),isControlled:false});
-    if(scenario==='duplicate')rows.push({...rows[0]!});
-    if(scenario==='expired-s2')f.signature.s2ValidUntil=new Date('2020-01-01Z');
-    const p=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data});
-    const body={workflowId,inputHash:p.inputHash,data,receipt:f.receipt(workflowId,data,'treatment',scenario==='missing'?{}:{medicineClassifications:rows})};
-    const issue=()=>f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),body);
-    const failure=scenario==='duplicate'?'EHR_RECORDS_EVIDENCE_INVALID':scenario==='expired-s2'?'S2_VALIDITY_REQUIRED':
-      ['downgrade','missing','extra'].includes(scenario)?'RECORDS_MEDICINE_CLASSIFICATION_CHANGED':null;
-    if(failure){await assert.rejects(issue(),isCode(failure));assert.equal(f.state().documents.size,0);continue;}
-    const issued=await issue(),saved=f.state().documents.get(issued.id);
-    const snapshot=unprotectPayload<any>(keyring,{patientId:f.patientId,resourceId:issued.id,schema:'document.v1'},saved.protectedPayload);
-    assert.deepEqual(snapshot.lines.map((row:any)=>row.isControlled),data.lines.map(row=>row.isControlled));
-    assert.equal((await issue()).id,issued.id);
+test('prescription prepare rejects free text, controlled flags, and a mixed prescription on both routes and corrections', async () => {
+  const line=catalogLine();
+  for (const path of ['appointment','records','correction']) {
+    const f=fixture();
+    for (const invalid of [{...line,medicineId:''},{...line,isControlled:true},{...line,brandName:'ALTERED'}]) {
+      const data={signingConfirmed:true,lines:[catalogLine(),invalid],
+        ...(path==='correction'?{supersedesId:randomUUID(),correctionReason:'Correction'}:{})};
+      const appointment=path!=='records';
+      await assert.rejects(f.module.prepareDocument(f.actor('document.prepare',appointment?f.id:f.patientId),f.meta(),{
+        workflowId:randomUUID(),kind:'prescription',patientId:f.patientId,
+        ...(appointment?{appointmentId:f.id,expectedVersion:1}:{expectedVersion:0}),data,
+      }),isCode('RECORDS_MEDICINE_CLASSIFICATION_CHANGED'));
+      assert.equal(f.state().documents.size,0);
+    }
+  }
+});
+
+test('patient-record prescriptions and corrections require and accept the same current catalog evidence', async () => {
+  const f=fixture(),line=catalogLine();
+  async function issue(supersedesId?: string) {
+    const workflowId=randomUUID();
+    const data={signingConfirmed:true,lines:[line],...(supersedesId?{supersedesId,correctionReason:'Review'}:{})};
+    const p=await f.module.prepareDocument(f.actor('document.prepare',f.patientId),f.meta(),{
+      workflowId,kind:'prescription',patientId:f.patientId,expectedVersion:0,data,
+    });
+    return f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),{
+      workflowId,inputHash:p.inputHash,data,receipt:f.receipt(workflowId,data,'treatment',catalogClaims(data.lines)),
+    });
+  }
+  const original=await issue();
+  const corrected=await issue(original.id);
+  assert.equal(f.state().documents.get(corrected.id).supersedesId,original.id);
+  await assert.rejects(issue(original.id),isCode('DOCUMENT_CORRECTION_CONFLICT'));
+  assert.equal(f.state().documents.size,2);
+});
+
+test('prescription issue rejects missing, controlled and mismatched signed classifications atomically', async () => {
+  for (const scenario of ['non-controlled','controlled','missing','extra','duplicate','unavailable','repeated']) {
+    const f=fixture(),workflowId=randomUUID(),line=catalogLine();
+    const data={signingConfirmed:true,lines:[line,scenario==='repeated'?{...line}:catalogLine()]};
+    const prepared=await f.module.prepareDocument(f.actor('document.prepare'),f.meta(),{
+      workflowId,kind:'prescription',patientId:f.patientId,appointmentId:f.id,expectedVersion:1,data,
+    });
+    const evidence=catalogClaims(scenario==='unavailable'?[line]:data.lines);
+    if (scenario==='controlled') evidence.medicineClassifications[1]!.isControlled=true;
+    if (scenario==='extra') evidence.medicineClassifications.push({medicineId:randomUUID(),isControlled:false});
+    if (scenario==='duplicate') evidence.medicineClassifications.push(evidence.medicineClassifications[0]!);
+    const issue=()=>f.module.issueDocument(f.actor('document.issue',workflowId),f.meta(),{
+      workflowId,inputHash:prepared.inputHash,data,
+      receipt:f.receipt(workflowId,data,'treatment',scenario==='missing'?{}:evidence),
+    });
+    if (scenario!=='non-controlled'&&scenario!=='repeated') {
+      await assert.rejects(issue(),isCode(scenario==='duplicate'?'EHR_RECORDS_EVIDENCE_INVALID':'RECORDS_MEDICINE_CLASSIFICATION_CHANGED'));
+      assert.equal(f.state().documents.size,0);
+      continue;
+    }
+    assert.equal((await issue()).operationStatus,'pending');
+    assert.equal(f.state().documents.size,1);
   }
 });
 

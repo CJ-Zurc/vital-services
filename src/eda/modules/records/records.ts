@@ -1,6 +1,6 @@
 import { episodeEvidence } from './episode-evidence.js';
 import { hasLiveAppointmentAccess,requireLiveAppointmentAccess } from '../appointment/appointment-access.js';
-import { signingSnapshot,signatureDate } from "./signing.js";
+import { signingSnapshot } from "./signing.js";
 import { randomUUID } from "node:crypto";
 import type { Pool,PoolClient } from "pg";
 import { z } from "zod";
@@ -13,7 +13,7 @@ import { assertPaperwork,assertRecordsIdle,assignedDoctor,currentPaid,medicalCon
 import { recordsCommand } from "./commands.js";
 import { certificateData,documentPrepare,prescriptionData,snapshotPrepare,type RecordsConfig,type RecordsWorkflowRow } from "./contracts.js";
 import { clinicalHash,protectPayload,unprotectPayload } from "./protection.js";
-import { verifyEhrEvidence,verifyMedicineClassifications } from "./ehr-evidence.js";
+import { verifyEhrEvidence,verifyMedicineClassifications,validatePrescriptionSelections } from "./ehr-evidence.js";
 import { createRecordsCollections } from './collection-reads.js';
 import { publicDocument } from './document-view.js';
 
@@ -152,6 +152,7 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
     async prepareDocument(actor:Actor,meta:AppointmentCommand,body:unknown){const input=documentPrepare.parse(body);const data=input.kind==="prescription"?prescriptionData.parse(input.data):certificateData.parse(input.data);
       return mutate(actor,"document.prepare",input.appointmentId??input.patientId??input.patientAuthId!,meta,{...input,data},async tx=>{
         await workflowLock(tx,input.workflowId);
+        if (input.kind === "prescription") validatePrescriptionSelections(prescriptionData.parse(data).lines);
         const doctor=await membership(tx,actor,"doctor");
         const resolved=input.patientId??(await tx.query<{userId:string}>('SELECT "userId" FROM vital_patients WHERE "authId"=$1',[input.patientAuthId])).rows[0]?.userId;
         if(!resolved)recordsDenied(404,'RECORDS_PATIENT_NOT_FOUND');
@@ -199,10 +200,8 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
         }else if(correction.correctionReason)recordsDenied(400,'DOCUMENT_CORRECTION_TARGET_REQUIRED');
         const id=randomUUID(),assetId=randomUUID(),issuedAt=new Date(clock()),accessCode=(w.kind==="prescription"?"VITAL-RX-":"VITAL-MC-")+id.toUpperCase();
         if(!signing)recordsDenied(409,'SIGNING_PROFILE_REQUIRED');
-        const currentSignature=(await tx.query('SELECT "signatureAssetId","s2License","s2ValidFrom"::text AS "s2ValidFrom","s2ValidUntil"::text AS "s2ValidUntil" FROM vital_doctors WHERE "authId"=$1 FOR UPDATE',[actor.authId])).rows[0];
-        if(currentSignature?.signatureAssetId!==signing.signatureAssetId||currentSignature.s2License!==signing.s2License||(!currentSignature.s2ValidFrom||signatureDate(currentSignature.s2ValidFrom)!==signing.s2ValidFrom)||(!currentSignature.s2ValidUntil||signatureDate(currentSignature.s2ValidUntil)!==signing.s2ValidUntil))recordsDenied(409,'SIGNING_PROFILE_CHANGED');
-        const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).format(issuedAt);
-        if(w.kind==='prescription'&&(data as {lines:{isControlled:boolean}[]}).lines.some(line=>line.isControlled)&&(today<signing.s2ValidFrom||today>signing.s2ValidUntil))recordsDenied(409,'S2_VALIDITY_REQUIRED');
+        const currentSignature = (await tx.query('SELECT "signatureAssetId" FROM vital_doctors WHERE "authId"=$1 FOR UPDATE', [actor.authId])).rows[0];
+        if (currentSignature?.signatureAssetId !== signing.signatureAssetId) recordsDenied(409, 'SIGNING_PROFILE_CHANGED');
         if(!parties)recordsDenied(503,'RECORDS_PARTIES_REQUIRED');
         const doctor=(await tx.query<{prcLicense:string|null}>(`SELECT "prc_license" AS "prcLicense" FROM vital_doctors WHERE "userId"=$1 AND "authId"=$2 FOR UPDATE`,[w.doctorId,actor.authId])).rows[0];
         if(!doctor?.prcLicense?.trim())recordsDenied(409,'SIGNING_PROFILE_REQUIRED');

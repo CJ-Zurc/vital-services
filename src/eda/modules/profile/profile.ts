@@ -240,7 +240,7 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
       ...(s2ValidUntil !== undefined && { s2ValidUntil: s2ValidUntil === null ? null : new Date(s2ValidUntil + "T00:00:00Z") }),
       changedAt: new Date(),
     };
-    if (input.isDoctorOnboardingComplete || input.s2License !== undefined || s2ValidFrom !== undefined || s2ValidUntil !== undefined) {
+    if (input.s2License !== undefined || s2ValidFrom !== undefined || s2ValidUntil !== undefined) {
       if ([license, from, until].some(value => value != null) && (!license?.trim() || !from || !until)) {
         throw new DomainError(400, "PROFILE_S2_INCOMPLETE", "Enter the PDEA S-2 number and both validity dates.");
       }

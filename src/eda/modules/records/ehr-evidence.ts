@@ -11,12 +11,33 @@ export const evidenceClaims=z.object({kind:z.enum(["snapshot","treatment"]),work
   medicineClassifications:classifications.optional(),
   iss:z.literal("uhse-ehr"),aud:z.literal("vital-services.records"),iat:z.number().int(),exp:z.number().int(),jti:z.uuid() }).strict();
 export type EhrEvidence = z.infer<typeof evidenceClaims>;
-export function verifyMedicineClassifications(lines:readonly {medicineId?:string|null;isControlled:boolean}[],claims:EhrEvidence){
-  const ids=new Set(lines.flatMap(line=>line.medicineId?[line.medicineId]:[]));
-  const rows=claims.medicineClassifications??[];
-  const catalog=new Map(rows.map(row=>[row.medicineId,row.isControlled]));
-  if(catalog.size!==ids.size||[...ids].some(id=>!catalog.has(id))||lines.some(line=>line.medicineId&&catalog.get(line.medicineId)&&!line.isControlled))
-    throw new DomainError(409,'RECORDS_MEDICINE_CLASSIFICATION_CHANGED','Refresh the medicine catalog and review the prescription.');
+type MedicineSelection = {
+  medicineId?: string | null;
+  medicineName: string;
+  isControlled: boolean;
+  brandName?: string | null;
+};
+
+export function validatePrescriptionSelections(lines: readonly MedicineSelection[]) {
+  const selections = new Map<string, string>();
+  for (const line of lines) {
+    const id = line.medicineId?.toLowerCase();
+    const prior = id ? selections.get(id) : undefined;
+    if (!id || line.isControlled || line.brandName ||
+      (prior && prior !== line.medicineName)) {
+      throw new DomainError(409, "RECORDS_MEDICINE_CLASSIFICATION_CHANGED", "Select a non-controlled medicine from the catalog.");
+    }
+    selections.set(id, line.medicineName);
+  }
+  return selections;
+}
+
+export function verifyMedicineClassifications(lines: readonly MedicineSelection[], claims: EhrEvidence) {
+  const selections = validatePrescriptionSelections(lines);
+  const rows = claims.medicineClassifications ?? [];
+  if (selections.size !== rows.length || rows.some(row => row.isControlled || !selections.has(row.medicineId))) {
+    throw new DomainError(409, "RECORDS_MEDICINE_CLASSIFICATION_CHANGED", "Refresh the medicine catalog and review the prescription.");
+  }
 }
 export function verifyEhrEvidence(token:string,config:EhrEvidenceConfig,expected:Pick<EhrEvidence,"kind"|"workflowId"|"actorAuthId"|"patientId"|"payloadHash"> & {caseId?:string|null},now=Math.floor(Date.now()/1000)) {
   try{
