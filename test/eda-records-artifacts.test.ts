@@ -277,12 +277,14 @@ test('Capstone inspection validates real images and PDFs without reading ClamAV 
 });
 
 test('Capstone artifact processing publishes validated attachments and both branded signed clinical PDFs without antivirus',{skip:!regularFont||!boldFont},async()=>{
-  for(const kind of ['upload','prescription','medical-certificate'] as const){
+  for(const kind of ['upload','prescription','medical-certificate','historical-prescription'] as const){
     const f=artifactFixture(await png());f.dependencies.scanner=createFileInspector(()=>{throw new Error('No ClamAV');},'capstone-validation-only',()=>now);
     if(kind==='upload')await f.upload();else{
-      f.job.kind=kind;f.job.input=undefined;f.dependencies.fonts={regularPath:regularFont!,boldPath:boldFont!};
-      const signature=await png(),signing={templateVersion:'bgh-capstone-v1',signatureBase64:signature.toString('base64'),signatureHash:sha256(signature),s2License:'DEMO-S2',s2ValidFrom:'2026-01-01',s2ValidUntil:'2027-01-01'},retrievalUrl='https://vital.example.test/documents/prescription/'+randomUUID();
-      f.dependencies.decryptCanonicalData=async()=>kind==='prescription'?{kind,data:{...base,...signing,lines:base.lines.map(line=>({...line,isControlled:true})),retrievalUrl}}:{kind,data:{...signing,accessCode:'MC-DEMO',patientName:'Synthetic Patient',doctorName:'Synthetic Doctor',doctorLicense:'DEMO-PRC',issuedAt:base.issuedAt,purpose:'Capstone demonstration',diagnosis:'Synthetic finding'}};
+      const documentKind=kind==='historical-prescription'?'prescription':kind;
+      f.job.kind=documentKind;f.job.input=undefined;f.dependencies.fonts={regularPath:regularFont!,boldPath:boldFont!};
+      const signature=await png(),signing={templateVersion:'bgh-capstone-v1',signatureBase64:signature.toString('base64'),signatureHash:sha256(signature)},retrievalUrl='https://vital.example.test/documents/prescription/'+randomUUID();
+      const historical=kind==='historical-prescription'?{s2License:'DEMO-S2',s2ValidFrom:'2026-01-01',s2ValidUntil:'2027-01-01'}:{};
+      f.dependencies.decryptCanonicalData=async()=>documentKind==='prescription'?{kind:documentKind,data:{...base,...signing,...historical,lines:base.lines.map(line=>({...line,isControlled:kind==='historical-prescription'})),retrievalUrl}}:{kind:documentKind,data:{...signing,accessCode:'MC-DEMO',patientName:'Synthetic Patient',doctorName:'Synthetic Doctor',doctorLicense:'DEMO-PRC',issuedAt:base.issuedAt,purpose:'Capstone demonstration',diagnosis:'Synthetic finding'}};
     }
     f.failPublication();await f.worker.runOnce();assert.equal(f.published(),undefined);assert.ok(f.job.prepared);const originalHash=f.job.prepared.contentHash;
     await f.worker.runOnce();const publication=f.published();assert.ok(publication,f.rejected());

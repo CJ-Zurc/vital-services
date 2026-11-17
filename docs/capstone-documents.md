@@ -30,19 +30,16 @@ No public Profile endpoint returns reusable signature bytes.
 
 Existing Records prepare/evidence/issue workflows retain membership, assignment,
 consent, payment, appointment version and paperwork-window checks. Commands require
-`signingConfirmed:true`. Each prescription line requires `isControlled:boolean`
-and a generic `medicineName`; brand, strength and form are optional. Classification
-uses EHR's `is_controlled` as its minimum. Clinicians may additionally mark other
-or free-text medicines controlled, but cannot clear a controlled catalog entry.
-Classification is never inferred from the name. Existing
-dosage, frequency, route, duration, quantity and instructions fields are retained.
+PRC, a saved prescriber signature and explicit signing confirmation. Every
+prescription line needs an EHR medicine ID, its catalog name from the active catalog. Only entries marked non-controlled can be issued. Strength,
+form, dosage, frequency, route, duration, quantity and instructions remain editable.
 
 Encrypted canonical documents use `payloadSchemaVersion:2` and
 `templateVersion:bgh-capstone-v1`. Patient/prescriber identity, issue time, PRC,
-S2, signature bytes/hash/asset ID and clinical content are snapshotted at issue.
+signature bytes/hash/asset ID and clinical content are snapshotted at issue.
 `contentHash` covers the canonical issuance fields before adding the hash itself.
 PDFs use only that snapshot. Profile/signature edits cannot change prior output.
-Old issued payloads continue to render with the legacy template.
+Historical documents render using their original templates and S-2 values when present.
 
 Corrections specify `supersedesId` and a nonempty `correctionReason`. The previous
 document must have the same patient, doctor, appointment and kind. Locking and a
@@ -92,18 +89,10 @@ Core migration `202610200001_signed_documents` creates signature versions, adds 
 and document correction fields, removes doctor title and resets existing doctors
 to onboarding-incomplete without manufacturing credentials. Integrations migration
 `202610200001_payment_acknowledgments` adds snapshot/PDF/hash columns to invoices.
-Controlled line snapshots remain in the protected Records payload. EHR migration
-`202611160001` adds the catalog boolean with default false. Treatment receipts
-optionally include signed `medicineClassifications`, requested by the BFF using
-at most 50 distinct `medicineIds`. Services requires exact ID coverage for new
-catalog-backed prescriptions and rejects missing evidence or a controlled-to-
-ordinary downgrade with `RECORDS_MEDICINE_CLASSIFICATION_CHANGED` (409).
-Duplicate signed IDs are invalid evidence. Free-text lines retain clinician
-classification. Existing S2 date checks follow classification verification.
-Catalog IDs on new lines must be UUIDs (empty/null means free text).
-Deploy the EHR migration/API first, then compatible Services and Web. During
-rollout, old clients missing required classifications fail closed. No VITAL
-database migration, historical-document rewrite or credential is added.
+VITAL Web validates the selected IDs and names against the current EHR catalog.
+Services verifies signed EHR classifications for the exact ID set across
+appointment and patient-record issuance and corrections. A missing, controlled
+or unavailable line blocks issuance. Deploy compatible VITAL Services and Web together.
 
 Use matching API/worker/tools/Web images for this coordinated contract release.
 The existing deployment runner acquires the lock, selects images, provisions scoped

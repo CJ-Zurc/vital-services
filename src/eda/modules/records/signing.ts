@@ -10,8 +10,7 @@ import type { FileInspector } from './inspection.js';
 import { verifyQrScan } from '../profile/profile-qr.js';
 
 export const signatureInput = z.object({ base64: z.string().min(1).max(44000), mimeType: z.enum(['image/png','image/jpeg']) }).strict();
-export type SigningSnapshot = { signatureBase64: string; signatureHash: string; signatureAssetId: string; s2License: string; s2ValidFrom: string; s2ValidUntil: string };
-export const signatureDate=(value:string|Date)=>typeof value==='string'?z.iso.date().parse(value):value.toISOString().slice(0,10);
+export type SigningSnapshot = { signatureBase64: string; signatureHash: string; signatureAssetId: string };
 const binding = (owner: string, id: string) => ({ patientId: owner, resourceId: id, schema: 'doctor-signature.v1' });
 export function createDoctorSigning(pool: Pool, keyring: RecordsKeyring, scanner: FileInspector) {
   async function own(actor: Actor, write = false) {
@@ -75,9 +74,9 @@ export function createDoctorSigning(pool: Pool, keyring: RecordsKeyring, scanner
 }
 
 export async function signingSnapshot(pool: Pick<Pool,'query'>,keyring:RecordsKeyring,doctorAuthId:string):Promise<SigningSnapshot> {
-  const row=(await pool.query('SELECT d."s2License",d."s2ValidFrom"::text AS "s2ValidFrom",d."s2ValidUntil"::text AS "s2ValidUntil",s.id,s."contentHash",s."protectedPayload" FROM vital_doctors d JOIN doctor_signatures s ON s.id=d."signatureAssetId" AND s."doctorAuthId"=d."authId" WHERE d."authId"=$1',[doctorAuthId])).rows[0];
-  if(!row||!row.s2License||!row.s2ValidFrom||!row.s2ValidUntil)throw new DomainError(409,'SIGNING_PROFILE_REQUIRED','Complete your S2 credentials and signature.');
+  const row=(await pool.query('SELECT s.id,s."contentHash",s."protectedPayload" FROM vital_doctors d JOIN doctor_signatures s ON s.id=d."signatureAssetId" AND s."doctorAuthId"=d."authId" WHERE d."authId"=$1',[doctorAuthId])).rows[0];
+  if (!row) throw new DomainError(409, 'SIGNING_PROFILE_REQUIRED', 'Save your prescriber signature.');
   const payload=unprotectPayload<{base64:string}>(keyring,binding(doctorAuthId,row.id),row.protectedPayload);
   if(sha256(Buffer.from(payload.base64,'base64'))!==row.contentHash)throw new DomainError(503,'SIGNATURE_HASH_INVALID','Signature unavailable.');
-  return {signatureBase64:payload.base64,signatureHash:row.contentHash,signatureAssetId:row.id,s2License:row.s2License,s2ValidFrom:signatureDate(row.s2ValidFrom),s2ValidUntil:signatureDate(row.s2ValidUntil)};
+  return {signatureBase64:payload.base64,signatureHash:row.contentHash,signatureAssetId:row.id};
 }

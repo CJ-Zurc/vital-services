@@ -808,7 +808,7 @@ test("doctor onboarding and profile updates accept absent S-2 and clear the comp
   Object.assign(stub.rows().vitalDoctor[0]!, { specialty: "Cardiology", departmentExternalId: "trace-cardio" });
   const profile = createProfileModule(stub.db, createProfileCommandGuard());
   const absent = { s2License: null, s2ValidFrom: null, s2ValidUntil: null };
-  const input = { ...doctorOnboarding, ...absent };
+  const { s2License: _license, s2ValidFrom: _from, s2ValidUntil: _until, ...input } = doctorOnboarding;
   const workflowId = randomUUID();
   await profile.workflows.prepare(actor("doctor"), { workflowId, kind: "doctor.onboarding", input }, metadata());
   await profile.workflows.commit(actor("doctor"), workflowId, { input, receipt: receipt("doctor.onboarding", workflowId, input) }, metadata());
@@ -821,7 +821,7 @@ test("doctor onboarding and profile updates accept absent S-2 and clear the comp
   for (const key of Object.keys(absent)) assert.equal(stub.rows().vitalDoctor[0]![key], null);
 });
 
-test('S6 onboarding denies missing signature, missing S2, reversed dates and removed honorific',async()=>{
+test('S6 onboarding denies missing signature, partial legacy credentials, reversed dates and removed honorific',async()=>{
  const stub=databaseStub();await createProfileModule(stub.db,permit).materialize(actor('doctor'));
  Object.assign(stub.rows().vitalDoctor[0]!, { specialty: "Cardiology", departmentExternalId: "trace-cardio" });
  const profile=createProfileModule(stub.db,createProfileCommandGuard());
