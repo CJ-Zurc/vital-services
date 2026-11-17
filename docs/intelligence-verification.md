@@ -116,3 +116,11 @@ The test refuses other database names and non-loopback hosts. It creates synthet
 Clinical reviewers must author and approve sourced routing criteria with verified TRACE IDs. The checked-in artifact remains unreviewed and contains no hospital routing rules.
 
 Staging must still exercise complete authenticated browser journeys, Gateway expiry and token rotation, concurrent slot booking and retries, doctor-approved EHR handoff, failure injection, production runtime privileges, shared AIMS heavyweight-work coordination and sustained load at the configured Node/Python limits. Local tests cover selected contracts; they do not establish clinical accuracy or complete staging acceptance. Do not switch legacy analytics traffic or enable the patient journey before these gates pass.
+# Staging prerequisite repairs (2026-11-17)
+
+The first real NLP image build exposed directory settings typed as strings even
+though inference joins them with `/`. They are now `Path` settings, including
+environment overrides. Asset-output guards use unittest so the Docker smoke
+runner does not require an undeclared pytest dependency. The actual model tests
+remain mandatory; they are not skipped to activate the feature. Root source
+bundles explicitly retain the tracked, licensed BODHI vocabulary.
