@@ -4,6 +4,7 @@ import { DomainError, type Actor } from "../contracts/actor.js";
 import type { createPaymentModule, PaymentMetadata, PaymentResult } from "../modules/payment/payment.js";
 
 export type PaymentModule = ReturnType<typeof createPaymentModule> & {
+  webhook?: ReturnType<typeof import('../modules/payment/paymongo-webhook.js').createPaymongoWebhook>;
   acknowledgment?: ReturnType<typeof import('../modules/payment/acknowledgments.js').createAcknowledgments>;
   receipt?: ReturnType<typeof import('../modules/payment/payment-receipts.js').createPaymentReceipts>;
 };
@@ -35,6 +36,11 @@ export function createPaymentRouter(payment?: PaymentModule) {
   router.get('/appointments/:appointmentId/receipt', receipt(false));
   router.get('/appointments/:appointmentId/receipt/file', receipt(true));
   router.get("/appointments/:appointmentId", handle((actor, id) => payment!.read(actor, id)));
+  router.post("/provider-webhook", handle((actor, _id, metadata, body) => {
+    mutation(metadata);
+    if (!payment?.webhook) throw new DomainError(503, "PAYMENT_WEBHOOK_DISABLED", "Webhook is unavailable.");
+    return payment.webhook(actor, body);
+  }));
   router.post("/appointments/:appointmentId/checkout", handle((actor, id, metadata, body) => {
     empty.parse(body); return payment!.checkout(actor, id, mutation(metadata));
   }));

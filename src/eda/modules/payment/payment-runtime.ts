@@ -6,6 +6,7 @@ import { createBillingAuthority } from "../appointment/appointment-billing.js";
 import { createPaymentModule } from "./payment.js";
 import { createPaymongoProvider } from "./payment-provider.js";
 import { createPaymentStore } from "./payment-store.js";
+import { createPaymongoWebhook } from "./paymongo-webhook.js";
 import { createPaymentAssociation } from "./payment-association.js";
 import { createRescheduleAuthority } from "../appointment/appointment-saga-authority.js";
 
@@ -24,6 +25,7 @@ export function paymentRuntime(databases: { corePool: Pool; integrationsPool: Po
   const fonts = {regularPath:environment.VITAL_RECORDS_FONT_REGULAR_FILE??'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',boldPath:environment.VITAL_RECORDS_FONT_BOLD_FILE??'/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'};
   return {
     ...module,
+    webhook: createPaymongoWebhook(databases.integrationsPool, environment),
     acknowledgment: createAcknowledgments(databases.integrationsPool, billing, fonts),
     receipt: createPaymentReceipts(databases.integrationsPool, billing, fonts, acknowledgmentNames(environment)),
   };
