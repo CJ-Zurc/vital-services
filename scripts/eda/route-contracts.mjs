@@ -226,7 +226,9 @@ const reviewedHashes = Object.freeze({
   'lib/eda/messaging-paths.ts': '320185fde0904df6ac25828bebe20dd3a2a126138eac68b0980d5c7988dcced5',
   'lib/eda/messaging-route-policy.ts': 'f8fe5c61d6c5f7105e0fe9241816258bc5a63fb27ef37708831e7cef332b5e94',
   'lib/eda/messaging.ts': '1ce8421f0dbd074d669eaf85d5ee119f2a98cddcfd62efb74e9b9c8b5ceb9cd9',
-  'lib/eda/mode-policy.ts': '5cbec115a4c6b7b9407bb882093860cd234e7779aedc9819d82411511d0af947',
+  'app/api/webhooks/paymongo/route.ts': '5fafa793573492d260e044bd08538aa6319b0a14c99ab97ef88f6876af62e6df',
+  'tests/paymongo-webhook.test.ts': '34a99551283f302c713ba57ab2b16ddda5d0b82011a4496e854950e7a5d2cb7a',
+  'lib/eda/mode-policy.ts': '11ffca0577ff299e87972624d4c1a15d25d61d3775cb2d85bea5592378a2def8',
   'lib/eda/patient-onboarding.ts': 'bf14670643dc52a6693e4bb8ea452b247b43834246196f28554d9686673e092d',
   'lib/eda/patient-record-notice.ts': '966b336c56669936b94c6470a6598802335f0509f562e2373142f841a97db35c',
   'lib/eda/patient-workflow.ts': '81de5bf45249c1d71da5f7df9fda58866fcbd3a998cc5ca50e4b01b277533f4b',
@@ -257,7 +259,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/request-body.ts': '7a78782d69c435e689b110eee50541ed73795c6bfcdb2aaa43ca6da10c71b0d5',
   'lib/eda/stream-bff.ts': '2fa4d988f94763e0876d4b4995c843c155846c1a61dd96ad537fed6ed01e32c7',
   'lib/eda/stream-transport.ts': 'ada0197f643603eb27a9659728a2629b0301ea96e81477afa5b737730037fd5d',
-  'lib/eda/transport.ts': 'c939bbadd9fc03b9b8f6f14f620f1cbaced84059bb26cc8d01206f3a0c3db045',
+  'lib/eda/transport.ts': 'd79d30f899f10be442dce1d2d357e98766b43d1d23f4c03b98c28286cba58355',
   'app/api/internal/vital/readiness/route.ts': 'b7ffb181f5babb03300373584259088eb10b1d57494b09f579d93aa5183a0877',
   'tests/eda-readiness.test.ts': 'a37c0db033d0143465be8faf2472406e4a4ed75cb86000c6947ee1591cb2c16a',
   'lib/eda/video-bff.ts': '81021e8f76361365a7ebb5432b1242fffc5012b14196020f701fe732ee1811bd',
@@ -353,6 +355,11 @@ const reviewedHashes = Object.freeze({
 });
 
 const families = {
+  paymongoWebhook: { owner: 'Services Payment', files: ['lib/eda/transport.ts'], tests: ['paymongo-webhook.test.ts'],
+    request: 'PayMongo sandbox signature and raw JSON up to 32 KiB; Web relays via signed mTLS',
+    response: 'JSON acknowledgment after verified receipt and durable reconciliation scheduling',
+    statuses: [200,400,401,403,404,413,415,503], deps: ['PayMongo sandbox','Integrations Payment reconciliation'],
+    flags: ['VITAL_EDA_ENABLED','VITAL_EDA_PAYMENT_ENABLED','VITAL_PAYMONGO_WEBHOOK_ENABLED'] },
   audit: {owner:'BGH Audit through Gateway; Services durable access intents',entry:'lib/eda/audit-bff.ts',dispatch:'targetAudit',
     files:['lib/eda/profile.ts','lib/eda/transport.ts','lib/gateway.ts'],tests:['audit-bff.test.ts'],
     request:'Current VITAL admin membership, fixed system=vital, safe exact filters; export same-origin POST with explicit hospital dates, at most31 days and10000 events',
@@ -587,6 +594,7 @@ GET /api/doctor/records/files/[assetId]/file`);
 add('recordsIntegration', `
 GET,POST /integrations/v1/prescriptions
 GET,POST /integrations/v1/medical-certificates`);
+add('paymongoWebhook', 'POST /api/webhooks/paymongo');
 add('video', `
 GET,DELETE /api/doctor/google-meet
 POST /api/doctor/google-meet/start
@@ -961,6 +969,7 @@ export function reviewRouteContract(route, options = {}) {
     try {
       const environment = Object.fromEntries(['VITAL_EDA_ENABLED', 'VITAL_EDA_APPOINTMENT_ENABLED', 'VITAL_EDA_COMPLETION_ENABLED', 'VITAL_EDA_PAYMENT_ENABLED',
         'VITAL_EDA_RECORDS_ENABLED', 'VITAL_EDA_VIDEO_ENABLED', 'VITAL_EDA_MESSAGING_ENABLED', 'VITAL_EDA_MESSAGE_HOLDS_ENABLED', 'VITAL_EDA_SSE_ENABLED', 'VITAL_EDA_PROFILE_QR_ENABLED','VITAL_AI_ENABLED','VITAL_AI_PATIENT_ENABLED','VITAL_AI_SANDBOX_ENABLED','VITAL_AI_ANALYTICS_ENABLED'].map(name => [name, 'true']));
+      environment.VITAL_PAYMONGO_WEBHOOK_ENABLED = 'true';
       const ingress = rule.family === 'readiness' ? null : ingressProbe(examples(path), method, read, environment);
       frontDoor = rule.family === 'readiness'
         ? { file: source, review: 'static direct-probe classification; not a browser route or deployment claim',
@@ -978,7 +987,8 @@ export function reviewRouteContract(route, options = {}) {
     const foreign = ['portal', 'recordsIntegration'].includes(rule.family);
     const publicRoute = rule.family === 'address' || rule.family === 'registration' || rule.family === 'auth' && !/\/me\/|\/password\/change$|\/picture$|\/credentials$/.test(path);
     const bearerOnly = ['/api/auth/me/password', '/api/auth/password/change'].includes(path);
-    const authentication = rule.family === 'readiness' ? 'Constant-time X-Gateway-Secret check at Web; verified mTLS to Services; no user or actor assertion'
+    const authentication = rule.family === 'paymongoWebhook' ? 'PayMongo sandbox signature verified by Services after signed mTLS relay'
+      : rule.family === 'readiness' ? 'Constant-time X-Gateway-Secret check at Web; verified mTLS to Services; no user or actor assertion'
       : foreign ? 'Gateway-secret validated X-User-* source and source expiry; signed scoped Services delegation; no local-role impersonation'
       : internal ? 'directional internal service/key before scoped signed backend request'
         : ['retired', 'worker'].includes(rule.family) ? 'no session authority claimed; explicit unavailable response'
@@ -993,7 +1003,7 @@ export function reviewRouteContract(route, options = {}) {
     if (rule.family === 'stream') owner = path.includes('/messages/') ? 'Services Messaging SSE' : 'Services Appointment SSE';
     const row = { method, publicPath: path, family: rule.family, targetOwner: owner,
       caller: rule.family === 'readiness' ? 'Gateway server readiness probe; not browser' : foreign ? 'Gateway-forwarded foreign portal/staff' : internal ? 'internal service, not browser' : rule.family === 'video' && path.endsWith('/callback') ? 'browser OAuth callback navigation' : 'Web browser/BFF consumer',
-      authentication, requiredRole: roleFor(path, method, rule.family),
+      authentication, requiredRole: rule.family === 'paymongoWebhook' ? 'PayMongo sandbox provider' : roleFor(path, method, rule.family),
       dispatch: { wrapper: source, handlerSource: entry?.file ?? null, implementation: binding?.file ?? null, symbol: dispatch ?? 'local explicit response', policy: dispatchPolicy, frontDoor },
       requestDto: { summary: requestDetails[path] ?? family.request, staticValidatorReferences: facts.validators, note: 'References include shared family branches, not proof every branch runs for this method.' },
       responseDto: { summary: family.response, schemaFiles: files.filter(file => /dto|composition|compatibility/.test(file)) },

@@ -17,3 +17,13 @@ acceptance must be recorded against the deployed image IDs.
 
 Staging payment/provider and reconciliation flags remain disabled. Payment-dependent
 behavior is verified only in an isolated harness; no simulated live feature is exposed.
+
+## PayMongo sandbox webhook
+
+VITAL Web relays POST /api/webhooks/paymongo over signed mTLS to the
+Services payment owner. Set VITAL_PAYMONGO_WEBHOOK_ENABLED on Web and API
+only after registration and mount the endpoint secret in the API's existing
+read-only config directory. Set VITAL_PAYMONGO_WEBHOOK_SECRET_FILE to that
+file. Services verifies the original body and the test-mode signature before
+recording a checkout event and scheduling the existing worker reconciliation.
+The worker verifies the provider checkout before committing financial state.

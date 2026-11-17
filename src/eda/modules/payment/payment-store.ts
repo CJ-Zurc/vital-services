@@ -137,25 +137,45 @@ function postgresTx(client: PoolClient): PaymentTx {
     },
   };
 }
+async function paymentTransaction<T>(pool: Pool, lineage: string, execute: (client: PoolClient) => Promise<T>) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`payment:${lineage}`]);
+    const frozen = await client.query(`SELECT "operationId" FROM payment_association_holds WHERE "billingLineageId"=$1 AND state='prepared' LIMIT 1`, [lineage]);
+    if (frozen.rows.length) throw new DomainError(409, "PAYMENT_ASSOCIATION_FROZEN", "Payment is preparing an appointment transfer.");
+    const result = await execute(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) { await client.query("ROLLBACK"); throw error; }
+  finally { client.release(); }
+}
+
+export async function schedulePaymongoWebhook(pool: Pool, checkoutId: string, eventId: string) {
+  const { rows: [payment] } = await pool.query<{ billingLineageId: string }>(
+    `SELECT "billingLineageId" FROM payments WHERE "checkoutSessionId"=$1 AND "providerMode"='sandbox'`, [checkoutId]);
+  if (!payment) return;
+  await paymentTransaction(pool, payment.billingLineageId, async client => {
+    await client.query(`
+      UPDATE payments SET "latestWebhookEventId"=$2, "nextReconcileAt"=CASE
+        WHEN "paidAt" IS NULL AND "refundId" IS NULL AND "reconcileFailures"=0
+          AND status IN ('pending', 'unpaid', 'failed')
+          AND "reviewCode" IS DISTINCT FROM 'RECONCILIATION_EXHAUSTED'
+          AND ("reconcileLeaseUntil" IS NULL OR "reconcileLeaseUntil"<=timezone('UTC', NOW()))
+        THEN LEAST("nextReconcileAt", GREATEST(timezone('UTC', NOW()), "lastReconciledAt" + INTERVAL '15 seconds'))
+        ELSE "nextReconcileAt" END
+      WHERE "checkoutSessionId"=$1 AND "providerMode"='sandbox' AND "latestWebhookEventId" IS NULL
+    `, [checkoutId, eventId]);
+  });
+}
+
 export function createPaymentStore(pool: Pool): PaymentStore {
   const read = async (sql: string, values: unknown[]) => {
     const result = await pool.query(sql, values);
     return result.rows.map(row => normalize<PaymentRow>(row)!);
   };
   return {
-    async transaction(lineage, execute) {
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, [`payment:${lineage}`]);
-        const frozen = await client.query(`SELECT "operationId" FROM payment_association_holds WHERE "billingLineageId"=$1 AND state='prepared' LIMIT 1`, [lineage]);
-        if (frozen.rows.length) throw new DomainError(409, "PAYMENT_ASSOCIATION_FROZEN", "Payment is preparing an appointment transfer.");
-        const result = await execute(postgresTx(client));
-        await client.query("COMMIT");
-        return result;
-      } catch (error) { await client.query("ROLLBACK"); throw error; }
-      finally { client.release(); }
-    },
+    transaction: (lineage, execute) => paymentTransaction(pool, lineage, client => execute(postgresTx(client))),
     byAppointment: async id => (await read(`SELECT * FROM payments WHERE "appointmentId"=$1`, [id]))[0] ?? null,
     byId: async id => (await read(`SELECT * FROM payments WHERE id=$1`, [id]))[0] ?? null,
     due: (now, limit) => read(`SELECT * FROM payments WHERE "providerMode"='sandbox' AND "reviewCode" IS DISTINCT FROM 'RECONCILIATION_EXHAUSTED'
