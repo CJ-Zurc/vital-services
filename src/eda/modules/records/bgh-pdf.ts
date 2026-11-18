@@ -85,3 +85,21 @@ export async function createAcknowledgmentPdfBuffer(args:AcknowledgmentPdf,fonts
  doc.moveDown().font('bold').fontSize(18).fillColor(GREEN).text(`TOTAL PAID: PHP ${(args.amountCentavos/100).toFixed(2)}`);doc.moveDown().font('regular').fontSize(10).fillColor('#111827').text('This payment acknowledgment does not replace a BIR-authorized invoice.');if(args.sandbox)doc.moveDown().font('bold').fillColor('#9b1c1c').text('TEST — NO ACTUAL PAYMENT');finish(doc,args.reference,false);return await result;
  }catch(error){doc.destroy();void result.catch(()=>{});throw error;}
 }
+
+export async function bookingAcknowledgmentPdf(args: import('../appointment/booking-acknowledgment.js').BookingSnapshot, fonts: RecordsFontConfig) {
+ const { doc, result } = begin('BOOKING ACKNOWLEDGMENT', new Date(args.issuedAt), fonts);
+ try {
+  field(doc, 'Booking Reference', args.reference);
+  field(doc, 'Patient', args.patientName);
+  field(doc, 'Doctor', args.doctorName);
+  field(doc, 'Consultation', 'Face-to-Face');
+  field(doc, 'Starts', philippineDate(new Date(args.startsAt), true));
+  field(doc, 'Ends', philippineDate(new Date(args.endsAt), true));
+  field(doc, 'Hospital', args.hospital);
+  field(doc, 'Address', args.address);
+  field(doc, 'Issued', philippineDate(new Date(args.issuedAt), true));
+  doc.moveDown().font('regular').fontSize(10).text('Present this booking acknowledgment to hospital staff. Check your appointment in VITAL for its current status and schedule.');
+  finish(doc, args.reference, false);
+  return await result;
+ } catch (error) { doc.end(); throw error; }
+}

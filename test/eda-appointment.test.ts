@@ -1,3 +1,6 @@
+import { createBookingAcknowledgments } from '../src/eda/modules/appointment/booking-acknowledgment.js';
+import { createAppointmentSaga } from '../src/eda/modules/appointment/appointment-saga.js';
+import { existsSync } from 'node:fs';
 import { accessFixtureSql } from './fixtures/appointment-access.js';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -20,7 +23,7 @@ function fixture(){
     scheduledAt:new Date(now+3600000),proposedEndAt:new Date(now+7200000),slotEndsAt:null,scheduleSlotId:null,consultationType:"virtual",sourceAppointmentId:null,
     appointmentKind:"standard",patientRescheduleCount:0,doctorRescheduleCount:0,ehrCaseId:null,doctorConfirmedAt:null,patientConfirmedAt:null,
     completionDeadlineAt:null,paperworkLockedAt:null,completedAt:null,proposalRole:null};
-  let state={row,proposals:new Map<string,AppointmentRow>(),commands:new Map<string,Record<string,unknown>>(),events:[] as Record<string,unknown>[],workflows:new Map<string,Record<string,unknown>>(),logs:[] as unknown[][]};
+  let state={bookingSnapshots:new Map<string,unknown>(),row,proposals:new Map<string,AppointmentRow>(),commands:new Map<string,Record<string,unknown>>(),events:[] as Record<string,unknown>[],workflows:new Map<string,Record<string,unknown>>(),logs:[] as unknown[][]};
   const slot={id:scheduleSlotId,doctorId,slotDate:new Date("2099-01-02T00:00:00Z"),startTime:"23:45",endTime:"01:00",consultationType:"both",isPublished:true};
   let blocked=false,occupied=false,quoted=false; const billingInserts: Array<{sql:string;args:unknown[]}> = [];
   let previous=structuredClone(state);let revoked=false,failOutbox=false,hasProposal=false;
@@ -30,6 +33,17 @@ function fixture(){
     calls.push(sql);
     const privacy=accessFixtureSql(sql,args,state.row);if(privacy)return privacy;
     if(sql==='SELECT pg_notify($1,$2)::text') { assert.equal(args[0],'vital_appointment_events'); const hint=JSON.parse(String(args[1])); assert.deepEqual(Object.keys(hint).sort(),['appointmentId','kind']); assert.equal(hint.kind,'eligibility'); return{rows:[],rowCount:1}; }
+    if(sql.startsWith('SELECT * FROM appointment_booking_acknowledgments')){
+      const snapshot=state.bookingSnapshots.get(String(args[0]));
+      return{rows:snapshot?[{snapshot,reference:'BOOK-TEST',issuedAt:new Date(now),supersededBy:null}]:[],rowCount:snapshot?1:0};
+    }
+    if(sql.startsWith('UPDATE appointment_booking_acknowledgments'))return{rows:[],rowCount:1};
+    if(sql.startsWith('UPDATE appointments SET "associationVersion"')){
+      Object.assign(state.proposals.get(String(args[0]))!,{associationVersion:args[1],patientRescheduleCount:args[2],doctorRescheduleCount:args[3]});
+      return{rows:[],rowCount:1};
+    }
+    if(sql.startsWith('INSERT INTO appointment_booking_acknowledgments')){state.bookingSnapshots.set(String(args[0]),JSON.parse(String(args[2])));return{rows:[],rowCount:1};}
+    if(sql.startsWith('SELECT 1 FROM appointment_booking_acknowledgments'))return{rows:state.bookingSnapshots.has(String(args[0]))?[{exists:1}]:[],rowCount:state.bookingSnapshots.has(String(args[0]))?1:0};
     if(sql==="BEGIN"){previous=structuredClone(state);return{rows:[],rowCount:0};}
     if(sql==="ROLLBACK"){state=previous;return{rows:[],rowCount:0};}
     if(sql==="COMMIT"||sql.includes("pg_advisory_xact_lock"))return{rows:[],rowCount:0};
@@ -57,6 +71,7 @@ function fixture(){
     if(sql.includes("SELECT a.id FROM appointments")&&sql.includes("approved"))return{rows:occupied?[{id:randomUUID()}]:[],rowCount:occupied?1:0};
     if(sql.includes("SELECT id FROM saga_operations")||sql.includes("SELECT id FROM doctor_date_blocks")||sql.includes("SELECT a.id FROM appointments")||sql.includes("SELECT id FROM slot_reservations"))return{rows:[],rowCount:0};
     if(sql.includes("UPDATE appointments SET status=")){const row=state.proposals.get(String(args[0]))??state.row;row.status=String(args[1]);row.version++;return{rows:[{version:row.version}],rowCount:1};}
+    if(sql.startsWith('UPDATE appointments SET "doctorConfirmedAt"=$2,"completedAt"=$2')){state.row.doctorConfirmedAt=args[1] as Date;state.row.completedAt=args[1] as Date;return{rows:[],rowCount:1};}
     if(sql.includes('UPDATE appointments SET "doctorConfirmedAt"')){state.row.doctorConfirmedAt=args[1] as Date;state.row.patientConfirmedAt=args[2] as Date;state.row.completionDeadlineAt=args[3] as Date;state.row.version++;return{rows:[],rowCount:1};}
     if(sql.includes('UPDATE appointments SET "maintenanceDueAt"'))return{rows:[],rowCount:1};
     if(sql.includes('UPDATE appointments SET "expiryProcessedAt"')){state.row.status=String(args[3]);state.row.version++;return{rows:[{version:state.row.version}],rowCount:1};}
@@ -84,7 +99,7 @@ function fixture(){
   const meta=()=>({operationId:randomUUID(),requestHash:"a".repeat(64)});
   const participant={prepare:async()=>{throw new Error("PARTICIPANT_NOT_USED");},abort:async()=>{},finalize:async()=>{}};
   const receipts=new Map<string,VideoPreparationReceipt>();
-  const owners={records:{apply:async(_tx:unknown,_row:unknown,action:string)=>{effects.push(action);},beforeDoctorAcknowledgement:async()=>{}},video:{validate:async()=>{},participant,
+  const owners={bookingNames:async()=>({patientName:"Synthetic Patient",doctorName:"Synthetic Doctor"}),records:{apply:async(_tx:unknown,_row:unknown,action:string)=>{effects.push(action);},beforeDoctorAcknowledgement:async()=>{}},video:{validate:async()=>{},participant,
     prepareWorkflow:async(workflowId:string,selection:VideoSelection)=>{const receipt={workflowId,sourceAppointmentId:id,targetAppointmentId:id,expectedSourceVersion:0,expectedTargetVersion:0,billingLineageId:state.row.billingLineageId,associationVersion:1,selectionHash:selectionHash(selection),resourceId:randomUUID(),resourceVersion:0,freezeToken:randomUUID()};receipts.set(workflowId,receipt);return receipt;},
     finalizeWorkflow:async(workflowId:string)=>{state.workflows.get(workflowId)!.videoProcessingState='finalized';return receipts.get(workflowId)!;}},
     financial:{verifyPaid:async()=>{}}};
@@ -333,4 +348,120 @@ test('patient booking denies missing slot custom overrides and mismatched doctor
  const custom={...body,scheduleSlotId:undefined};
  for(const input of [custom,{...body,startTime:'10:00'},{...body,slotDate:'2099-01-01'},{...body,doctorId:randomUUID()}])await assert.rejects(f.module().book(actor,f.meta(),input));
  assert.ok(!f.calls.some(s=>s.startsWith('INSERT INTO appointments')));
+});
+
+test('face-to-face acceptance confirms without external owners and stores an encrypted booking snapshot once',async()=>{
+  const f=fixture();f.state().row.consultationType='in_person';
+  const module=createAppointmentModule(f.pool,{bookingNames:f.owners.bookingNames},()=>f.now);
+  const meta=f.meta(),actor=f.actor('approve');
+  const input={expectedVersion:0};
+  const result=await module.approveInPerson(actor,f.id,meta,input);
+  assert.equal(result.status,'confirmed');
+  assert.equal(result.operationStatus,'completed');
+  assert.equal(f.state().row.ehrCaseId,null);
+  assert.equal(f.state().bookingSnapshots.size,1);
+  assert.doesNotMatch(JSON.stringify([...f.state().bookingSnapshots.values()]),/Synthetic Patient|Synthetic Doctor/);
+  assert.deepEqual(await module.approveInPerson(actor,f.id,meta,input),result);
+  assert.equal(f.state().bookingSnapshots.size,1);
+  assert.equal(f.effects.length,0);
+  assert.equal(f.billingInserts.length,0);
+  assert.ok(!f.calls.some(sql=>/INSERT INTO (appointment_workflows|consultations|appointment_billing_intents)/.test(sql)));
+});
+
+test('face-to-face acceptance preserves version, conflict and atomic rollback protection',async()=>{
+  for(const scenario of ['stale','conflict','outbox']){
+    const f=fixture();f.state().row.consultationType='in_person';
+    if(scenario==='conflict')f.conflict();
+    if(scenario==='outbox')f.fail();
+    const module=createAppointmentModule(f.pool,{bookingNames:f.owners.bookingNames},()=>f.now);
+    await assert.rejects(module.approveInPerson(f.actor('approve'),f.id,f.meta(),{expectedVersion:scenario==='stale'?9:0}));
+    assert.equal(f.state().row.status,'pending');
+    assert.equal(f.state().bookingSnapshots.size,0);
+  }
+});
+
+test('face-to-face outcome is doctor-only, time bounded, terminal and replay safe',async()=>{
+  for(const kind of ['complete','no-show'] as const){
+    for(const scenario of ['success','patient','early','proposal']){
+      const f=fixture();Object.assign(f.state().row,{consultationType:'in_person',status:'confirmed',
+        scheduledAt:new Date(f.now-3600000),proposedEndAt:new Date(f.now-1)});
+      if(scenario==='early')Object.assign(f.state().row,{scheduledAt:new Date(f.now+3600000),proposedEndAt:new Date(f.now+7200000)});
+      if(scenario==='proposal')f.proposal();
+      const actor=f.actor(kind,scenario==='patient'?'patient':'doctor'),meta=f.meta(),input={expectedVersion:0};
+      const invoke=()=>kind==='complete'?f.module().complete(actor,f.id,meta,input):f.module().noShow(actor,f.id,meta,input);
+      if(scenario!=='success'){await assert.rejects(invoke());assert.equal(f.state().row.status,'confirmed');continue;}
+      const result=await invoke();
+      assert.equal(result.status,kind==='complete'?'completed':'no_show');
+      assert.deepEqual(await invoke(),result);
+      assert.equal(f.state().row.patientConfirmedAt,null);
+      assert.equal(f.billingInserts.length,0);
+      assert.equal(f.effects.length,0);
+    }
+  }
+});
+
+test('face-to-face No-Show waits for the overnight end rather than the start',async()=>{
+  const f=fixture(),interval=slotInterval('2026-11-17','23:00','01:00');
+  Object.assign(f.state().row,{consultationType:'in_person',status:'confirmed',scheduledAt:interval.startsAt,proposedEndAt:interval.endsAt,slotEndsAt:interval.endsAt});
+  const module=createAppointmentModule(f.pool,{},()=>interval.startsAt.getTime()+3600000);
+  await assert.rejects(module.noShow(f.actor('no-show'),f.id,f.meta(),{expectedVersion:0}));
+  assert.equal(f.state().row.status,'confirmed');
+});
+
+test('face-to-face reschedule commits locally, replaces acknowledgment, consumes one quota and replays once',async()=>{
+  for(const role of ['doctor','patient'] as const){
+    const f=fixture();Object.assign(f.state().row,{consultationType:'in_person',status:'confirmed'});
+    const original=structuredClone(f.state().row);
+    const proposal=await f.module().propose(f.actor('reschedule',role),f.id,f.meta(),{
+      expectedVersion:0,reason:'New date',...(role==='patient'?{scheduleSlotId:f.scheduleSlotId}:{slotDate:'2099-01-02',startTime:'09:00',endTime:'10:00'}),
+    });
+    const next=f.state().proposals.get(proposal.id)!;
+    next.proposalRole=role;
+    const acceptingRole=role==='patient'?'doctor':'patient';
+    const saga=createAppointmentSaga(f.pool,{bookingNames:f.owners.bookingNames},()=>f.now);
+    const actor=f.actor('accept-reschedule',acceptingRole,proposal.id),meta=f.meta();
+    const body={expectedVersion:next.version,expectedSourceVersion:original.version};
+    const result=await saga.accept(actor,proposal.id,meta,body);
+    assert.equal(result.operationStatus,'completed');
+    assert.equal(f.state().row.status,'rescheduled');
+    assert.equal(next.status,'confirmed');
+    assert.equal(next.patientRescheduleCount,role==='patient'?1:0);
+    assert.equal(next.doctorRescheduleCount,role==='doctor'?1:0);
+    assert.ok(f.state().bookingSnapshots.has(proposal.id));
+    assert.deepEqual(await saga.accept(actor,proposal.id,meta,body),result);
+    assert.ok(!f.calls.some(sql=>sql.startsWith('INSERT INTO saga_operations')||sql.startsWith('INSERT INTO slot_reservations')));
+  }
+});
+
+test('face-to-face acknowledgment is limited to its parties and PDF rendering retries preserve the accepted booking',async()=>{
+  const f=fixture();f.state().row.consultationType='in_person';
+  await createAppointmentModule(f.pool,{bookingNames:f.owners.bookingNames},()=>f.now)
+    .approveInPerson(f.actor('approve'),f.id,f.meta(),{expectedVersion:0});
+  const fonts={regularPath:'C:/Windows/Fonts/arial.ttf',boldPath:'C:/Windows/Fonts/arialbd.ttf'};
+  const reader=createBookingAcknowledgments(f.pool,fonts);
+  const doctor=f.actor('booking-acknowledgment.read');
+  const patient=f.actor('booking-acknowledgment.read','patient');
+  assert.equal((await reader(patient,f.id)).appointmentId,f.id);
+  assert.equal((await reader(doctor,f.id)).status,'confirmed');
+  await assert.rejects(reader({...doctor,authId:randomUUID()},f.id),statusIs(403));
+  await assert.rejects(createBookingAcknowledgments(f.pool,{regularPath:'missing-font',boldPath:'missing-font'})(doctor,f.id,true));
+  assert.equal(f.state().row.status,'confirmed');
+  if(existsSync(fonts.regularPath)&&existsSync(fonts.boldPath)){
+    const file=await reader(patient,f.id,true);
+    assert.match(Buffer.from(String(file.base64),'base64').toString('ascii',0,8),/^%PDF/);
+    assert.equal(String(file.sha256).length,64);
+  }
+});
+
+test('face-to-face completion never becomes automatic after the virtual paperwork deadline',()=>{
+  const f=fixture();Object.assign(f.state().row,{consultationType:'in_person',status:'confirmed',proposedEndAt:new Date(f.now-2*86400000)});
+  assert.equal(completionDue(f.state().row,f.now),false);
+});
+
+test('pending face-to-face read reveals its mode for acceptance while keeping patient identity masked',async()=>{
+  const f=fixture();f.state().row.consultationType='in_person';
+  const row=await f.module().read(f.actor('read'),f.id);
+  assert.equal(row.consultationType,'in_person');
+  assert.equal(row.patientId,null);
+  assert.equal(row.access.identityUnlocked,false);
 });

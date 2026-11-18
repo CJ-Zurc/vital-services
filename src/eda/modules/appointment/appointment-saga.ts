@@ -1,3 +1,4 @@
+import { saveBookingAcknowledgment } from './booking-acknowledgment.js';
 import { appointmentNotification } from './appointment-notifications.js';
 import { randomUUID,createHash } from "node:crypto";
 import type { Pool } from "pg";
@@ -118,10 +119,27 @@ export function createAppointmentSaga(pool:Pool,owners:AppointmentOwners,clock=D
         await membership(tx,actor);const proposal=await lockAppointment(tx,proposalId);appointmentOwn(actor,proposal);
         if(!proposal.sourceAppointmentId||proposal.version!==input.expectedVersion||!(actor.role==='patient'&&proposal.status==='pending_patient_confirmation'||actor.role==='doctor'&&proposal.status==='pending'))fail("RESCHEDULE_ACCEPT_INVALID");
         const source=await readAppointment(tx,proposal.sourceAppointmentId,true);if(source.version!==input.expectedSourceVersion||!['approved','confirmed'].includes(source.status)||appointmentExpired(source,clock())||appointmentExpired(proposal,clock()))fail("RESCHEDULE_SOURCE_CHANGED");
-        participants();requireOwner(owners.records,"records");
+
         const active=await tx.query(`SELECT id FROM saga_operations WHERE "billingLineageId"=$1 AND status NOT IN ('completed','compensated','cancelled','failed') LIMIT 1`,[source.billingLineageId]);if(active.rows.length)fail("APPOINTMENT_TRANSITION_PENDING");
         await assertCalendarAvailable(tx,source.doctorId,proposal.scheduledAt,proposal.proposedEndAt??proposal.scheduledAt,[source.id,proposal.id]);
         const initiator=proposal.proposalRole;if(!['doctor','patient'].includes(initiator??''))fail("RESCHEDULE_INITIATOR_UNVERIFIED");if(!rescheduleAllowed(source,initiator as 'doctor'|'patient'))fail("RESCHEDULE_LIMIT_REACHED");
+        if(source.consultationType==="in_person"){
+          if(proposal.consultationType!=="in_person")fail("RESCHEDULE_TYPE_CHANGED");
+          const names=requireOwner(owners.bookingNames,"booking_names");
+          await tx.query('UPDATE appointments SET "associationVersion"=$2,"patientRescheduleCount"=$3,"doctorRescheduleCount"=$4 WHERE id=$1',
+            [proposal.id,source.associationVersion+1,source.patientRescheduleCount+(initiator==='patient'?1:0),source.doctorRescheduleCount+(initiator==='doctor'?1:0)]);
+          proposal.associationVersion=source.associationVersion+1;
+          await saveBookingAcknowledgment(tx,proposal,names,new Date(clock()));
+          await tx.query('UPDATE appointment_booking_acknowledgments SET "supersededBy"=$2 WHERE "appointmentId"=$1',[source.id,proposal.id]);
+          await appointmentTransition(tx,source,"rescheduled",actor,meta.operationId,actor.correlationId,null,{replacementAppointmentId:proposal.id,replacementVersion:proposal.version+1},
+            {initiatorRole:initiator,initiatorAuthId:initiator==='doctor'?source.doctorAuthId:source.patientAuthId,acceptedByAuthId:actor.authId,
+             originalStart:source.scheduledAt.toISOString(),originalEnd:(source.slotEndsAt??source.proposedEndAt)?.toISOString()??null,
+             replacementStart:proposal.scheduledAt.toISOString(),replacementEnd:proposal.proposedEndAt?.toISOString()??null});
+          await appointmentTransition(tx,proposal,"confirmed",actor,meta.operationId,actor.correlationId);
+          await appointmentNotification(tx,proposal,actor,meta.operationId,"appointment.rescheduled",initiator==="doctor"?proposal.doctorAuthId:proposal.patientAuthId);
+          return{operationId:meta.operationId,appointmentId:proposal.id,operationStatus:"completed"};
+        }
+        participants();requireOwner(owners.records,"records");
         const id=meta.operationId;const reservationId=randomUUID();
         // Reclaim only uncommitted expired holds while holding the same doctor calendar lock.
         await tx.query(`UPDATE slot_reservations r SET status='released',"releasedAt"=NOW() WHERE r."doctorId"=$1 AND r.status='reserved' AND r."leaseUntil"<=NOW()
@@ -133,7 +151,7 @@ export function createAppointmentSaga(pool:Pool,owners:AppointmentOwners,clock=D
           [id,source.id,proposal.id,actor.authId,actor.role,source.version,proposal.version,source.billingLineageId,source.associationVersion,meta.requestHash,new Date(clock()+300000),actor.correlationId,reservationId,JSON.stringify({initiator})]);
         await participantCommand(tx,{id,actorAuthId:actor.authId,correlationId:actor.correlationId},source,'prepare');
         return{operationId:id,appointmentId:proposal.id,operationStatus:"processing"};
-      });await advance(response.operationId);return response;
+      });if(response.operationStatus!=="completed")await advance(response.operationId);return response;
     },
     async status(actor:Actor,id:string){requireScope(actor,"appointments.operation.read",id);
       if(actor.role==='admin'){

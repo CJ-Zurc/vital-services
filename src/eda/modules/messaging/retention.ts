@@ -11,7 +11,7 @@ export interface MessageRetentionInput {
   lastMessageAt: Date | null; legalHoldAt: Date | null;
 }
 export function messageExpiryDate(input: MessageRetentionInput): Date | null {
-  if (input.legalHoldAt || !["completed", "cancelled", "rescheduled"].includes(input.status)) return null;
+  if (input.legalHoldAt || !["completed", "cancelled", "rescheduled", "no_show"].includes(input.status)) return null;
   const closure = input.status === "completed" ? input.completedAt : input.updatedAt;
   if (!closure) return null;
   const reference = [closure, input.lastCompletedVisitAt, input.lastMessageAt]

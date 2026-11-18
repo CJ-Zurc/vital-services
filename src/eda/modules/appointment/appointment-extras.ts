@@ -47,10 +47,12 @@ export function createAppointmentExtras(pool: Pool, owners: Pick<AppointmentOwne
         if (row.status !== 'completed') throw new DomainError(400, 'APPOINTMENT_FEEDBACK_INELIGIBLE', 'Review is not available.');
         const blocked = await tx.query(`SELECT 1 FROM saga_operations WHERE "billingLineageId"=$1 AND status NOT IN ('completed','compensated','cancelled','failed') LIMIT 1`, [row.billingLineageId]);
         if (blocked.rows.length) throw new DomainError(409, 'APPOINTMENT_PROCESSING', 'Appointment transfer is pending.');
+        if(row.consultationType!=='in_person'){
         const projection = (await tx.query('SELECT * FROM appointment_payment_projections WHERE "appointmentId"=$1', [row.id])).rows[0];
         if (!owners.financial) throw new DomainError(503, 'APPOINTMENT_FINANCIAL_OWNER_UNAVAILABLE', 'Financial owner required.');
         if (!projection || projection.status !== 'paid' || projection.reviewRequired || projection.billingLineageId !== row.billingLineageId || projection.associationVersion !== row.associationVersion) throw new DomainError(409, 'APPOINTMENT_PAYMENT_UNVERIFIED', 'Verified payment required.');
         await owners.financial.verifyPaid(row, projection);
+        }
         const feedback = (await tx.query(`INSERT INTO feedback (id,"appointmentId","patientId","doctorId","starRating",feedback,"submittedAt")
           VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT ("appointmentId") DO NOTHING RETURNING *`,
         [randomUUID(), row.id, member.userId, row.doctorId, input.rating, null, new Date(clock())])).rows[0];

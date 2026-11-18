@@ -105,7 +105,7 @@ test("EDA Billing first preparation freezes fee and consultation snapshot withou
   assert.equal(f.state.row.status, "approved"); assert.equal(f.state.row.appointmentVersion, 4);
   assert.ok(!f.state.queries.some(sql => /UPDATE appointments|INSERT INTO appointment_logs/.test(sql)));
   f.state.row.consultationType = "in_person";
-  await assert.rejects(f.prepare(), code("BILLING_QUOTE_ASSOCIATION_CONFLICT"));
+  await assert.rejects(f.prepare(), code("IN_PERSON_BOOKING_ONLY"));
 });
 
 test("EDA Billing duplicate command renews only freshly authorized matching current intent", async () => {

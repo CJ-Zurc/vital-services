@@ -36,12 +36,19 @@ export async function issueAppointmentCode(db:DB,row:AppointmentRow,environment:
 }
 export async function revokeAppointmentAccess(db:DB,id:string){await db.query('UPDATE appointment_access SET "revokedAt"=COALESCE("revokedAt",NOW()),digest=NULL,ciphertext=NULL WHERE "appointmentId"=$1',[id]);}
 export async function hasLiveAppointmentAccess(db:DB,row:AppointmentRow,now=Date.now()){
+  if(row.consultationType==="in_person")return false;
   const a=await accessRow(db,row.id);
   const consent=(await db.query(`SELECT accepted FROM consent_records WHERE "patientId"=$1 AND "consentType"='medical_record' AND ("appointmentId" IS NULL OR "appointmentId"=$2) ORDER BY "consentedAt" DESC,id DESC LIMIT 1`,[row.patientId,row.id])).rows[0];
   return Boolean(consent?.accepted&&a&&a.patientId===row.patientId&&a.doctorId===row.doctorId&&a.grantedAt&&!a.revokedAt&&a.grantUntil&&a.grantUntil.getTime()>now&&row.status==='confirmed'&&!row.paperworkLockedAt&&!row.doctorConfirmedAt&&effectiveCompletionDeadline(row).getTime()>now);
 }
 export async function requireLiveAppointmentAccess(db:DB,row:AppointmentRow,now=Date.now()){if(!await hasLiveAppointmentAccess(db,row,now))deny(403,'APPOINTMENT_CODE_REQUIRED');}
 export async function appointmentAccessState(db:DB,row:AppointmentRow,now=Date.now()){
+ if(row.consultationType==="in_person"){
+   const a=await accessRow(db,row.id);
+   const identityUnlocked=!!(await db.query('SELECT 1 FROM appointment_booking_acknowledgments WHERE "appointmentId"=$1',[row.id])).rowCount;
+   return{contractVersion:2 as const,appointmentVersion:row.version,state:'review_only' as const,
+     reference:a?displayReference(a.reference):'Patient #Unavailable',generation:0,ageYears:a?.ageYears??null,sex:a?.sex??null,identityUnlocked};
+ }
  const a=await accessRow(db,row.id),live=await hasLiveAppointmentAccess(db,row,now);
  const closed=['cancelled','rejected','rescheduled','completed'].includes(row.status)||row.paperworkLockedAt||row.doctorConfirmedAt||effectiveCompletionDeadline(row).getTime()<=now;
  const state=live?'unlocked':closed||a?.revokedAt?(a?.grantedAt?'historical_only':'locked'):a&&a.attempts>=5?'locked':row.status==='confirmed'&&a?.digest?'unlock_available':'review_only';
@@ -53,6 +60,7 @@ export function createAppointmentAccess(pool:Pool,read:(db:DB,id:string,lock?:bo
   const input=action==='redeem'?z.object({expectedVersion:z.number().int().nonnegative(),generation:z.number().int().positive(),code:z.string().regex(/^\d{6}$/)}).strict().parse(raw):z.object({}).strict().parse(raw);
   const db=await pool.connect();try{await db.query('BEGIN');
    const row=await read(db,id,true);
+   if(row.consultationType==="in_person")deny(409,"IN_PERSON_BOOKING_ONLY");
    const table=actor.role==='patient'?'vital_patients':actor.role==='doctor'?'vital_doctors':null;
    if(!table||!(await db.query(`SELECT 1 FROM ${table} p JOIN vital_users u ON u.id=p."userId" AND u."authId"=p."authId" WHERE p."authId"=$1 AND u.role=$2`,[actor.authId,actor.role])).rowCount)deny(403,'APPOINTMENT_ACCESS_MEMBERSHIP_REQUIRED');
    if(actor.role==='patient'?actor.authId!==row.patientAuthId:actor.role!=='doctor'||actor.authId!==row.doctorAuthId)deny(403,'APPOINTMENT_ACCESS_OWNER_DENIED');

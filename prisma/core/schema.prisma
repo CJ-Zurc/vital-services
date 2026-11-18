@@ -50,6 +50,7 @@ enum AppointmentKind {
 }
 
 enum AppointmentStatus {
+  no_show
   pending
   approved
   rejected
@@ -389,6 +390,8 @@ model Appointment {
   billingQuotes AppointmentBillingQuote[]
   billingIntents AppointmentBillingIntent[]
   paymentProjection AppointmentPaymentProjection?
+  bookingAcknowledgment BookingAcknowledgment? @relation("BookingDocument")
+  supersededBookingAcknowledgments BookingAcknowledgment[] @relation("SupersededBooking")
 }
 
 model AppointmentLog {
@@ -1214,4 +1217,17 @@ model AppointmentIntakeBrief {
  approvedAt DateTime? @db.Timestamptz
  createdAt DateTime @default(now()) @db.Timestamptz
  @@map("appointment_intake_briefs")
+}
+
+model BookingAcknowledgment {
+  appointmentId String @id
+  appointment Appointment @relation("BookingDocument", fields: [appointmentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reference String @unique
+  snapshot Json
+  protectedPdf Json?
+  pdfHash String?
+  issuedAt DateTime @default(now())
+  supersededBy String?
+  replacement Appointment? @relation("SupersededBooking", fields: [supersededBy], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  @@map("appointment_booking_acknowledgments")
 }

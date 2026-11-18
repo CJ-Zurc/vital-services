@@ -20,3 +20,5 @@ See [portal consistency and clinical review](portal-consistency.md) for appointm
 
 
 See [portal consistency v2](portal-consistency-v2.md) for anonymous patient ratings and the screenshot-aligned portal changes.
+
+See [face-to-face booking](f2f-booking.md) for booking-only acceptance, doctor outcomes, acknowledgment routes and paired rollout.

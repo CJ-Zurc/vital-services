@@ -61,6 +61,7 @@ export interface AppointmentParticipant {
   finalize(operationId: string, token: string): Promise<void>;
 }
 export interface AppointmentOwners {
+  bookingNames?: import("./booking-acknowledgment.js").BookingNames;
   messaging?: { chainEligibility(appointmentId:string):Promise<{eligible:boolean;lineageId:string;sourceVersion:number}> };
   realtime?: { invalidate(appointmentId:string,sourceVersion:number):Promise<void> };
   ehrRecovery?: (appointmentId:string)=>Promise<{caseId:string;patientId:string;doctorAuthId:string|null;externalSystemRef:string}|null>;

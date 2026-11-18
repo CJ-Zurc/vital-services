@@ -51,15 +51,15 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
           FROM appointments a JOIN vital_patients p ON p."userId"=a."patientId" JOIN vital_doctors d ON d."userId"=a."doctorId"
           LEFT JOIN schedules s ON s.id=a."scheduleSlotId" LEFT JOIN pre_consultations pc ON pc."appointmentId"=a.id
           LEFT JOIN consultations c ON c."appointmentId"=a.id
-          WHERE a."patientId"=$1 AND a."scheduledAt">=$2 AND a.status NOT IN ('cancelled','rejected','completed')
+          WHERE a."patientId"=$1 AND a."scheduledAt">=$2 AND a.status NOT IN ('cancelled','rejected','completed','no_show')
           ORDER BY a."scheduledAt",a.id LIMIT 4`, [patientId, new Date(clock())])).rows;
         await tx.query('COMMIT');
       } catch (error) { await tx.query('ROLLBACK'); throw error; } finally { tx.release(); }
       const appointments: AppointmentReadSnapshot[] = [];
       for (const row of selected) {
         if (row.patientId !== patientId || row.patientAuthId !== actor.authId) throw changed();
-        if (!owners.payment) completionUnavailable('PAYMENT');
-        const payment = await owners.payment.byAppointment(row.id);
+        if (row.consultationType !== 'in_person' && !owners.payment) completionUnavailable('PAYMENT');
+        const payment = row.consultationType === 'in_person' ? null : await owners.payment!.byAppointment(row.id);
         if (payment && (payment.appointmentId !== row.id || payment.billingLineageId !== row.billingLineageId || payment.associationVersion !== row.associationVersion
           || payment.patientAuthId !== actor.authId || payment.doctorAuthId !== row.doctorAuthId)) throw changed();
         const association = associations.find(item => item.id === row.id);

@@ -55,6 +55,7 @@ export const eventDataSchemas = {
   "vital.appointment.rescheduled": appointmentData.extend({ replacementAppointmentId: uuid, replacementVersion: z.number().int().nonnegative() }),
   "vital.appointment.cancelled": appointmentData,
   "vital.appointment.completed": appointmentData,
+  "vital.appointment.no_show": appointmentData,
   "vital.appointment.completion_acknowledged": appointmentData,
   "vital.appointment.participant.requested": appointmentData.extend({phase:z.enum(["prepare","abort","finalize"]),participants:z.array(z.enum(["payment","video"])).min(1).max(2)}),
   "vital.messaging.changed": z.object({
@@ -80,7 +81,7 @@ export const eventDataSchemas = {
     requestId: uuid,
     recipientAuthId: uuid,
     appointmentId: uuid,
-    template: z.enum(["appointment_requested", "appointment_approved", "appointment_rejected", "appointment.cancelled", "appointment.follow_up", "appointment.reschedule_proposed", "appointment.rescheduled", "appointment.reschedule_declined"]),
+    template: z.enum(["appointment_requested", "appointment_approved", "appointment_rejected", "appointment.cancelled", "appointment.follow_up", "appointment.reschedule_proposed", "appointment.rescheduled", "appointment.reschedule_declined", "appointment_completed", "appointment_expired"]),
     parameters: z.object({ scheduledAt: z.iso.datetime().optional() }).strict(),
   }).strict(),
 } as const;
@@ -107,6 +108,7 @@ const producers: Record<EventType, readonly Producer[]> = {
   "vital.appointment.rescheduled": ["appointment"],
   "vital.appointment.cancelled": ["appointment"],
   "vital.appointment.completed": ["appointment"],
+  "vital.appointment.no_show": ["appointment"],
   "vital.appointment.completion_acknowledged": ["appointment"],
   "vital.appointment.participant.requested": ["appointment"],
   "vital.messaging.changed": ["messaging"],
