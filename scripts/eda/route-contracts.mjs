@@ -242,7 +242,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/payment-dto.ts': 'ee9aa64efb28fefeaa17c51695e06347d7cddfb174fa09046de7de82e4ffb496',
   'lib/eda/payment.ts': 'f108996aaaaef9917b8ae6cc687110f73b3e72e3b7823b0625cff647718fa0d0',
   'lib/eda/portal-doctor-provision-bff.ts': '6df5fc7d2edcd352afc0ee4a2b83e33a3d1e44b2142b0be6f04847d380ac0a52',
-  'lib/eda/portal-integrations-bff.ts': '6dad62672925b6d96c1aa725473e75d265102bc47e40998877de5d88c139ec09',
+  'lib/eda/portal-integrations-bff.ts': 'ff51b7ebe5e6acc3dca8c17b04cd2a2ad08964ee1200edbfddeb9bf4ea45e7b0',
   'lib/eda/portal-integrations-paths.ts': '9834b51150d903c8a159aba811b80fee23af252118ad7a93e2833d8669bb391b',
   'lib/eda/portal-integrations-route-policy.ts': '06fc03af6b23eae65c85848b971a5c9c4b50b6040ce1d52de9f52d4fbaf1a8da',
   'lib/eda/profile-dto.ts': '60804fedd58c4a71563c314ae4836fe41826f77dcd42aa94734c9960690c8468',
