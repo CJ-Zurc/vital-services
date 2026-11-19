@@ -27,3 +27,5 @@ See [department and specialty contracts](department_catalog.md).
 See the [production configuration reference](configuration-reference.md) for every service example variable, feature dependencies and the activation sequence.
 
 See [VITAL audit integration](audit-integration.md) for universal metadata, admin history, bounded CSV export and coordinated rollout.
+
+See [face-to-face booking](f2f-booking.md) for booking-only acceptance, doctor outcomes, acknowledgment routes and paired rollout.

@@ -12,13 +12,13 @@ export type MessagingAppointment = {
 export type MessageAccess = { canSend: boolean; sendUntil: string | null; hasActiveFollowUp: boolean;
   nextOpenAt: string | null; availabilityReason: 'open' | 'before_follow_up' | 'window_closed' | 'cancelled' | 'rescheduled' | 'schedule_unavailable' | 'processing' | 'purged' };
 const active = new Set(['approved', 'confirmed']);
-export const messageHistoryStatuses = ['approved', 'confirmed', 'completed', 'cancelled', 'rescheduled'];
+export const messageHistoryStatuses = ['approved', 'confirmed', 'completed', 'cancelled', 'rescheduled', 'no_show'];
 function cancellationDate(row: MessagingAppointment) {
   const times = row.statusLogs.filter(log => log.toStatus === 'cancelled' && active.has(log.fromStatus ?? '')).map(log => log.changedAt.getTime());
   return times.length ? Math.max(...times) : null;
 }
 function accepted(row: MessagingAppointment) {
-  return active.has(row.status) || ['completed', 'rescheduled'].includes(row.status) ||
+  return active.has(row.status) || ['completed', 'rescheduled', 'no_show'].includes(row.status) ||
     row.status === 'cancelled' && (cancellationDate(row) !== null || row.statusLogs.some(log => active.has(log.toStatus)));
 }
 export function linkedMessageAppointments(seed: MessagingAppointment, rows: MessagingAppointment[]) {

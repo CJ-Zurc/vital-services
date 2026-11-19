@@ -15,7 +15,7 @@ import type { PaymentStore } from '../payment/payment-store.js';
 import type { VideoRuntime } from '../video/runtime.js';
 import { prepareReadPage, readCollectionPage, readPageInput, collectReadPages } from '../../infrastructure/read-pages.js';
 
-const states = ['pending','approved','confirmed','pending_patient_confirmation','pending_payment_verification','rejected','rescheduled','cancelled','completed'] as const;
+const states = ['pending','approved','confirmed','pending_patient_confirmation','pending_payment_verification','rejected','rescheduled','cancelled','completed','no_show'] as const;
 const filters = z.object({status:z.enum([...states,'all','expired']).optional(),dateFrom:dateOnly.optional(),dateTo:dateOnly.optional(),...readPageInput}).strict()
   .refine(x=>!x.dateFrom||!x.dateTo||x.dateFrom<=x.dateTo);
 const active = ['pending','approved','confirmed','pending_patient_confirmation'];
@@ -142,8 +142,8 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
         relation.statusLogs=(await collectReadPages(input=>historyPage(actor,relation.id,input,false))).reverse()
           .map(log=>({note:log.note,changedAt:log.changedAt.toISOString()}));
       }
-      if(!owners.payment)unavailable('PAYMENT');
-      const financial=await owners.payment.byAppointment(row.id);
+      if(row.consultationType!=='in_person'&&!owners.payment)unavailable('PAYMENT');
+      const financial=row.consultationType==='in_person'?null:await owners.payment!.byAppointment(row.id);
       if(financial&&(financial.appointmentId!==row.id||financial.billingLineageId!==row.billingLineageId||financial.associationVersion!==row.associationVersion||financial.patientAuthId!==row.patientAuthId||financial.doctorAuthId!==row.doctorAuthId))
         throw new DomainError(409,'APPOINTMENT_PAYMENT_READ_STALE','Payment association changed.');
       let video:Awaited<ReturnType<VideoRuntime['resource']>>|null=null;
@@ -168,7 +168,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
         ehrCaseId:restricted?null:row.ehrCaseId,scheduledAt:row.scheduledAt,proposedEndAt:row.proposedEndAt,createdAt:row.createdAt,updatedAt:row.updatedAt,
         doctorConfirmedAt:row.doctorConfirmedAt,patientConfirmedAt:row.patientConfirmedAt,completionDeadlineAt:row.completionDeadlineAt,autoCompletedAt:row.autoCompletedAt,paperworkLockedAt:row.paperworkLockedAt,
         rating:actor.role==='patient'&&row.status==='completed'&&row.ownRating!=null&&row.ownRating>=1&&row.ownRating<=5?{rating:row.ownRating,submittedAt:row.ratingSubmittedAt}:null,
-        canRate:actor.role==='patient'&&row.status==='completed'&&row.ownRating==null&&row.ratingPaymentEligible===true,
+        canRate:actor.role==='patient'&&row.status==='completed'&&row.ownRating==null&&(row.consultationType==='in_person'||row.ratingPaymentEligible===true),
         preConsultation:{summary,privacyWithheld:restricted&&(reviewText(row.chiefComplaint,knownIdentities).withheld||!isDeepStrictEqual(reviewIntake(row.opqrst,knownIdentities),row.opqrst)),chiefComplaint:noIntake?null:restricted?reviewText(row.chiefComplaint,knownIdentities).text:row.chiefComplaint??null,opqrst:noIntake?null:restricted?reviewIntake(row.opqrst,knownIdentities):row.opqrst??null},statusLogs:restricted?logs.map(l=>({...l,note:null})):logs,
         sourceAppointment:restricted?null:related.find(r=>r.id===row.sourceAppointmentId)?relation(related.find(r=>r.id===row.sourceAppointmentId)!):null,
         rescheduleProposals:restricted?[]:related.filter(r=>r.sourceAppointmentId===row.id).map(relation),followUpAppointments:restricted?[]:related.filter(r=>r.followUpOfAppointmentId===row.id).map(r=>({id:r.id,status:r.status})),

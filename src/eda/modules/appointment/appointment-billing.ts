@@ -135,6 +135,7 @@ async function appointment(db: Queryable, id: string, lock = false): Promise<App
     WHERE a.id=$1 ${lock ? "FOR UPDATE OF a" : ""}`, [id]);
   const row = result.rows[0];
   if (!row) denied(404, "BILLING_APPOINTMENT_NOT_FOUND");
+  if(row.consultationType==="in_person")denied(409,"IN_PERSON_BOOKING_ONLY");
   if (!["virtual", "in_person"].includes(row.consultationType) || !Number.isSafeInteger(row.appointmentVersion)
     || row.appointmentVersion < 0 || !Number.isSafeInteger(row.associationVersion) || row.associationVersion < 1
     || !(row.scheduledAt instanceof Date) || !Number.isFinite(row.scheduledAt.getTime())) denied(409, "BILLING_CONTEXT_INVALID");

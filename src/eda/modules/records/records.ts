@@ -27,6 +27,7 @@ export function createRecordsModule(pool:Pool,config:RecordsConfig,clock=Date.no
     if(!row)recordsDenied(404,"RECORDS_PATIENT_NOT_FOUND");return row;
   }
   async function eligibility(tx:PoolClient,actor:Actor,row:AppointmentRow,recovery=false) {
+    if(row.consultationType==="in_person")recordsDenied(403,"IN_PERSON_BOOKING_ONLY");
     assignedDoctor(actor,row);await medicalConsent(tx,row.patientId,row.id);await assertRecordsIdle(tx,row);
     if(row.status!=="confirmed")recordsDenied(409,"RECORDS_LIVE_ACCESS_DENIED");
     if(!recovery)assertPaperwork(row,clock());

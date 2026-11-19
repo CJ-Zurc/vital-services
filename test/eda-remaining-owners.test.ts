@@ -10,7 +10,7 @@ import { createPortalIdentityLookup } from '../src/eda/modules/portal-integratio
 
 function fixture() {
   const patientId = randomUUID(), doctorId = randomUUID(), authId = randomUUID(), doctorAuthId = randomUUID(), id = randomUUID();
-  const row = { id, patientId, doctorId, patientAuthId: authId, doctorAuthId, version: 3, status: 'completed', billingLineageId: randomUUID(), associationVersion: 1 };
+  const row = { id, patientId, doctorId, patientAuthId: authId, doctorAuthId, version: 3, status: 'completed', consultationType: 'virtual', billingLineageId: randomUUID(), associationVersion: 1 };
   let state = { feedback: null as Record<string, unknown> | null, command: null as Record<string, any> | null, events: [] as unknown[][], ratingWrites: 0 };
   let previous = structuredClone(state), revoked = false, failAudit = false, paid = true, verified = 0, intakeCount = 1;
   const calls: { sql: string; args: unknown[] }[] = [];
@@ -89,4 +89,19 @@ test('portal identity runtime batches bounded Auth projections and rejects subst
   assert.equal((await lookup(ids)).size, 130); assert.deepEqual(batches.map(batch => batch.length), [100, 30]);
   await assert.rejects(createPortalIdentityLookup(environment, async () => Response.json({ success: true, data: { profiles: [{ id: randomUUID(), first_name: 'Foreign', last_name: 'Person' }], missing_ids: [] } }))([ids[0]!]), { code: 'PORTAL_AUTH_PROFILE_MISMATCH' });
   await assert.rejects(createPortalIdentityLookup({ ...environment, VITAL_AUTH_INTERNAL_URL: 'http://auth.test' })(ids), { code: 'PORTAL_AUTH_CONFIGURATION_REQUIRED' });
+});
+
+test('completed face-to-face visits can be rated once without a payment owner',async()=>{
+  const f=fixture();f.row.consultationType='in_person';f.unpaid();
+  const owner=createAppointmentExtras(f.pool,{});
+  const first=await owner.feedback(f.actor(),f.id,f.meta,f.input);
+  assert.equal(first.feedback.starRating,5);
+  assert.equal(f.verified(),0);
+  assert.ok(!f.calls.some(call=>call.sql.includes('appointment_payment_projections')));
+  f.state().command=null;
+  await assert.rejects(owner.feedback(f.actor(),f.id,{...f.meta,operationId:randomUUID()},f.input),{code:'APPOINTMENT_ALREADY_RATED'});
+  for(const status of ['no_show','cancelled']){
+    const g=fixture();g.row.consultationType='in_person';g.row.status=status;
+    await assert.rejects(createAppointmentExtras(g.pool,{}).feedback(g.actor(),g.id,g.meta,g.input),{code:'APPOINTMENT_FEEDBACK_INELIGIBLE'});
+  }
 });

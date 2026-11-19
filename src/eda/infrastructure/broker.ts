@@ -5,7 +5,7 @@ import { z } from "zod";
 import { exchangeFor, parseEvent, type EventEnvelope, type EventType, type Producer } from "../contracts/events.js";
 
 const appointmentFacts=['vital.appointment.requested','vital.appointment.approved','vital.appointment.confirmed','vital.appointment.rejected',
-  'vital.appointment.rescheduled','vital.appointment.cancelled','vital.appointment.completed','vital.appointment.expired','vital.appointment.completion_acknowledged'] as const;
+  'vital.appointment.rescheduled','vital.appointment.cancelled','vital.appointment.completed','vital.appointment.no_show','vital.appointment.expired','vital.appointment.completion_acknowledged'] as const;
 export const subscriptions = [
   { id: "appointment-payment", producer: "payment", types: ["vital.payment.completed", "vital.payment.changed"] },
   { id: "appointment-confirmation", producer: "payment", types: ["vital.payment.completed", "vital.payment.changed"] },

@@ -8,7 +8,7 @@ import { appointmentOwn, calendarLock, lockAppointment, membership, readAppointm
 const version = z.number().int().nonnegative();
 const inputSchema = z.object({
   commandId: z.uuid(), browserHash: z.string().regex(/^[a-f0-9]{64}$/),
-  action: z.enum(['approve', 'follow-up', 'reject', 'reschedule', 'decline-reschedule', 'accept-reschedule', 'cancel', 'complete', 'schedule.write', 'blocks.write']),
+  action: z.enum(['approve', 'follow-up', 'reject', 'no-show', 'reschedule', 'decline-reschedule', 'accept-reschedule', 'cancel', 'complete', 'schedule.write', 'blocks.write']),
   resource: z.uuid(), expectedVersion: version.optional(), expectedSourceVersion: version.optional(),
 }).strict();
 export type AppointmentPreparationInput = z.infer<typeof inputSchema>;
@@ -22,7 +22,7 @@ function deny(status: number, code: string): never { throw new DomainError(statu
 // This ledger stores identifiers, digests and revisions only. Browser bodies never enter it.
 export function createAppointmentCommandPreparation(pool: Pool) {
   async function authority(tx: PoolClient, actor: Actor, input: Pick<AppointmentPreparationInput, 'action' | 'resource'>) {
-    const doctorOnly = ['approve', 'follow-up', 'reject', 'schedule.write', 'blocks.write'].includes(input.action);
+    const doctorOnly = ['approve', 'follow-up', 'reject', 'no-show', 'schedule.write', 'blocks.write'].includes(input.action);
     const member = await membership(tx, actor, doctorOnly ? 'doctor' : actor.role);
     if (input.action === 'schedule.write' || input.action === 'blocks.write') {
       await calendarLock(tx, member.userId);

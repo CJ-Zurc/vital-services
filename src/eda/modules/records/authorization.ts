@@ -9,6 +9,7 @@ export function paperworkDeadline(row:Pick<AppointmentRow,"completionDeadlineAt"
   return effectiveCompletionDeadline(row);
 }
 export function assertPaperwork(row:AppointmentRow, now:number) {
+  if(row.consultationType==="in_person")recordsDenied(403,"IN_PERSON_BOOKING_ONLY");
   if(row.status!=="confirmed"||row.doctorConfirmedAt||row.paperworkLockedAt||paperworkDeadline(row).getTime()<=now)
     recordsDenied(409,"RECORDS_PAPERWORK_CLOSED");
 }

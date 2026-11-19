@@ -8,3 +8,5 @@ checks the two stores with the same mTLS peer without impersonating a user.
 The source route inventory is `src/eda/http/` and `src/eda/entrypoints/api.ts` and the module-owned HTTP adapters
 under `src/eda/modules/`. Web implements browser compatibility adapters; Gateway
 forwards only reviewed BFF/integration paths. Generic domain scaffolds are not routes.
+
+See [face-to-face booking](f2f-booking.md) for booking-only acceptance, doctor outcomes, acknowledgment routes and paired rollout.

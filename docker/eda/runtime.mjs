@@ -26,7 +26,7 @@ if (mode === 'api' || mode === 'worker' || mode === 'ai-worker') {
   }
   if (mode === 'worker') environment.VITAL_RABBITMQ_URL = broker('runtime', 'vital');
   commands = [[`dist/entrypoints/${mode}.js`]];
-} else if (['migrate', 'seed', 'seed-verify', 'catalog-snapshot', 'catalog-restore'].includes(mode)) {
+} else if (['migrate', 'seed', 'seed-verify', 'catalog-snapshot', 'catalog-restore', 'fixture-seed', 'fixture-verify', 'fixture-refresh'].includes(mode)) {
   for (const domain of ['core', 'integrations']) {
     const url = new URL(database(domain, 'migrator'));
     if (environment.VITAL_EDA_PRIVATE_HTTP !== 'true') {
@@ -36,7 +36,13 @@ if (mode === 'api' || mode === 'worker' || mode === 'ai-worker') {
     environment[`VITAL_${domain.toUpperCase()}_MIGRATION_URL`] = url.href;
   }
   if (mode === 'migrate') commands = ['core', 'integrations'].map(domain => ['node_modules/prisma/build/index.js', 'migrate', 'deploy', '--config', `prisma/${domain}.config.ts`]);
-  else if (mode.startsWith('catalog-')) {
+  else if (mode.startsWith('fixture-')) {
+    if (!/^bgh-fixture-[a-z0-9][a-z0-9-]{0,31}$/.test(environment.BGH_FIXTURE_PROJECT ?? '')) {
+      throw new Error('An isolated BGH fixture project is required');
+    }
+    environment.VITAL_FIXTURE_MODE = mode;
+    commands = [['dist/entrypoints/fixture-seed.js']];
+  } else if (mode.startsWith('catalog-')) {
     environment.VITAL_BASELINE_SEED = 'true';
     environment.VITAL_CATALOG_RECOVERY_MODE = mode === 'catalog-snapshot' ? 'snapshot' : 'restore';
     commands = [['dist/entrypoints/catalog-recovery.js']];

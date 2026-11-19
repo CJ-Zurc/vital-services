@@ -10,7 +10,7 @@ function stableId(value: string) {
   const h = bytes.toString('hex'); return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }
 export async function appointmentNotification(tx: PoolClient, row: AppointmentRow, actor: Pick<Actor, 'authId'|'role'|'correlationId'>,
-  operationId: string, template: 'appointment_requested'|'appointment_approved'|'appointment_rejected'|'appointment.cancelled'|'appointment.follow_up'|'appointment.reschedule_proposed'|'appointment.rescheduled'|'appointment.reschedule_declined',
+  operationId: string, template: 'appointment_requested'|'appointment_approved'|'appointment_rejected'|'appointment.cancelled'|'appointment.follow_up'|'appointment.reschedule_proposed'|'appointment.rescheduled'|'appointment.reschedule_declined'|'appointment_completed'|'appointment_expired',
   recipientAuthId: string, targetId = row.id) {
   const key = `${operationId}:${row.id}:${template}:${recipientAuthId}`;
   await appendSqlOutbox(tx, { eventId: stableId(`notification-event:${key}`),

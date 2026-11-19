@@ -7,20 +7,21 @@ import { requestHash } from "../../infrastructure/security.js";
 import { appointmentExpired, appointmentFactData, effectiveCompletionDeadline, type AppointmentOwners } from "./appointment-contracts.js";
 import { appointmentTransition, lockAppointment, resolveOpenProposals } from "./appointment.js";
 
-export function completionDue(row:{scheduledAt:Date;proposedEndAt:Date|null;slotEndsAt:Date|null;completionDeadlineAt:Date|null},now:number){
-  return effectiveCompletionDeadline(row).getTime()<=now;
+export function completionDue(row:{scheduledAt:Date;proposedEndAt:Date|null;slotEndsAt:Date|null;completionDeadlineAt:Date|null;consultationType?:string},now:number){
+  return row.consultationType!=='in_person'&&effectiveCompletionDeadline(row).getTime()<=now;
 }
 export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,payment:PaymentModule|undefined,clock=Date.now){
   async function lifecycle(){
     if(!owners.records)return{processed:0,blocked:"RECORDS_OWNER_UNAVAILABLE"};
     const candidates=(await core.query<{id:string}>(`SELECT a.id FROM appointments a LEFT JOIN schedules s ON s.id=a."scheduleSlotId"
-      WHERE a.status IN ('pending','approved','confirmed','pending_patient_confirmation') AND a."maintenanceDueAt"<=NOW() AND (
+      WHERE NOT(a.\"consultationType\"='in_person' AND a.status='confirmed') AND a.status IN ('pending','approved','confirmed','pending_patient_confirmation') AND a."maintenanceDueAt"<=NOW() AND (
         (a.status='confirmed' AND COALESCE(a."completionDeadlineAt",COALESCE(a."proposedEndAt",a."scheduledAt")+INTERVAL '24 hours')<=NOW()) OR
         (a."expiryProcessedAt" IS NULL AND COALESCE((s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila',a."proposedEndAt",a."scheduledAt")<=NOW()))
       ORDER BY a."maintenanceDueAt",a.id LIMIT 20`)).rows;
     let processed=0;
     for(const candidate of candidates){const tx=await core.connect();try{
       await tx.query("BEGIN");const row=await lockAppointment(tx,candidate.id);
+      if(row.consultationType==='in_person'&&row.status==='confirmed'){await tx.query("COMMIT");continue;}
       await tx.query('UPDATE appointments SET "maintenanceDueAt"=$2 WHERE id=$1',[row.id,new Date(clock()+60000)]);
       const busy=await tx.query(`SELECT id FROM saga_operations WHERE "billingLineageId"=$1 AND status NOT IN ('completed','compensated','cancelled','failed') LIMIT 1`,[row.billingLineageId]);
       const proposal=await tx.query(`SELECT id FROM appointments WHERE "sourceAppointmentId"=$1 AND status IN ('pending','pending_patient_confirmation') LIMIT 1`,[row.id]);
