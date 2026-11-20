@@ -29,3 +29,7 @@ See the [production configuration reference](configuration-reference.md) for eve
 See [VITAL audit integration](audit-integration.md) for universal metadata, admin history, bounded CSV export and coordinated rollout.
 
 See [face-to-face booking](f2f-booking.md) for booking-only acceptance, doctor outcomes, acknowledgment routes and paired rollout.
+
+
+- [VITAL–TRACE in-system dispute proposal for TRACE review](integrations/trace/patient-feedback/VITAL_Feedback_on_TRACE_Integration_Plan.md).
+- [Historical TRACE Google Forms implementation ledger](integrations/trace/trace-integration-changes.md).
