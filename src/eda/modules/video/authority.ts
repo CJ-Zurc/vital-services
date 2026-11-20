@@ -4,7 +4,6 @@ import type { Pool } from 'pg';
 import { z } from 'zod';
 import { DomainError,type Actor } from '../../contracts/actor.js';
 import { appointmentOwn,calendarLock,membership,readAppointment,abandonExpiredAppointmentWorkflow } from '../appointment/appointment.js';
-import { appointmentExpired } from '../appointment/appointment-contracts.js';
 import type { VideoAuthority,VideoWorkflowIntent,VideoPreparationReceipt,VideoSagaIntent } from './contracts.js';
 
 function fail(code:string):never{throw new DomainError(409,'VIDEO_'+code,'Video authority changed.');}
@@ -15,12 +14,6 @@ export function createVideoAuthority(pool:Pool):VideoAuthority{
     async appointment(actor,id){await membership(pool,actor);const row=await readAppointment(pool,id);appointmentOwn(actor,row);
       const consultation=(await pool.query('SELECT "videoResourceId","videoResourceVersion" FROM consultations WHERE "appointmentId"=$1',[id])).rows[0];
       return{...row,activeFollowUp:false,videoResourceId:consultation?.videoResourceId??null,videoResourceVersion:consultation?.videoResourceVersion??null};},
-    async generation(actor,id,purpose){const d=await doctor(actor),row=await readAppointment(pool,id);appointmentOwn(actor,row);if(row.doctorId!==d.doctorId)fail('DOCTOR_CHANGED');
-      const active=(await pool.query(`SELECT id FROM appointments WHERE "followUpOfAppointmentId"=$1 AND status NOT IN ('cancelled','rejected') LIMIT 1`,[id])).rows.length>0;
-      const pending=(await pool.query(`SELECT id FROM saga_operations WHERE "billingLineageId"=$1 AND status NOT IN ('completed','compensated','cancelled','failed') LIMIT 1`,[row.billingLineageId])).rows.length>0;
-      if(pending||purpose==='approval'&&(row.consultationType!=='virtual'||row.status!=='pending'||!!row.sourceAppointmentId||appointmentExpired(row,Date.now()))||
-        purpose==='follow_up'&&(row.status!=='completed'||active))fail('GENERATION_INELIGIBLE');
-      return{...row,activeFollowUp:active};},
     async workflow(id):Promise<VideoWorkflowIntent>{z.uuid().parse(id);const workflow=(await pool.query('SELECT * FROM appointment_workflows WHERE id=$1::uuid',[id])).rows[0];
       if(!workflow||!['approve','follow-up'].includes(workflow.kind)||!workflow.targetAppointmentId||!workflow.videoSelectionHash||workflow.videoTargetVersion===null)fail('WORKFLOW_INTENT_REQUIRED');
       const source=await readAppointment(pool,workflow.appointmentId),target=await readAppointment(pool,workflow.targetAppointmentId);

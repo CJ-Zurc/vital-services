@@ -12,7 +12,7 @@ function fixture(selection:VideoSelection={meetingUrl:'https://meet.google.com/a
   const now=Date.now(),id=randomUUID(),source=randomUUID(),doctorId=randomUUID(),lineage=randomUUID(),generationId=randomUUID();
   const intent:VideoWorkflowIntent={workflowId:id,sourceAppointmentId:source,targetAppointmentId:source,doctorId,doctorAuthId:randomUUID(),patientAuthId:randomUUID(),kind:'approve',consultationType:'virtual',billingLineageId:lineage,quotaLineageId:lineage,expectedSourceVersion:0,expectedTargetVersion:0,associationVersion:1,selectionHash:selectionHash(selection),state:'prepared',expiresAt:new Date(now+300000),externalStartedAt:null,videoProcessingState:'pending',receipt:null,correlationId:randomUUID()};
   const saga:VideoSagaIntent={operationId:randomUUID(),doctorId,sourceAppointmentId:source,replacementAppointmentId:randomUUID(),doctorAuthId:intent.doctorAuthId,patientAuthId:intent.patientAuthId,billingLineageId:lineage,associationVersion:1,expectedSourceVersion:1,expectedReplacementVersion:0,requestHash:'a'.repeat(64),state:'preparing',deadlineAt:new Date(now+300000),pivotCommittedAt:null,correlationId:randomUUID(),sourceConsultationType:'virtual',replacementConsultationType:'virtual'};
-  let state={resources:new Map<string,any>(),holds:new Map<string,any>(),sagas:new Map<string,any>(),events:[] as any[],generation:{id:selection.meetingGenerationId??generationId,doctorId,appointmentId:source,billingLineageId:lineage,purpose:'approval',status:'ready',claimedAppointmentId:null as string|null,reservedWorkflowId:null as string|null,connectionId:randomUUID(),connectionRevision:1,expiresAt:new Date(now+86400000),spaceName:'spaces/preserved_room',meetingUrl:'https://meet.google.com/abc-defg-hij',createdAt:new Date(now),version:1},connection:{status:'connected',revision:1}};
+  let state={resources:new Map<string,any>(),holds:new Map<string,any>(),sagas:new Map<string,any>(),events:[] as any[],generation:{id:generationId,doctorId,appointmentId:source,billingLineageId:lineage,purpose:'approval',status:'ready',claimedAppointmentId:null as string|null,reservedWorkflowId:null as string|null,connectionId:randomUUID(),connectionRevision:1,expiresAt:new Date(now+86400000),spaceName:'spaces/preserved_room',meetingUrl:'https://meet.google.com/abc-defg-hij',createdAt:new Date(now),version:1},connection:{status:'connected',revision:1}};
   let before=structuredClone(state),tail=Promise.resolve(),failCore=false,failOutbox=false,coreWrites=0;
   const sqls:string[]=[];const result=(rows:any[]=[],rowCount=rows.length)=>({rows,rowCount});
   async function query(sql:string,a:any[]=[]):Promise<{rows:any[];rowCount:number}>{sqls.push(sql);if(sql.includes('pg_advisory_xact_lock'))return result();
@@ -38,7 +38,7 @@ function fixture(selection:VideoSelection={meetingUrl:'https://meet.google.com/a
     throw new Error('UNEXPECTED_ASSOCIATION_SQL:'+sql);
   }
   const pool={query,connect:async()=>{let unlock:()=>void=()=>{};return{async query(sql:string,a:any[]=[]){if(sql==='BEGIN'){const prior=tail;tail=new Promise<void>(r=>{unlock=r;});await prior;before=structuredClone(state);return result();}if(sql==='ROLLBACK'){state=before;unlock();return result();}if(sql==='COMMIT'){unlock();return result();}return query(sql,a);},release(){}};}} as unknown as Pool;
-  const authority:VideoAuthority={doctor:async()=>({doctorId}),appointment:async()=>{throw new Error('UNUSED');},generation:async()=>{throw new Error('UNUSED');},workflow:async()=>structuredClone(intent),saga:async()=>structuredClone(saga),
+  const authority:VideoAuthority={doctor:async()=>({doctorId}),appointment:async()=>{throw new Error('UNUSED');},workflow:async()=>structuredClone(intent),saga:async()=>structuredClone(saga),
     completeWorkflow:async()=>{if(failCore){failCore=false;throw new Error('TEST_CORE_FINALIZATION_CRASH');}intent.videoProcessingState='finalized';coreWrites++;},
     abandonExpiredWorkflow:async()=>{if(intent.state==='prepared'&&!intent.externalStartedAt&&intent.expiresAt.getTime()<=now){intent.state='abandoned';return true;}return false;},expiredWorkflows:async()=>[]};
   const api=createVideoAssociations(pool,authority,()=>now);
@@ -56,49 +56,44 @@ test('EDA Video manual workflow reserves before approval finalizes once and reda
   assert.equal(r.version,1);assert.equal(r.preparedWorkflowId,null);assert.equal(r.meetingUrl,'https://meet.google.com/abc-defg-hij');assert.equal(f.state().events.length,2);
   assert.doesNotMatch(JSON.stringify(f.state().events),/meet\.google\.com|spaces\/|meetingUrl|token|clinical/);
 });
-test('EDA Video generated workflow claims exactly the reserved doctor source purpose and connection revision',async()=>{
-  const f=fixture({meetingGenerationId:randomUUID()}),receipt=await f.prepare();assert.equal(f.state().generation.reservedWorkflowId,f.intent.workflowId);
-  await f.api.validate(f.row());f.commit(receipt);await f.api.finalizeWorkflow(f.intent.workflowId);
-  assert.equal(f.state().generation.status,'claimed');assert.equal(f.state().generation.claimedAppointmentId,f.intent.targetAppointmentId);assert.equal(f.state().generation.spaceName,'spaces/preserved_room');
+test('EDA Video rejects obsolete generated selections before any persistence',async()=>{
+  const f=fixture();await assert.rejects(f.api.prepareWorkflow(f.intent.workflowId,{meetingGenerationId:randomUUID()} as never),code('MEET_AUTOMATION_RETIRED'));
+  assert.equal(f.state().resources.size,0);assert.equal(f.state().holds.size,0);
 });
-test('EDA Video generated selection denies wrong account stale revision expired and conflicting claims',async()=>{
-  for(const mutate of [(f:ReturnType<typeof fixture>)=>{f.state().generation.doctorId=randomUUID();},(f:ReturnType<typeof fixture>)=>{f.state().generation.purpose='follow_up';},
-    (f:ReturnType<typeof fixture>)=>{f.state().generation.expiresAt=new Date(0);},(f:ReturnType<typeof fixture>)=>{f.state().connection.revision++;},
-    (f:ReturnType<typeof fixture>)=>{f.state().generation.reservedWorkflowId=randomUUID();}]){const f=fixture({meetingGenerationId:randomUUID()});mutate(f);await assert.rejects(f.prepare());assert.equal(f.state().holds.size,0);assert.equal(f.state().resources.size,0);}
-});
+
 test('EDA Video workflow selection hash both sources and missing required links cannot mutate resources',async()=>{
   const f=fixture();await assert.rejects(f.api.prepareWorkflow(f.intent.workflowId,{meetingUrl:'https://meet.google.com/xyz-abcd-efg'}),code('VIDEO_SELECTION_BINDING_INVALID'));
   await assert.rejects(f.api.prepareWorkflow(f.intent.workflowId,{...f.selection,meetingGenerationId:randomUUID()}));assert.equal(f.state().resources.size,0);
   const g=fixture({});await assert.rejects(g.prepare(),code('VIDEO_SELECTION_REQUIRED'));assert.equal(g.state().holds.size,0);
 });
 test('EDA Video committed association recovers Core acknowledgement failure without duplicate claim or audit',async()=>{
-  const f=fixture({meetingGenerationId:randomUUID()}),receipt=await f.prepare();f.commit(receipt);f.failCore();await assert.rejects(f.api.finalizeWorkflow(f.intent.workflowId),/TEST_CORE/);
-  assert.equal(f.state().holds.get(f.intent.workflowId).state,'finalized');assert.equal(f.state().generation.status,'claimed');assert.equal(await f.api.recover(),1);
+  const f=fixture(),receipt=await f.prepare();f.commit(receipt);f.failCore();await assert.rejects(f.api.finalizeWorkflow(f.intent.workflowId),/TEST_CORE/);
+  assert.equal(f.state().holds.get(f.intent.workflowId).state,'finalized');assert.equal(await f.api.recover(),1);
   assert.equal(f.intent.videoProcessingState,'finalized');assert.equal(f.state().events.length,2);assert.equal([...f.state().resources.values()][0].version,1);
 });
 test('EDA Video association finalization outbox failure rolls back claim and resource before retry',async()=>{
-  const f=fixture({meetingGenerationId:randomUUID()}),receipt=await f.prepare();f.commit(receipt);f.failOutbox();await assert.rejects(f.api.finalizeWorkflow(f.intent.workflowId),/OUTBOX_CRASH/);
+  const f=fixture(),receipt=await f.prepare();f.commit(receipt);f.failOutbox();await assert.rejects(f.api.finalizeWorkflow(f.intent.workflowId),/OUTBOX_CRASH/);
   assert.equal(f.state().generation.status,'ready');assert.equal(f.state().holds.get(f.intent.workflowId).state,'prepared');assert.equal(f.state().events.length,0);
-  await f.api.finalizeWorkflow(f.intent.workflowId);assert.equal(f.state().generation.status,'claimed');assert.equal(f.state().events.length,2);
+  await f.api.finalizeWorkflow(f.intent.workflowId);assert.equal(f.state().events.length,2);
 });
 test('EDA Video unknown external preparation retains hold beyond expiry until durable Core abandonment',async()=>{
-  const f=fixture({meetingGenerationId:randomUUID()});await f.prepare();f.intent.expiresAt=new Date(0);f.intent.externalStartedAt=new Date();assert.equal(await f.api.recover(),0);
-  assert.equal(f.state().holds.get(f.intent.workflowId).state,'prepared');assert.equal(f.state().generation.reservedWorkflowId,f.intent.workflowId);
+  const f=fixture();await f.prepare();f.intent.expiresAt=new Date(0);f.intent.externalStartedAt=new Date();assert.equal(await f.api.recover(),0);
+  assert.equal(f.state().holds.get(f.intent.workflowId).state,'prepared');
   f.intent.externalStartedAt=null;assert.equal(await f.api.recover(),1);assert.equal(f.state().holds.get(f.intent.workflowId).state,'aborted');assert.equal(f.state().generation.reservedWorkflowId,null);
   const oldResource=[...f.state().resources.values()][0].id;
   f.intent.workflowId=randomUUID();f.intent.targetAppointmentId=randomUUID();f.intent.state='prepared';f.intent.expiresAt=new Date(Date.now()+300000);
-  const reused=await f.api.prepareWorkflow(f.intent.workflowId,f.selection);assert.equal(reused.resourceId,oldResource);assert.equal(f.state().resources.size,1);assert.equal(f.state().generation.status,'ready');assert.equal(f.state().generation.reservedWorkflowId,f.intent.workflowId);
+  const reused=await f.api.prepareWorkflow(f.intent.workflowId,f.selection);assert.equal(reused.resourceId,oldResource);assert.equal(f.state().resources.size,1);assert.equal(f.state().generation.status,'ready');
 });
 test('EDA Video in-person preparation persists verified no-resource receipt rather than a synthetic participant',async()=>{
   const f=fixture({});f.intent.consultationType='in_person';const receipt=await f.prepare();assert.equal(receipt.resourceId,null);assert.equal(receipt.resourceVersion,null);await f.api.validate(f.row());
   f.commit(receipt);await f.api.finalizeWorkflow(f.intent.workflowId);assert.equal(f.state().resources.size,0);assert.equal(f.intent.videoProcessingState,'finalized');
 });
-test('EDA Video follow-up generation binds source quota but creates a distinct target resource lineage',async()=>{
-  const f=fixture({meetingGenerationId:randomUUID()});f.intent.kind='follow-up';f.intent.targetAppointmentId=randomUUID();f.intent.billingLineageId=randomUUID();f.state().generation.purpose='follow_up';
+test('EDA Video manual follow-up binds source but creates a distinct target resource lineage',async()=>{
+  const f=fixture();f.intent.kind='follow-up';f.intent.targetAppointmentId=randomUUID();f.intent.billingLineageId=randomUUID();f.state().generation.purpose='follow_up';
   const receipt=await f.prepare();assert.equal(receipt.billingLineageId,f.intent.billingLineageId);assert.notEqual(receipt.targetAppointmentId,receipt.sourceAppointmentId);assert.equal(f.state().generation.billingLineageId,f.intent.quotaLineageId);
 });
-test('EDA Video reschedule freezes preserves Google identity and transfers only after committed pivot',async()=>{
-  const f=fixture({meetingGenerationId:randomUUID()}),workflow=await f.prepare();f.commit(workflow);await f.api.finalizeWorkflow(f.intent.workflowId);
+test('EDA Video reschedule preserves historical Google identity and transfers only after committed pivot',async()=>{
+  const f=fixture(),workflow=await f.prepare();const legacy=[...f.state().resources.values()][0];legacy.generationId=f.state().generation.id;legacy.googleSpaceName='spaces/preserved_room';f.state().generation.reservedWorkflowId=f.intent.workflowId;f.commit(workflow);await f.api.finalizeWorkflow(f.intent.workflowId);
   const receipt=await f.api.participant.prepare(f.saga.operationId);await assert.rejects(f.api.validate(f.row()),code('VIDEO_LINEAGE_ALREADY_FROZEN'));
   await assert.rejects(f.api.participant.finalize(f.saga.operationId,receipt.freezeToken),code('VIDEO_SAGA_PIVOT_REQUIRED'));
   f.pivot(receipt);await f.api.participant.finalize(f.saga.operationId,receipt.freezeToken);await f.api.participant.finalize(f.saga.operationId,receipt.freezeToken);
@@ -114,4 +109,21 @@ test('EDA Video saga rejects substituted receipts changed resources and type cha
   const f=fixture(),workflow=await f.prepare();f.commit(workflow);await f.api.finalizeWorkflow(f.intent.workflowId);const receipt=await f.api.participant.prepare(f.saga.operationId);f.pivot({...receipt,resourceId:randomUUID()});
   await assert.rejects(f.api.participant.finalize(f.saga.operationId,receipt.freezeToken),code('VIDEO_SAGA_FREEZE_RECEIPT_INVALID'));assert.equal(f.state().events.length,2);
   const g=fixture();g.saga.replacementConsultationType='in_person';await assert.rejects(g.api.participant.prepare(g.saga.operationId),code('VIDEO_SAGA_PREPARATION_INVALID'));
+});
+
+test('Legacy committed generation finalizes and recovers after credentials are retired',async()=>{
+ const f=fixture(),receipt=await f.prepare(),resource=[...f.state().resources.values()][0];
+ resource.generationId=f.state().generation.id;resource.googleSpaceName='spaces/preserved_room';
+ f.state().generation.reservedWorkflowId=f.intent.workflowId;f.state().connection.status='retired';f.state().connection.revision++;
+ await assert.rejects(f.api.validate(f.row()),code('VIDEO_MANUAL_LINK_REVIEW_REQUIRED'));
+ f.commit(receipt);f.failCore();await assert.rejects(f.api.finalizeWorkflow(f.intent.workflowId),/TEST_CORE/);
+ assert.equal(await f.api.recover(),1);assert.equal(f.state().generation.status,'claimed');
+ assert.equal([...f.state().resources.values()][0].meetingUrl,'https://meet.google.com/abc-defg-hij');assert.equal(f.intent.videoProcessingState,'finalized');
+});
+test('Manual association rejects invalid URLs and active duplicate link ownership atomically',async()=>{
+ for(const link of ['http://meet.google.com/abc-defg-hij','https://meet.google.com.evil.test/abc-defg-hij','https://meet.google.com/invalid']){
+  const f=fixture({meetingUrl:link});await assert.rejects(f.prepare(),code('VIDEO_LINK_INVALID'));assert.equal(f.state().resources.size,0);assert.equal(f.state().holds.size,0);
+ }
+ const f=fixture();await f.prepare();f.intent.workflowId=randomUUID();f.intent.targetAppointmentId=randomUUID();
+ await assert.rejects(f.api.prepareWorkflow(f.intent.workflowId,f.selection),code('VIDEO_LINK_ALREADY_ASSOCIATED'));assert.equal(f.state().resources.size,1);
 });
