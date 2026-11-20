@@ -19,9 +19,9 @@ Web/API use mTLS plus signed assertions. Named Docker services may use explicitl
 allowlisted internal HTTP in staging; external origins remain HTTPS. Databases,
 broker and storage use separate scoped credentials. Preserve correlation IDs.
 
-Staging keeps payments, automatic Google Meet creation, external email/SMS and
-retention deletion disabled. Preserve configured Google client credentials in the
-backend owner without enabling provider activity. Auth Google login is separate.
+Staging keeps provider payments, external email/SMS and retention deletion disabled
+unless separately enabled for an approved flow. Google Meet uses manually pasted
+links; no dedicated Meet client credentials are required. Auth Google login is separate.
 Use service-owned feature flags consistently across Web/API/worker. Never disable
 OTP or enable shared sandbox bypasses for normal staging.
 
@@ -33,3 +33,6 @@ See the [production configuration reference](configuration-reference.md) for eve
 
 
 See [portal rollout configuration](portal-consistency.md#admin-dashboard-and-rollout) for paired symptom analytics flags and disabled face verification.
+
+
+Manual Google Meet links replace the retired connection/generation feature. See [manual meeting workflow](manual-meet-links.md).

@@ -1,10 +1,10 @@
 # VITAL lead developer environment handoff
 
-Updated: 2026-10-29. Target: complete VITAL business workflows with PayMongo SANDBOX, automatic Google Meet, NLP summaries and symptom analytics. This document is suitable for handing to the environment/deployment owner. It describes the current repository contracts, not proof that the deployed environment is configured.
+Updated: 2026-11-20. Target: complete VITAL business workflows with PayMongo SANDBOX, manual Google Meet links, NLP summaries and symptom analytics. This document is suitable for handing to the environment/deployment owner. It describes the current repository contracts, not proof that the deployed environment is configured.
 
 ## 1. Required outcome and boundaries
 
-The finished environment must support registration/onboarding, manual doctor/specialty selection, published schedules, doctor/slot-first booking, OPQRST and factual AI summary confirmation, restricted doctor review, acceptance/rejection, PayMongo sandbox payment and reconciliation, automatic Meet, verbal appointment-code record unlock, messaging, clinical documents/QR assets, rescheduling/cancellation, follow-up, completion and administrator symptom analytics.
+The finished environment must support registration/onboarding, manual doctor/specialty selection, published schedules, doctor/slot-first booking, OPQRST and factual AI summary confirmation, restricted doctor review, acceptance/rejection, PayMongo sandbox payment and reconciliation, manual Meet links, verbal appointment-code record unlock, messaging, clinical documents/QR assets, rescheduling/cancellation, follow-up, completion and administrator symptom analytics.
 
 PayMongo remains test-mode: this environment must not collect real payments. Production Node/application mode, public HTTPS and normal authorization still apply. There are no OTP, identity, payment, consent or appointment-code bypasses. Do not activate E2E credential support or staff AI sandbox in the production runtime. AI is normalization and a deterministic summary, not diagnosis or specialty recommendation. External email/SMS transport belongs to Notifications and requires that owner's separate configuration.
 
@@ -45,7 +45,6 @@ The following are intentional target values after dependencies are provisioned. 
 | VITAL_EDA_RECORDS_ENABLED | true | true | true | not needed for AI jobs |
 | VITAL_EDA_RECORDS_ARTIFACTS_ENABLED | not consumed | true | true | not needed for AI jobs |
 | VITAL_EDA_VIDEO_ENABLED | true | true | true | not needed for AI jobs |
-| VITAL_VIDEO_GOOGLE_ENABLED | never put provider config here | true | true | not needed for AI jobs |
 | VITAL_EDA_VIDEO_MAINTENANCE_ENABLED | not consumed | not a scan loop | true | not a scan loop |
 | VITAL_EDA_MESSAGING_ENABLED | true | true | true | not needed for AI jobs |
 | VITAL_EDA_MESSAGE_HOLDS_ENABLED | true | true | true | not needed for AI jobs |
@@ -64,7 +63,7 @@ Before setting feature flags, the lead developer must obtain the following from 
 
 | Item to obtain | Set in VITAL | Matching peer requirement |
 |---|---|---|
-| Public VITAL HTTPS origin | NEXT_PUBLIC_APP_URL, VITAL_PAYMENT_APP_ORIGIN, VITAL_VIDEO_APP_ORIGIN | Browser origin, reverse proxy and provider return URLs must agree |
+| Public VITAL HTTPS origin | NEXT_PUBLIC_APP_URL, VITAL_PAYMENT_APP_ORIGIN | Browser origin, reverse proxy and provider return URLs must agree |
 | Public Gateway origin | NEXT_PUBLIC_API_GATEWAY_URL | Public routing/TLS works from a browser |
 | Private Gateway address | GATEWAY_URL | Reachable from Web, correct internal HTTP allowlist or HTTPS trust |
 | Gateway protected-call key | GATEWAY_SECRET | Same value in Gateway's VITAL integration configuration |
@@ -93,17 +92,12 @@ Confirm the Core/Integrations billing migrations, scoped grants and RabbitMQ con
 
 Acceptance evidence: one accepted synthetic booking receives a sandbox checkout, payment is reconciled once, the correct appointment becomes confirmed and replay does not duplicate payment or EHR work. An unpaid booking must remain unable to unlock records. This sandbox configuration does not permit real-money operation.
 
-## 6. Automatic Google Meet: separate from Google login
+## 6. Manual Google Meet links
 
-On API and ordinary worker set VITAL_EDA_VIDEO_ENABLED=true, VITAL_VIDEO_GOOGLE_ENABLED=true and worker VITAL_EDA_VIDEO_MAINTENANCE_ENABLED=true. Set VITAL_VIDEO_APP_ORIGIN to VITAL's public HTTPS origin. Supply VITAL_VIDEO_GOOGLE_CLIENT_ID, mount the client-secret file selected by VITAL_VIDEO_GOOGLE_CLIENT_SECRET_FILE, and mount VITAL_VIDEO_KEYRING_FILE on every backend process that uses the provider.
-
-Set VITAL_VIDEO_GOOGLE_REDIRECT_URI to exactly https://YOUR-VITAL-HOST/api/doctor/google-meet/callback and register that exact redirect for the dedicated Meet OAuth client. The repository provider uses the Meet meetings.space.created scope and OpenID user identity calls. Confirm the Google project/API/consent and account eligibility for that flow with the provider account owner. Do not reuse Auth's login tokens or assume an Auth Google login means Meet is connected.
-
-Every participating doctor must complete the existing Connect Google Meet flow. Required runtime outbound access includes the Google OAuth token endpoint, OpenID identity endpoint and Meet API used by the implementation. Protect encrypted refresh credentials and retain the old keyring versions during rotation.
-
-Meet keyring file format used by the code: {"activeKeyId":"v1","keys":{"v1":"BASE64_OF_32_RANDOM_BYTES"}}. Use privately generated keys, not literal placeholders. The regular intake/message map format is different.
-
-Acceptance evidence: a connected doctor accepts an appointment with automatic Meet selected, a valid Meet link is returned after successful provider finalization, retries recover the same workflow without creating another case/charge, and reconnect/provider failures show a recoverable state. Joining the meeting must not require first unlocking patient records.
+Keep the Video owner enabled for authenticated manual-link resources and worker
+association recovery. Meet OAuth/client credentials, callback URL, app origin and
+token keyring are retired. See [manual meeting rollout](manual-meet-links.md)
+for credential cleanup and old workflow recovery. Auth Google sign-in is unchanged.
 
 ## 7. AI summary and symptom dashboard: all required parts
 
@@ -163,7 +157,7 @@ Compose sets internal health metadata file paths and some TLS paths directly. Us
 3. Configure public HTTPS origins, reverse proxy, Gateway routes, allowed private DNS/ports and provider outbound access. Ensure all process clocks are synchronized.
 4. Apply migrations using tools credentials, grant scoped runtime access and provision the existing broker topology. Verify migrations succeeded before starting enabled API/worker processes. Prepare required buckets/scanner/fonts.
 5. Verify Auth registration/login/OTP/session restoration, EHR profile/case/evidence, active TRACE specialties and doctor assignments, Audit and Notification ingestion. Configure and test doctor onboarding and published slots.
-6. Configure PayMongo sandbox and dedicated Meet OAuth. Perform doctor Meet connection rather than assuming flags connect accounts automatically.
+6. Configure PayMongo sandbox and enable the Video owner for manually pasted meeting links. No Meet OAuth client or doctor connection is required.
 7. Start/recreate compatible API, ordinary worker and Web with matching feature configuration. Add the AI overlay/profile and start its two separate processes. Use the supported deployment/runbook for actual commands and secret paths.
 8. Use docker compose config --quiet with the exact intended files/interpolation inputs to validate structure. Do not paste a full rendered config into tickets or chat because it may include secrets. Privately inspect effective flag names and mounted file targets. Verify relevant process health and content-free logs.
 9. Perform the feature acceptance cases below. Confirm new post-activation analytics data, state transitions, code grants and provider results from authorized views rather than only HTTP health.
@@ -177,7 +171,7 @@ Compose sets internal health metadata file paths and some TLS paths directly. Us
 | Doctor review | Only reference, age/sex and sanitized intake are visible before unlock |
 | Acceptance and EHR handoff | Case created once, blank complaint uses separately approved handoff and patient sees code |
 | PayMongo sandbox | Test checkout and reconciliation confirm only the correct appointment with idempotent retries |
-| Automatic Meet | Connected doctor's automatic generation produces one valid meeting and recovers pending provider operations |
+| Manual Meet links | Valid pasted links are saved once and association recovery preserves the same meeting URL |
 | Appointment code | Leading zeros, wrong doctor/code, expired window, lockout, reissue and replay are enforced |
 | Records/documents/QR | Authorized upload/scan/render/download works and revoked users cannot keep downloading |
 | Messaging/live updates | Schedule windows and reference labels are correct, live updates work and administrator metadata does not expose transcripts |
@@ -193,7 +187,7 @@ The current repo examples intentionally contain blank secrets and off-by-default
 # Detailed variable dictionary and supporting procedures
 
 
-Updated: 2026-10-29. Source-based production preparation guide for the current summary and appointment-code implementation. No real secrets or runtime settings were changed by this documentation update.
+Updated: 2026-11-20. Source-based production preparation guide for the current summary and appointment-code implementation. No real secrets or runtime settings were changed by this documentation update.
 
 ## Should every switch be enabled?
 
@@ -221,7 +215,6 @@ Web receives no database, broker, storage, model or data-encryption secrets. API
 | Chat and live updates | VITAL_EDA_MESSAGING_ENABLED, VITAL_EDA_SSE_ENABLED | Shared message keys, allowed appointment window, API streams and worker consumers |
 | Administrative holds | VITAL_EDA_MESSAGE_HOLDS_ENABLED | Messaging enabled and administrator authority |
 | Meeting links | VITAL_EDA_VIDEO_ENABLED | Meeting URL validation and configured public origin |
-| Automatic Google Meet | VITAL_VIDEO_GOOGLE_ENABLED in backend, VITAL_EDA_VIDEO_MAINTENANCE_ENABLED on worker | Dedicated Meet OAuth client, mounted secret/keyring, registered callback, doctor connection |
 | Doctor payment QR | VITAL_EDA_PROFILE_QR_ENABLED | Separate restricted QR storage and scanner |
 | Patient AI summary | VITAL_AI_ENABLED, VITAL_AI_PATIENT_ENABLED on Web/API and master AI on AI worker | AI keys, migrated tables, assets, running AI worker and private Python runtime |
 | Symptom analytics | VITAL_AI_ENABLED, VITAL_AI_ANALYTICS_ENABLED on Web/API/AI worker | Recorded activation, eligible new submissions and successful derived processing |
@@ -284,12 +277,6 @@ Tables list every active assignment in the revised service .env.example files. D
 | `VITAL_RECORDS_FONT_BOLD_FILE` | `/run/vital-config/bold.ttf` | Mounted bold font file needed for document rendering. |
 | `VITAL_EHR_INTERNAL_URL` | `http://uhse-ehr-api:8008` | Services/worker address for protected EHR recovery and mirror contracts. |
 | `VITAL_SERVICES_EHR_RECOVERY_KEY` | `(empty)` | Read-only recovery key for existing authorized EHR operations. Does not authorize creating a new operation. |
-| `VITAL_VIDEO_GOOGLE_ENABLED` | `false` | Backend Google Meet OAuth/provider operations. Requires the separate Meet client and real doctor authorization. Leave false for manual meeting-link testing. |
-| `VITAL_VIDEO_APP_ORIGIN` | `https://vital.example.invalid` | Public VITAL origin used by the dedicated doctor Google Meet connection flow. |
-| `VITAL_VIDEO_GOOGLE_CLIENT_ID` | `(empty)` | Backend-owned OAuth client ID for doctor Meet authorization. This is separate from Auth Google login. |
-| `VITAL_VIDEO_GOOGLE_CLIENT_SECRET_FILE` | `/run/vital-config/meet-client-secret` | Mounted file containing the Meet OAuth client secret. Never put it in Web. |
-| `VITAL_VIDEO_GOOGLE_REDIRECT_URI` | `https://vital.example.invalid/api/doctor/google-meet/callback` | Exact registered Meet OAuth callback URL, ending /api/doctor/google-meet/callback. Must match Google client settings. |
-| `VITAL_VIDEO_KEYRING_FILE` | `/run/vital-config/meet-keyring.json` | Mounted versioned encryption keyring for provider credentials. Keep separate from intake, access-code and messaging keys. |
 | `MESSAGE_ENCRYPTION_KEYS` | `(empty)` | JSON object mapping positive version numbers to base64 32-byte message encryption keys. API and worker must agree. Retain old versions. |
 | `MESSAGE_ACTIVE_KEY_VERSION` | `(empty)` | Version in MESSAGE_ENCRYPTION_KEYS used for new message encryption. |
 | `MESSAGE_RETENTION_APPROVED` | `false` | Explicit approval prerequisite for destructive message retention processing. Not a normal feature-enablement switch. |
@@ -415,7 +402,7 @@ These are process-specific infrastructure/tool inputs rather than toggles to cop
 3. Apply Core and Integrations migrations through the tools identity. Both intelligent-intake and appointment-access migrations must be present. Apply the required scoped runtime grants. Provision the VITAL RabbitMQ topology with the tools identity.
 4. Verify Auth/Gateway login and session restoration, patient onboarding/EHR profile, doctor membership, active TRACE specialty UUIDs, available doctor slots and EHR case/evidence contracts. No specialty fallback or invented UUID should be used to hide a lookup failure.
 5. Start the ordinary API/worker with matching domain flags. Confirm Audit, Notification, Auth profile sync and EHR mirror delivery. In-app notifications and external email/SMS are different owner configurations.
-6. Configure PayMongo TEST credentials and enable Payment plus worker reconciliation for the full paid path. For manual meeting links keep Google provider creation off. For automatic Meet testing configure its dedicated OAuth client and doctor connection, then enable the Google provider and Video maintenance.
+6. Configure PayMongo TEST credentials and enable Payment plus worker reconciliation for the full paid path. For manual meeting links enable the Video owner and worker association recovery. No Google provider configuration is required.
 7. Enable Records artifacts, QR assets and Messaging only after storage/scanner/fonts/keyrings are mounted. Validate uploads, downloads, code-gated record access and message windows.
 8. Prepare encrypted operational summaries and references for existing eligible appointments using the explicit maintenance/backfill procedure outside active consultations. New bookings create their own references. Never backfill legacy symptom analytics.
 9. Configure the private NLP bearer/coordination secrets and built model assets. Start the AI worker and Python services using the explicit AI profile/overlay. Keep ordinary booking available when the NLP service fails.
@@ -448,7 +435,7 @@ Changing an env file does not update an already running process. Recreate/restar
 | Cannot unlock after acceptance | Payment/confirmed state, consent, assigned doctor, code generation, redemption window and separately provisioned appointment keys. |
 | Specialty list unavailable | Authenticated Gateway lookup with category=specialty, actual active UUIDs and current doctor assignments. |
 | Upload or PDF fails | Storage principal/bucket, scanner socket, fonts and Records keyring. |
-| Meeting generation fails | Separate Meet OAuth client, callback, provider flag, doctor authorization and Video worker recovery. |
+| Meeting link cannot be saved | Check the HTTPS Google Meet URL, current appointment version, duplicate association and Video owner recovery. |
 | Browser mutations fail origin validation | NEXT_PUBLIC_APP_URL must equal the browser-visible origin. |
 | Flags appear to have no effect | Wrong process env file, Compose interpolation override, stale container or missing Web rebuild. |
 
@@ -458,4 +445,4 @@ This guide describes configuration contracts. It does not certify that your depl
 
 ## Production exclusions
 
-The ordinary production examples omit E2E_TEST_SUPPORT_ENABLED, E2E_TEST_SUPPORT_KEY, VITAL_AI_SANDBOX_ENABLED and EDA_TEST_ENABLED where previously present. Their test harnesses remain available only through separate isolated configurations. None is needed for ordinary patient or doctor business operations. Keep PayMongo sandbox credentials, Google Meet OAuth configuration and all required security keys. Do not remove mandatory privacy checks to make a workflow pass. Existing private environment files can still contain old overrides: these example edits do not remove values already configured in a deployment.
+The ordinary production examples omit E2E_TEST_SUPPORT_ENABLED, E2E_TEST_SUPPORT_KEY, VITAL_AI_SANDBOX_ENABLED and EDA_TEST_ENABLED where previously present. Their test harnesses remain available only through separate isolated configurations. None is needed for ordinary patient or doctor business operations. Keep PayMongo sandbox credentials, manual meeting-link resource configuration and all required security keys. Do not remove mandatory privacy checks to make a workflow pass. Existing private environment files can still contain old overrides: these example edits do not remove values already configured in a deployment.

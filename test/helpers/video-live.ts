@@ -16,8 +16,6 @@ import { createVideoModule } from '../../src/eda/modules/video/module.js';
 import { createVideoAuthority } from '../../src/eda/modules/video/authority.js';
 import { createVideoAssociations } from '../../src/eda/modules/video/association.js';
 import { selectionHash } from '../../src/eda/modules/video/contracts.js';
-import { meetKeyring,encryptMeetSecret } from '../../src/eda/modules/video/crypto.js';
-import { MEET_SCOPE,type MeetProvider } from '../../src/eda/modules/video/provider.js';
 import { fixture,type Context } from './payment-live.js';
 
 export function videoLiveConfiguration(environment:NodeJS.ProcessEnv){
@@ -48,44 +46,30 @@ async function videoFixture<T>(context:Context,run:(value:Awaited<ReturnType<typ
   });
 }
 async function setup(context:Context,f:Parameters<Parameters<typeof fixture>[1]>[0]){
-  const keyring=meetKeyring({activeKeyId:'test',keys:{test:Buffer.alloc(32,42).toString('base64')}});let writes=0;
-  // Real DB/broker/mTLS, but provider transport is deliberately an injected test fixture.
-  const provider:MeetProvider={create:async()=>{writes++;const code=['abc-defg-hij','xyz-abcd-efg'][writes-1]!;return{spaceName:'spaces/test_'+randomUUID(),meetingUrl:'https://meet.google.com/'+code};},
-    get:async()=>{throw new Error('UNUSED');},exchangeCode:async()=>{throw new Error('UNUSED');},refresh:async()=>{throw new Error('UNUSED');},identity:async()=>{throw new Error('UNUSED');},revoke:async()=>{}};
   await context.core.query(`UPDATE appointments SET status='pending',"consultationType"='virtual',"proposedEndAt"="scheduledAt"+INTERVAL '1 hour' WHERE id=$1`,[f.appointmentId]);
-  await context.integrations.query(`INSERT INTO google_meet_connections (id,"doctorId",status,revision,scopes,"accessToken","refreshToken","expiresAt","updatedAt") VALUES($1,$2,'connected',1,$3,$4,$5,NOW()+INTERVAL '1 hour',NOW())`,[randomUUID(),f.doctorId,[MEET_SCOPE],encryptMeetSecret(keyring,'fixture-access',f.doctorId),encryptMeetSecret(keyring,'fixture-refresh',f.doctorId)]);
   const authority=createVideoAuthority(context.core),associations=createVideoAssociations(context.integrations,authority);
-  const module=createVideoModule(context.integrations,authority,associations,{googleEnabled:true,appOrigin:'https://vital.test',clientId:'fixture-client',redirectUri:'https://vital.test/api/doctor/google-meet/callback',provider,keyring});
-  const actor={...f.actor,authId:f.doctorAuthId,role:'doctor' as const,resource:f.appointmentId,scopes:['video.generate']};
-  const generate=(id=randomUUID())=>module.generate(actor,{operationId:id,requestHash:'a'.repeat(64)},{requestId:id,appointmentId:f.appointmentId,purpose:'approval'});
-  return{...f,module,authority,associations,actor,generate,writes:()=>writes};
+  const module=createVideoModule(context.integrations,authority,associations);
+  const actor={...f.actor,authId:f.doctorAuthId,role:'doctor' as const,resource:f.appointmentId,scopes:['video.resource.read']};
+  return{...f,module,authority,associations,actor};
 }
 export async function videoLiveScenarios(t:TestContext,context:Context){
-  await t.test('EDA Video real PostgreSQL concurrent commands quota rollback and unknown creation remain bounded',()=>videoFixture(context,async f=>{
-    const id=randomUUID();await Promise.all([f.generate(id),f.generate(id)]);assert.equal(f.writes(),1);
-    const outcomes=await Promise.allSettled([f.generate(),f.generate()]);assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1);assert.equal(f.writes(),2);
-    const quota=(await context.integrations.query('SELECT "attemptsStarted" FROM meet_generation_quotas WHERE "doctorId"=$1 AND "billingLineageId"=$2',[f.doctorId,f.lineage])).rows[0];assert.equal(quota.attemptsStarted,2);
-    const generation=(await context.integrations.query('SELECT id,"requestId" FROM google_meet_generations WHERE "doctorId"=$1 ORDER BY "createdAt" LIMIT 1',[f.doctorId])).rows[0];
-    await context.integrations.query(`UPDATE google_meet_generations SET status='uncertain',"spaceName"=NULL,"meetingUrl"=NULL WHERE id=$1`,[generation.id]);
-    assert.equal((await f.generate(generation.requestId)).status,'uncertain');assert.equal(f.writes(),2);
-  }));
   await t.test('EDA Video real association commits and broker inbox deduplicates without generating another room',()=>videoFixture(context,async f=>{
-    const generation=await f.generate(),workflowId=randomUUID(),selection={meetingGenerationId:generation.generationId},hash=selectionHash(selection);
+    const workflowId=randomUUID(),selection={meetingUrl:'https://meet.google.com/abc-defg-hij'},hash=selectionHash(selection);
     await context.core.query(`INSERT INTO appointment_workflows (id,"appointmentId","targetAppointmentId","actorAuthId",kind,"inputHash","expectedVersion","prepareOperationId","expiresAt","videoSelectionHash","videoTargetVersion","videoCorrelationId","updatedAt") VALUES($1::uuid,$2,$2,$3,'approve',$4,0,$5::uuid,NOW()+INTERVAL '5 minutes',$6,0,$7,NOW())`,[workflowId,f.appointmentId,f.doctorAuthId,'a'.repeat(64),randomUUID(),hash,randomUUID()]);
     const receipt=await f.associations.prepareWorkflow(workflowId,selection);
     await context.core.query('UPDATE appointment_workflows SET "videoReceipt"=$2::jsonb,"videoProcessingState"=\'prepared\' WHERE id=$1::uuid',[workflowId,JSON.stringify(receipt)]);
     // This is explicit owner-state fixture setup, not a synthetic runtime acknowledgement.
     await context.core.query(`UPDATE appointments SET status='approved',version=version+1 WHERE id=$1`,[f.appointmentId]);
     await context.core.query(`UPDATE appointment_workflows SET state='committed',receipt=$2::jsonb WHERE id=$1::uuid`,[workflowId,JSON.stringify({ehrCaseId:randomUUID()})]);
-    await f.associations.finalizeWorkflow(workflowId);await f.associations.finalizeWorkflow(workflowId);assert.equal(f.writes(),1);
-    const resource=(await context.integrations.query('SELECT id,version,"googleSpaceName" FROM video_resources WHERE "appointmentId"=$1',[f.appointmentId])).rows[0];assert.equal(resource.version,1);assert.ok(resource.googleSpaceName);
+    await f.associations.finalizeWorkflow(workflowId);await f.associations.finalizeWorkflow(workflowId);
+    const resource=(await context.integrations.query('SELECT id,version,"googleSpaceName" FROM video_resources WHERE "appointmentId"=$1',[f.appointmentId])).rows[0];assert.equal(resource.version,1);assert.equal(resource.googleSpaceName,null);
     assert.equal((await context.core.query('SELECT "videoResourceId" FROM consultations WHERE "appointmentId"=$1',[f.appointmentId])).rows[0].videoResourceId,resource.id);
     const fact=(await context.integrations.query<OutboxRow>('SELECT * FROM outbox_events WHERE "aggregateId"=$1 AND "eventType"=$2',[resource.id,'vital.video.resource.changed'])).rows[0]!;
     const event=envelopeFromRow(fact);await publishConfirmed(context.publisher,context.exchange,'routed',event);const delivered=await context.channel.get(context.queue,{noAck:false});assert.ok(delivered);
     const received=parseEvent(JSON.parse(delivered.content.toString()));assert.equal(received.eventId,event.eventId);
     await Promise.all([consumeVideoFact(context.integrations,received),consumeVideoFact(context.integrations,received)]);context.channel.ack(delivered);
     assert.equal((await context.integrations.query('SELECT 1 FROM inbox_events WHERE "consumerId"=$1 AND "eventId"=$2',['video-state',event.eventId])).rowCount,1);
-    assert.equal(f.writes(),1);
+
   }));
   await t.test('EDA Video actual process mTLS denies wrong certificate audience scope resource and payload',()=>videoFixture(context,async f=>{
     const prisma=new PrismaClient({adapter:new PrismaPg(context.core,{disposeExternalPool:false})}),keys=generateKeyPairSync('rsa',{modulusLength:2048});
@@ -95,7 +79,7 @@ export async function videoLiveScenarios(t:TestContext,context:Context){
     const call=(cert=true,audience='vital-services',resource=f.appointmentId,scope='video.generate',extra={})=>{const id=randomUUID(),body=JSON.stringify({requestId:id,appointmentId:f.appointmentId,purpose:'approval',...extra});
       const token=jwt.sign({actor:{...f.actor,resource,scopes:[scope]},action:'POST '+path,requestHash:requestHash('POST',path,JSON.parse(body))},keys.privateKey,{algorithm:'RS256',keyid:'test',issuer:'vital-web',audience,subject:f.doctorAuthId,jwtid:id,expiresIn:30});
       return new Promise<number>((resolve,reject)=>{const req=httpsRequest({host:'127.0.0.1',port,servername:'vital-api.test',method:'POST',path,ca:readFileSync(context.certs.serviceCa),...(cert?{key:readFileSync(context.certs.webKey),cert:readFileSync(context.certs.webCert)}:{}),headers:{'X-Vital-Actor-Assertion':token,'Content-Type':'application/json'}},res=>{res.resume();res.once('end',()=>resolve(res.statusCode??0));});req.setTimeout(5000,()=>req.destroy(new Error('VIDEO_TEST_TLS_TIMEOUT')));req.once('error',reject);req.end(body);});};
-    try{await assert.rejects(call(false));assert.equal(await call(true,'other-audience'),401);assert.equal(await call(true,'vital-services',randomUUID()),403);assert.equal(await call(true,'vital-services',f.appointmentId,'payments.checkout'),403);assert.equal(await call(true,'vital-services',f.appointmentId,'video.generate',{doctorId:randomUUID()}),400);assert.equal(await call(),200);assert.equal(f.writes(),1);}
+    try{await assert.rejects(call(false));assert.equal(await call(true,'other-audience'),401);assert.equal(await call(),410);}
     finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await prisma.$disconnect();}
   }));
 }

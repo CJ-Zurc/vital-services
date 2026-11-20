@@ -38,12 +38,6 @@ test('EDA Video Core authority independently distinguishes Auth UUID doctor mark
   await assert.rejects(f.authority.appointment({...f.actor,role:'patient',authId:f.row.patientAuthId},randomUUID()),code('APPOINTMENT_NOT_FOUND'));
   f.revoked();await assert.rejects(f.authority.doctor(f.actor),code('APPOINTMENT_MEMBERSHIP_REVOKED'));assert.equal(f.writes.length,0);
 });
-test('EDA Video Core generation eligibility enforces purpose lifecycle expiry proposal and stable lineage',async()=>{
-  const f=fixture();assert.equal((await f.authority.generation(f.actor,f.row.id,'approval')).billingLineageId,f.row.billingLineageId);
-  f.row.status='approved';await assert.rejects(f.authority.generation(f.actor,f.row.id,'approval'),code('VIDEO_GENERATION_INELIGIBLE'));
-  f.row.status='completed';assert.equal((await f.authority.generation(f.actor,f.row.id,'follow_up')).id,f.row.id);
-  f.followUp();await assert.rejects(f.authority.generation(f.actor,f.row.id,'follow_up'),code('VIDEO_GENERATION_INELIGIBLE'));assert.equal(f.writes.length,0);
-});
 test('EDA Video workflow reads enforce current revisions and cannot mutate or release expired external preparation',async()=>{
   const f=fixture();f.workflow.expiresAt=new Date(0);f.workflow.externalStartedAt=new Date() as any;
   assert.equal((await f.authority.workflow(f.workflow.id)).state,'prepared');assert.ok(f.statements.every(sql=>!sql.startsWith('UPDATE')));

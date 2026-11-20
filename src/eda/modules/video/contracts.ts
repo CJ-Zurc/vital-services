@@ -3,12 +3,9 @@ import type { AppointmentRow,AppointmentParticipant,ParticipantReceipt,Reschedul
 import { requestHash } from '../../infrastructure/security.js';
 import { z } from 'zod';
 
-export const meetPurpose=z.enum(['approval','follow_up']);
-export type MeetPurpose=z.infer<typeof meetPurpose>;
-export const videoSelection=z.object({meetingProvider:z.literal('gmeet').optional(),meetingUrl:z.string().trim().max(2048).optional(),meetingGenerationId:z.uuid().optional()}).strict()
-  .refine(v=>!(v.meetingUrl&&v.meetingGenerationId),{message:'Select one meeting source.'});
+export const videoSelection=z.object({meetingProvider:z.literal('gmeet').optional(),meetingUrl:z.string().trim().max(2048).optional()}).strict();
 export type VideoSelection=z.infer<typeof videoSelection>;
-export function selectionHash(input:VideoSelection){return requestHash('VIDEO-SELECTION','gmeet',{meetingUrl:input.meetingUrl??null,meetingGenerationId:input.meetingGenerationId??null});}
+export function selectionHash(input:VideoSelection){return requestHash('VIDEO-SELECTION','gmeet',{meetingUrl:input.meetingUrl??null,meetingGenerationId:null});}
 export interface VideoAppointment extends AppointmentRow {activeFollowUp:boolean;videoResourceId?:string|null;videoResourceVersion?:number|null}
 export interface VideoWorkflowIntent {
   workflowId:string;sourceAppointmentId:string;targetAppointmentId:string;doctorId:string;doctorAuthId:string;patientAuthId:string;
@@ -25,7 +22,6 @@ export interface VideoSagaIntent extends RescheduleIntent {doctorId:string;sourc
 export interface VideoAuthority {
   doctor(actor:Actor):Promise<{doctorId:string}>;
   appointment(actor:Actor,id:string):Promise<VideoAppointment>;
-  generation(actor:Actor,id:string,purpose:MeetPurpose):Promise<VideoAppointment>;
   workflow(id:string):Promise<VideoWorkflowIntent>;
   saga(id:string):Promise<VideoSagaIntent>;
   completeWorkflow(id:string,receipt:VideoPreparationReceipt):Promise<void>;

@@ -36,6 +36,10 @@ async function publishedSlot(tx: PoolClient, id: string, doctorId: string, consu
   if(!slot||![consultationType,"both"].includes(slot.consultationType))fail(409,"SCHEDULE_UNAVAILABLE");
   return slotInterval(slot.slotDate.toISOString().slice(0,10),slot.startTime.slice(0,5),slot.endTime.slice(0,5));
 }
+function rejectGeneratedSelection(body:unknown){
+  if(body&&typeof body==='object'&&'meetingGenerationId' in body)throw new DomainError(410,'MEET_AUTOMATION_RETIRED','Refresh VITAL and paste a Google Meet link manually.');
+  return body;
+}
 const preparedInput = z.object({ workflowId: z.uuid(), appointmentId: z.uuid(), expectedVersion: versionSchema,
   handoffText:z.string().trim().min(1).max(2000).optional(),kind: z.enum(["approve","follow-up"]),consultationType:z.enum(["virtual","in_person"]).optional(),confirmConflicts:z.boolean().optional(),
   ...videoSelection.shape,
@@ -354,15 +358,15 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       if(!row.sourceAppointmentId||row.status!=="pending_patient_confirmation"||actor.role!=="patient")fail(409,"RESCHEDULE_DECLINE_INVALID");await appointmentTransition(tx,row,"rejected",actor,meta.operationId,actor.correlationId,input.reason);await appointmentNotification(tx,row,actor,meta.operationId,"appointment.reschedule_declined",row.doctorAuthId,row.sourceAppointmentId);return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
     async cancel(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=reasonInput.parse(body);return mutate(actor,"cancel",id,meta,input,async tx=>{
       const row=await lockAppointment(tx,id);appointmentOwn(actor,row);expected(row,input.expectedVersion);if(appointmentExpired(row,clock()))fail(409,"APPOINTMENT_EXPIRED");await applyCancellation(tx,row,actor,meta.operationId,input.reason);return{id,version:row.version,status:row.status,operationStatus:row.consultationType==="in_person"?"completed":"processing"};});},
-    async prepareWorkflow(actor:Actor,meta:AppointmentCommand,body:unknown){const input=preparedInput.parse(body);
-      const selection:VideoSelection=videoSelection.parse({...(input.meetingProvider?{meetingProvider:input.meetingProvider}:{}),...(input.meetingUrl?{meetingUrl:input.meetingUrl}:{}),...(input.meetingGenerationId?{meetingGenerationId:input.meetingGenerationId}:{})});
+    async prepareWorkflow(actor:Actor,meta:AppointmentCommand,body:unknown){const input=preparedInput.parse(rejectGeneratedSelection(body));
+      const selection:VideoSelection=videoSelection.parse({...(input.meetingProvider?{meetingProvider:input.meetingProvider}:{}),...(input.meetingUrl?{meetingUrl:input.meetingUrl}:{})});
       const selectedHash=selectionHash(selection);
       const result=await mutate(actor,"workflow.prepare",input.appointmentId,meta,input,async tx=>{
       await membership(tx,actor,"doctor");const row=await lockAppointment(tx,input.appointmentId);appointmentOwn(actor,row);expected(row,input.expectedVersion);await noTransition(tx,row);
       if(input.kind==="follow-up"?input.consultationType==="in_person":row.consultationType==="in_person")fail(409,"IN_PERSON_BOOKING_WORKFLOW_REQUIRED");
       requireOwner(owners.records,"records");requireOwner(owners.video,"video");
       const type=input.kind==='follow-up'?input.consultationType:row.consultationType;
-      if(type==='virtual'?Number(Boolean(selection.meetingUrl))+Number(Boolean(selection.meetingGenerationId))!==1:Boolean(selection.meetingUrl||selection.meetingGenerationId))fail(400,'APPOINTMENT_MEETING_SELECTION_INVALID');
+      if(type==='virtual'?!Boolean(selection.meetingUrl):Boolean(selection.meetingUrl))fail(400,'APPOINTMENT_MEETING_SELECTION_INVALID');
       const abandoned=(await tx.query(`UPDATE appointment_workflows SET state='abandoned',"updatedAt"=NOW() WHERE "appointmentId"=$1 AND state='prepared'
         AND "externalStartedAt" IS NULL AND "expiresAt"<=NOW() RETURNING "targetAppointmentId"`,[row.id])).rows;
       for(const old of abandoned)if(old.targetAppointmentId&&old.targetAppointmentId!==row.id){

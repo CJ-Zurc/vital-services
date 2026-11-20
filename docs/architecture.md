@@ -53,3 +53,6 @@ See [portal consistency and clinical review](portal-consistency.md) for appointm
 
 
 See [portal consistency v2](portal-consistency-v2.md) for anonymous patient ratings and the screenshot-aligned portal changes.
+
+
+Manual Google Meet links replace the retired connection/generation feature. See [manual meeting workflow](manual-meet-links.md).

@@ -11,6 +11,10 @@ type Resource={id:string;appointmentId:string;doctorId:string;billingLineageId:s
 type WorkflowHold={workflowId:string;state:string;receipt:VideoPreparationReceipt;resourceId:string|null;resourceVersion:number|null};
 type SagaHold={operationId:string;state:string;receipt:ParticipantReceipt;freezeToken:string;videoResourceId:string|null;videoResourceVersion:number|null};
 function fail(code:string):never{throw new DomainError(409,'VIDEO_'+code,'Meeting association is unavailable.');}
+function rejectGeneratedSelection(body:unknown){
+  if(body&&typeof body==='object'&&'meetingGenerationId' in body)throw new DomainError(410,'MEET_AUTOMATION_RETIRED','Refresh VITAL and paste a Google Meet link manually.');
+  return body;
+}
 export function createVideoAssociations(pool:Pool,authority:VideoAuthority,clock=Date.now):VideoAssociations{
   async function local<T>(lineage:string,run:(tx:PoolClient)=>Promise<T>){const tx=await pool.connect();try{await tx.query('BEGIN');await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['video-lineage:'+lineage]);const result=await run(tx);await tx.query('COMMIT');return result;}catch(error){await tx.query('ROLLBACK');throw error;}finally{tx.release();}}
   const resource=async(tx:Pick<PoolClient,'query'>,id:string)=>(await tx.query<Resource>('SELECT * FROM video_resources WHERE id=$1 FOR UPDATE',[id])).rows[0];
@@ -53,18 +57,13 @@ export function createVideoAssociations(pool:Pool,authority:VideoAuthority,clock
   };
   const api:VideoAssociations={
     participant,
-    async prepareWorkflow(id,body){const selection=videoSelection.parse(body),intent=await authority.workflow(id);if(selectionHash(selection)!==intent.selectionHash)fail('SELECTION_BINDING_INVALID');
+    async prepareWorkflow(id,body){const selection=videoSelection.parse(rejectGeneratedSelection(body)),intent=await authority.workflow(id);if(selectionHash(selection)!==intent.selectionHash)fail('SELECTION_BINDING_INVALID');
       return local(intent.billingLineageId,async tx=>{const old=await workflowHold(tx,id);if(old){if(old.state==='aborted'||!workflowBinding(old.receipt,intent))fail('WORKFLOW_PREPARATION_CONFLICT');return old.receipt;}
         if(intent.state!=='prepared'||intent.expiresAt.getTime()<=clock())fail('WORKFLOW_PREPARATION_EXPIRED');
-        if(intent.consultationType==='virtual'?Boolean(selection.meetingUrl)===Boolean(selection.meetingGenerationId):Boolean(selection.meetingUrl||selection.meetingGenerationId))fail('SELECTION_REQUIRED');
+        if(intent.consultationType==='virtual'?!Boolean(selection.meetingUrl):Boolean(selection.meetingUrl))fail('SELECTION_REQUIRED');
         let r:Resource|undefined;
         if(intent.consultationType==='virtual'){
           let url=selection.meetingUrl??null,spaceName:string|null=null,generatedAt:Date|null=null;
-          if(selection.meetingGenerationId){const generation=(await tx.query('SELECT * FROM google_meet_generations WHERE id=$1 FOR UPDATE',[selection.meetingGenerationId])).rows[0];
-            if(!generation||generation.doctorId!==intent.doctorId||generation.appointmentId!==intent.sourceAppointmentId||generation.billingLineageId!==intent.quotaLineageId||generation.purpose!==(intent.kind==='approve'?'approval':'follow_up')||generation.status!=='ready'||generation.claimedAppointmentId||generation.reservedWorkflowId&&generation.reservedWorkflowId!==id||generation.expiresAt.getTime()<=clock()||!generation.spaceName||!generation.meetingUrl)fail('GENERATION_CLAIM_CONFLICT');
-            const c=(await tx.query('SELECT status,revision FROM google_meet_connections WHERE id=$1 FOR UPDATE',[generation.connectionId])).rows[0];if(!c||c.status!=='connected'||c.revision!==generation.connectionRevision)fail('RECONNECT_REQUIRED');
-            url=generation.meetingUrl;spaceName=generation.spaceName;generatedAt=generation.createdAt;
-          }
           const validated=validateMeetingUrl('gmeet',url??'');if(!validated.valid||!validated.normalizedUrl||!validated.urlHash)fail('LINK_INVALID');
           const conflict=(await tx.query<Resource>('SELECT * FROM video_resources WHERE "meetingUrlHash"=$1 FOR UPDATE',[validated.urlHash])).rows[0];
           if(conflict&&conflict.appointmentId!==intent.targetAppointmentId&&(!conflict.retiredAt||conflict.doctorId!==intent.doctorId))fail('LINK_ALREADY_ASSOCIATED');
@@ -73,9 +72,8 @@ export function createVideoAssociations(pool:Pool,authority:VideoAuthority,clock
           const prior=targetPrior??conflict;
           if(prior&&prior.doctorId!==intent.doctorId)fail('RESOURCE_OWNER_CHANGED');
           const resourceId=prior?.id??randomUUID(),version=prior?prior.version+1:0;
-          if(prior){r=(await tx.query<Resource>(`UPDATE video_resources SET "appointmentId"=$2,"billingLineageId"=$3,"associationVersion"=$4,version=$5,"meetingUrl"=$6,"normalizedMeetingUrl"=$7,"meetingUrlHash"=$8,"googleSpaceName"=$9,"generationId"=$10,"linkGeneratedAt"=$11,"preparedWorkflowId"=$12,"retiredAt"=NULL,"linkSavedAt"=NULL,"updatedAt"=NOW() WHERE id=$1 AND "retiredAt" IS NOT NULL RETURNING *`,[resourceId,intent.targetAppointmentId,intent.billingLineageId,intent.associationVersion,version,url,validated.normalizedUrl,validated.urlHash,spaceName,selection.meetingGenerationId??null,generatedAt,id])).rows[0];if(!r)fail('FROZEN_RESOURCE_CHANGED');}
-          else r=(await tx.query<Resource>(`INSERT INTO video_resources (id,"appointmentId","providerOriginAppointmentId","doctorId","billingLineageId","associationVersion",version,provider,"meetingUrl","normalizedMeetingUrl","meetingUrlHash","validationStatus","googleSpaceName","generationId","linkGeneratedAt","preparedWorkflowId","createdAt","updatedAt") VALUES($1,$2,$2,$3,$4,$5,$6,'gmeet',$7,$8,$9,'validated',$10,$11,$12,$13,NOW(),NOW()) RETURNING *`,[resourceId,intent.targetAppointmentId,intent.doctorId,intent.billingLineageId,intent.associationVersion,version,url,validated.normalizedUrl,validated.urlHash,spaceName,selection.meetingGenerationId??null,generatedAt,id])).rows[0]!;
-          if(selection.meetingGenerationId){const reserved=await tx.query(`UPDATE google_meet_generations SET "reservedWorkflowId"=$2 WHERE id=$1 AND status='ready' AND "claimedAppointmentId" IS NULL AND ("reservedWorkflowId" IS NULL OR "reservedWorkflowId"=$2)`,[selection.meetingGenerationId,id]);if(reserved.rowCount!==1)fail('GENERATION_CLAIM_CONFLICT');}
+          if(prior){r=(await tx.query<Resource>(`UPDATE video_resources SET "appointmentId"=$2,"billingLineageId"=$3,"associationVersion"=$4,version=$5,"meetingUrl"=$6,"normalizedMeetingUrl"=$7,"meetingUrlHash"=$8,"googleSpaceName"=$9,"generationId"=$10,"linkGeneratedAt"=$11,"preparedWorkflowId"=$12,"retiredAt"=NULL,"linkSavedAt"=NULL,"updatedAt"=NOW() WHERE id=$1 AND "retiredAt" IS NOT NULL RETURNING *`,[resourceId,intent.targetAppointmentId,intent.billingLineageId,intent.associationVersion,version,url,validated.normalizedUrl,validated.urlHash,spaceName,null,generatedAt,id])).rows[0];if(!r)fail('FROZEN_RESOURCE_CHANGED');}
+          else r=(await tx.query<Resource>(`INSERT INTO video_resources (id,"appointmentId","providerOriginAppointmentId","doctorId","billingLineageId","associationVersion",version,provider,"meetingUrl","normalizedMeetingUrl","meetingUrlHash","validationStatus","googleSpaceName","generationId","linkGeneratedAt","preparedWorkflowId","createdAt","updatedAt") VALUES($1,$2,$2,$3,$4,$5,$6,'gmeet',$7,$8,$9,'validated',$10,$11,$12,$13,NOW(),NOW()) RETURNING *`,[resourceId,intent.targetAppointmentId,intent.doctorId,intent.billingLineageId,intent.associationVersion,version,url,validated.normalizedUrl,validated.urlHash,spaceName,null,generatedAt,id])).rows[0]!;
         }
         const receipt:VideoPreparationReceipt={workflowId:id,sourceAppointmentId:intent.sourceAppointmentId,targetAppointmentId:intent.targetAppointmentId,expectedSourceVersion:intent.expectedSourceVersion,expectedTargetVersion:intent.expectedTargetVersion,billingLineageId:intent.billingLineageId,associationVersion:intent.associationVersion,selectionHash:intent.selectionHash,resourceId:r?.id??null,resourceVersion:r?.version??null,freezeToken:randomUUID()};
         await tx.query(`INSERT INTO video_workflow_holds ("workflowId","sourceAppointmentId","targetAppointmentId","doctorId","expectedSourceVersion","expectedTargetVersion","billingLineageId","associationVersion","selectionHash","resourceId","resourceVersion","freezeToken",state,receipt,"expiresAt","createdAt","updatedAt") VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'prepared',$13::jsonb,$14,NOW(),NOW())`,[id,intent.sourceAppointmentId,intent.targetAppointmentId,intent.doctorId,intent.expectedSourceVersion,intent.expectedTargetVersion,intent.billingLineageId,intent.associationVersion,intent.selectionHash,receipt.resourceId,receipt.resourceVersion,receipt.freezeToken,JSON.stringify(receipt),intent.expiresAt]);return receipt;});},
@@ -91,9 +89,9 @@ export function createVideoAssociations(pool:Pool,authority:VideoAuthority,clock
     async validate(row:AppointmentRow){await local(row.billingLineageId,async tx=>{
       const freeze=await tx.query(`SELECT "operationId" FROM video_association_holds WHERE "billingLineageId"=$1 AND state='prepared'`,[row.billingLineageId]);if(freeze.rows.length)fail('LINEAGE_ALREADY_FROZEN');
       const r=(await tx.query<Resource>('SELECT * FROM video_resources WHERE "appointmentId"=$1 FOR UPDATE',[row.id])).rows[0];
+      if(r?.preparedWorkflowId&&r.generationId)fail('MANUAL_LINK_REVIEW_REQUIRED');
       if(r?.preparedWorkflowId){const i=await authority.workflow(r.preparedWorkflowId),hold=await workflowHold(tx,i.workflowId);if(i.state!=='prepared'||!hold||hold.state!=='prepared'||!workflowBinding(hold.receipt,i)||r.version!==hold.resourceVersion||row.version!==i.expectedTargetVersion)fail('WORKFLOW_PREPARATION_STALE');
-        if(r.generationId){const generation=(await tx.query('SELECT * FROM google_meet_generations WHERE id=$1 FOR UPDATE',[r.generationId])).rows[0],c=generation?(await tx.query('SELECT status,revision FROM google_meet_connections WHERE id=$1 FOR UPDATE',[generation.connectionId])).rows[0]:null;
-          if(!generation||generation.status!=='ready'||generation.reservedWorkflowId!==i.workflowId||generation.expiresAt.getTime()<=clock()||!c||c.status!=='connected'||c.revision!==generation.connectionRevision)fail('GENERATION_CLAIM_CONFLICT');}
+
       }
       if(row.consultationType==='virtual'){if(!r||r.retiredAt||r.doctorId!==row.doctorId||r.billingLineageId!==row.billingLineageId||r.associationVersion!==row.associationVersion||r.validationStatus!=='validated'||!r.meetingUrl)fail('RESOURCE_REQUIRED');
         if(r.preparedWorkflowId&&row.status!=='pending')fail('RESOURCE_NOT_FINALIZED');

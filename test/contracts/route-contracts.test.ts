@@ -107,7 +107,7 @@ test('route contract review distinguishes public Auth callback internal and reti
   assert.equal(sso.family, 'auth'); assert.match(sso.requestDto.summary, /exchange_token/);
   const meet = method('/api/doctor/google-meet/callback');
   assert.equal(meet.family, 'video'); assert.match(meet.caller, /callback navigation/);
-  assert.match(meet.cookies.policy, /HttpOnly.*vital_google_meet_oauth/); assert.ok(meet.status.documentedFamilyBranches.includes(303));
+  assert.match(meet.cookies.policy, /HttpOnly.*vital_google_meet_oauth/); assert.ok(meet.status.documentedFamilyBranches.includes(410));
   assert.match(method('/api/auth/google/url').targetOwner, /UHSE_AUTH/);
   assert.match(method('/api/auth/session').requestDto.summary, /refresh-token cookie.*not bearer-only/);
   assert.match(method('/api/auth/logout', 'POST').cookies.policy, /Clear.*even if upstream logout fails/);
