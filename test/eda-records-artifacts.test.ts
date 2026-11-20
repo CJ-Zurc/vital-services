@@ -258,8 +258,8 @@ test("Records artifact scan evidence cannot be reused from expired processing", 
 });
 
 test('Capstone inspection validates real images and PDFs without reading ClamAV configuration',async()=>{
-  assert.equal(FILE_INSPECTION_POLICY,'capstone-validation-only');
-  const inspector=createFileInspector(()=>{throw new Error('ClamAV configuration must not be accessed');},undefined,()=>now);
+  assert.equal(FILE_INSPECTION_POLICY,'clamav');
+  const inspector=createFileInspector(()=>{throw new Error('ClamAV configuration must not be accessed');},'capstone-validation-only',()=>now);
   for(const bytes of [await png(),await sharp(await png()).jpeg().toBuffer(),await createPrescriptionPdfBuffer(base)]){
     const evidence=await inspector.scan(bytes);
     assert.deepEqual(evidence,{policy:'capstone-validation-only',verdict:'not_scanned',validationVersion:1,validatedAt:new Date(now).toISOString(),contentHash:sha256(bytes),byteLength:bytes.length});
@@ -273,7 +273,7 @@ test('Capstone inspection validates real images and PDFs without reading ClamAV 
   }
   for(const bytes of [Buffer.alloc(0),Buffer.from('not a supported file'),Buffer.from([137,80,78,71,13,10,26,10,1]),Buffer.alloc(MAX_UPLOAD_BYTES+1)])await assert.rejects(inspector.scan(bytes),ArtifactError);
   await assert.rejects(inspector.scan(await png(),AbortSignal.abort()),/ARTIFACT_LEASE_LOST/);
-  let configured=0;assert.equal(createFileInspector(()=>{configured++;return clamConfig;},'clamav').policy,'clamav');assert.equal(configured,1);
+  let configured=0;assert.equal(createFileInspector(()=>{configured++;return clamConfig;}).policy,'clamav');assert.equal(configured,1);
 });
 
 test('Capstone artifact processing publishes validated attachments and both branded signed clinical PDFs without antivirus',{skip:!regularFont||!boldFont},async()=>{

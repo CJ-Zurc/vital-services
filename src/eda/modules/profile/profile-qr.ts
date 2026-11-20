@@ -36,10 +36,12 @@ export function createProfileQrModule(repository: ProfileQrRepository, storage: 
       const input = await storage.readQuarantine(originalKey(job.asset), { contentHash: descriptor.sha256, byteLength: descriptor.byteLength, mimeType: descriptor.mimeType }, signal);
       assertBytes(input);
       if (sha256(input) !== descriptor.sha256 || input.length !== descriptor.byteLength || detectRecordsMime(input) !== descriptor.mimeType) qrDenied(400, "PROFILE_QR_BYTES_MISMATCH");
-      verifyQrScan(await scanner.scan(input, signal), input, clock(), false, scanner.policy);
+      const deadline = AbortSignal.timeout(15_000);
+      const scanBudget = signal ? AbortSignal.any([signal, deadline]) : deadline;
+      verifyQrScan(await scanner.scan(input, scanBudget, job.asset.correlationId), input, clock(), false, scanner.policy);
       const validated = await validateUpload(input, descriptor.mimeType);
       assertBytes(validated.bytes);
-      const evidence = await scanner.scan(validated.bytes, signal);
+      const evidence = await scanner.scan(validated.bytes, scanBudget, job.asset.correlationId);
       verifyQrScan(evidence, validated.bytes, clock(), false, scanner.policy);
       const content: NonNullable<QrAsset["content"]> = { contentHash: validated.contentHash, byteLength: validated.byteLength, mimeType: descriptor.mimeType, evidence };
       const ready = { ...job.asset, content };
@@ -67,6 +69,14 @@ export function createProfileQrModule(repository: ProfileQrRepository, storage: 
       if (descriptor.operationId !== meta.operationId) qrDenied(409, "PROFILE_QR_OPERATION_MISMATCH");
       const bytes = Buffer.from(input); assertBytes(bytes);
       if (bytes.length !== descriptor.byteLength || sha256(bytes) !== descriptor.sha256 || detectRecordsMime(bytes) !== descriptor.mimeType) qrDenied(400, "PROFILE_QR_BYTES_MISMATCH");
+      try {
+        verifyQrScan(await scanner.scan(bytes, undefined, actor.correlationId), bytes, clock(), false, scanner.policy);
+      } catch (error) {
+        if (!(error instanceof ArtifactError)) throw error;
+        if (error.code === "UPLOAD_MALWARE_OR_SCAN_LIMIT") qrDenied(422, error.code);
+        if (error.retryable || error.code.startsWith("SCANNER_")) qrDenied(503, "UPLOAD_SCANNER_UNAVAILABLE");
+        qrDenied(400, "PROFILE_QR_IMAGE_REJECTED");
+      }
       const asset = await repository.reserve(actor, meta, descriptor);
       if (asset.state === "pending") {
         try { await storage.putQuarantine(originalKey(asset), bytes, descriptor.mimeType); }

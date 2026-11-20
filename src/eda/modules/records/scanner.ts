@@ -1,10 +1,11 @@
 import { connect } from "node:net";
+import { observeUploadScan } from "../../infrastructure/observation.js";
 import { lstat, readFile } from "node:fs/promises";
 import type { Duplex } from "node:stream";
 import { ArtifactError, MAX_UPLOAD_BYTES, assertUploadSize, sha256 } from "./upload-validation.js";
 
 export type ScanEvidence = { engine: "clamav"; engineVersion: string; databaseVersion: number; databaseDate: string; scannedAt: string; contentHash: string; byteLength: number; verdict: "clean" };
-export interface RecordsScanner { scan(bytes: Buffer, signal?: AbortSignal): Promise<ScanEvidence> }
+export interface RecordsScanner { scan(bytes: Buffer, signal?: AbortSignal, correlationId?: string): Promise<ScanEvidence> }
 export type ClamAvConfig = { socketPath: string; daemonConfigPath: string; deadlineMs: number; maxDatabaseAgeMs: number };
 export type ClamAvIo = {
   policy(config: ClamAvConfig): Promise<void>;
@@ -44,8 +45,9 @@ const nativeIo: ClamAvIo = {
     socket.once("error", reject); socket.once("connect", () => { socket.removeListener("error", reject); resolve(socket); });
   }),
 };
-function databaseVersion(reply: string, now: number, maximumAge: number): Omit<ScanEvidence, "contentHash" | "byteLength" | "scannedAt" | "verdict"> {
-  const match = /^ClamAV ([\w.+-]+)\/(\d+)\/(.+)$/.exec(reply);
+type ScannerVersion = Pick<ScanEvidence, "engine" | "engineVersion" | "databaseVersion" | "databaseDate">;
+function databaseVersion(reply: string, now: number, maximumAge: number): ScannerVersion {
+  const match = /^ClamAV ([\w.+-]{1,64})\/(\d+)\/(.+)$/.exec(reply);
   if (!match) throw new ArtifactError("SCANNER_VERSION_INVALID", true);
   // ClamAV's unzoned signature date is interpreted as UTC; daemon TZ=UTC is an activation requirement.
   const timestamp = Date.parse(/(?:Z|GMT|UTC|[+-]\d{4})$/.test(match[3]!) ? match[3]! : `${match[3]} UTC`);
@@ -97,20 +99,28 @@ export class ClamAvScanner implements RecordsScanner {
       }, () => finish(new ArtifactError("SCANNER_UNAVAILABLE", true)));
     });
   }
-  async scan(input: Buffer, parent?: AbortSignal): Promise<ScanEvidence> {
+  async scan(input: Buffer, parent?: AbortSignal, correlationId?: string): Promise<ScanEvidence> {
     assertUploadSize(input); const bytes = Buffer.from(input);
     const signal = parent ? AbortSignal.any([parent, AbortSignal.timeout(this.config.deadlineMs)]) : AbortSignal.timeout(this.config.deadlineMs);
+    const started = performance.now();
+    let version: ScannerVersion | undefined;
+    let outcome: "clean" | "rejected" | "unavailable" = "unavailable";
     try {
       await this.io.policy(this.config);
-      const version = databaseVersion(await this.exchange(Buffer.from("zVERSION\0"), signal), this.now(), this.config.maxDatabaseAgeMs);
+      version = databaseVersion(await this.exchange(Buffer.from("zVERSION\0"), signal), this.now(), this.config.maxDatabaseAgeMs);
       const verdict = await this.exchange(instreamRequest(bytes), signal);
       if (verdict !== "stream: OK") {
-        if (/^stream: .+ FOUND$/.test(verdict)) throw new ArtifactError("UPLOAD_MALWARE_OR_SCAN_LIMIT");
+        if (/^stream: [ -~]+ FOUND$/.test(verdict)) {
+          outcome = "rejected";
+          throw new ArtifactError("UPLOAD_MALWARE_OR_SCAN_LIMIT");
+        }
         throw new ArtifactError("SCANNER_VERDICT_INVALID", true);
       }
       const after = databaseVersion(await this.exchange(Buffer.from("zVERSION\0"), signal), this.now(), this.config.maxDatabaseAgeMs);
       if (after.databaseVersion !== version.databaseVersion || after.engineVersion !== version.engineVersion || after.databaseDate !== version.databaseDate) throw new ArtifactError("SCANNER_DATABASE_CHANGED", true);
+      outcome = "clean";
       return { ...after, scannedAt: new Date(this.now()).toISOString(), contentHash: sha256(bytes), byteLength: bytes.length, verdict: "clean" };
     } catch (error) { if (error instanceof ArtifactError) throw error; throw new ArtifactError("SCANNER_UNAVAILABLE", true); }
+    finally { observeUploadScan(outcome, Math.round(performance.now() - started), correlationId, version); }
   }
 }

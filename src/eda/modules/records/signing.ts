@@ -33,14 +33,15 @@ export function createDoctorSigning(pool: Pool, keyring: RecordsKeyring, scanner
         const input = signatureInput.parse(raw), bytes=Buffer.from(input.base64,'base64');
         if (!bytes.length || bytes.length>32768 || bytes.toString('base64')!==input.base64 || detectRecordsMime(bytes)!==input.mimeType) throw new DomainError(400,'SIGNATURE_INVALID','Use a PNG/JPEG signature up to 32 KiB.');
         stage = 'input_scan';
-        verifyQrScan(await scanner.scan(bytes),bytes,Date.now(),false,scanner.policy);
+        const scanBudget = AbortSignal.timeout(15_000);
+        verifyQrScan(await scanner.scan(bytes, scanBudget, actor.correlationId),bytes,Date.now(),false,scanner.policy);
         stage = 'normalization';
         const normalized=await validateUpload(bytes,input.mimeType);
         const sharp=(await import('sharp')).default;
         const final=await sharp(normalized.bytes).resize({width:600,height:240,fit:'inside',withoutEnlargement:true}).png().toBuffer();
         if(final.length>32768)throw new DomainError(413,'SIGNATURE_TOO_LARGE','Use a smaller signature image.');
         stage = 'final_scan';
-        const evidence=await scanner.scan(final); verifyQrScan(evidence,final,Date.now(),false,scanner.policy);
+        const evidence=await scanner.scan(final, scanBudget, actor.correlationId); verifyQrScan(evidence,final,Date.now(),false,scanner.policy);
         const hash=sha256(bytes), contentHash=sha256(final),id=randomUUID();
         stage = 'persistence';
         const tx=await pool.connect();
@@ -64,7 +65,8 @@ export function createDoctorSigning(pool: Pool, keyring: RecordsKeyring, scanner
           console.error(JSON.stringify({level:'error',event:'vital.signature.upload_failed',correlationId:actor.correlationId,stage,code}));
         }
         if (error instanceof ArtifactError) {
-          if (error.retryable || error.code.startsWith('SCANNER_')) throw new DomainError(503,'SIGNATURE_SERVICE_UNAVAILABLE','Signature processing is temporarily unavailable. Please try again later.');
+          if (error.code === 'UPLOAD_MALWARE_OR_SCAN_LIMIT') throw new DomainError(422,error.code,'The uploaded file was rejected by the security scan.');
+          if (error.retryable || error.code.startsWith('SCANNER_')) throw new DomainError(503,'UPLOAD_SCANNER_UNAVAILABLE','Signature processing is temporarily unavailable. Please try again later.');
           throw new DomainError(400,'SIGNATURE_INVALID','Choose a valid PNG or JPEG signature image.');
         }
         throw error;
