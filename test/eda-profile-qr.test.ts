@@ -85,15 +85,15 @@ test("Profile QR descriptors preserve providers, image types and the exact 5 MiB
   assert.equal(profileQrDescriptor.parse(input).byteLength, 5242880);
   for (const extra of [{ byteLength: PROFILE_QR_LIMIT + 1 }, { byteLength: 0 }, { mimeType: "application/pdf" }, { paymentProvider: "paymongo" }, { clinicalRecordId: randomUUID() }]) assert.equal(profileQrDescriptor.safeParse({ ...input, ...extra }).success, false);
 });
-test("Profile QR stages only; one existing worker validates scans and publishes real ready bytes", async () => {
+test("Profile QR scans before staging and its worker validates scans and publishes ready bytes", async () => {
   for (const format of ["png", "jpeg", "webp"] as const) {
     const f = fixture(), bytes = await image(format), uploaded = await f.upload(bytes, `image/${format}`, format === "webp" ? "maya" : "gcash");
     assert.equal(uploaded.result.operationStatus, "pending"); assert.equal(uploaded.result.qrCode, null); assert.equal(f.rows.size, 0);
-    assert.deepEqual(f.events, ["reserve.commit", "quarantine.put"]);
+    assert.deepEqual(f.events, ["scan", "reserve.commit", "quarantine.put"]);
     await f.module().recoverOnce();
     const status = await f.module().status(actor(), uploaded.operationId);
     assert.equal(status.operationStatus, "completed"); assert.equal(status.qrCode?.isActive, true);
-    assert.equal(f.events.filter(e => e === "scan").length, 2);
+    assert.equal(f.events.filter(e => e === "scan").length, 3);
     assert.ok(f.events.indexOf("final.verify") < f.events.indexOf("publish.commit"));
     const file = await f.module().file(actor(), status.qrCode!.id);
     assert.equal(file.sha256, sha256(Buffer.from(file.base64, "base64"))); assert.equal(file.mimeType, `image/${format}`);
@@ -113,8 +113,13 @@ test("Profile QR malformed images are durably rejected and never get public rows
 });
 test("Profile QR scanner outage, forged evidence and stale signatures fail closed", async () => {
   for (const fault of ["scannerDown", "forge", "stale"] as const) {
-    const f = fixture(); f[fault](); const value = await f.upload(await image());
-    await f.module().recoverOnce(); assert.equal((await f.module().status(actor(), value.operationId)).operationStatus, "pending");
+    const f = fixture(), bytes = await image(), staged = await f.upload(bytes);
+    f[fault]();
+    await assert.rejects(f.upload(bytes), denied("UPLOAD_SCANNER_UNAVAILABLE"));
+    assert.equal(f.assets.size, 1);
+    assert.equal(f.objects.size, 1);
+    await f.module().recoverOnce();
+    assert.equal((await f.module().status(actor(), staged.operationId)).operationStatus, "pending");
     assert.equal(f.rows.size, 0); assert.equal(f.events.includes("final.put"), false);
   }
 });
@@ -184,6 +189,8 @@ test('Capstone payment QR processing records unscanned evidence and supports his
   assert.ok((await restored.file(actor(),status.qrCode!.id)).base64);
 });
 
-test('Capstone payment QR runtime does not require ClamAV environment paths',()=>{
-  assert.ok(profileQrRuntime({corePool:{} as Pool},{VITAL_EDA_ENABLED:'true',VITAL_EDA_PROFILE_WRITES_ENABLED:'true',VITAL_EDA_PROFILE_QR_ENABLED:'true',VITAL_PROFILE_QR_STORAGE_ENDPOINT:'https://storage.example.test',VITAL_PROFILE_QR_STORAGE_BUCKET:'demo-qr',VITAL_PROFILE_QR_STORAGE_REGION:'local',VITAL_PROFILE_QR_STORAGE_ACCESS_KEY:'fictional-access',VITAL_PROFILE_QR_STORAGE_SECRET_KEY:'fictional-secret'}));
+test('Enabled payment QR runtime requires ClamAV paths',()=>{
+  const env = {VITAL_EDA_ENABLED:'true',VITAL_EDA_PROFILE_WRITES_ENABLED:'true',VITAL_EDA_PROFILE_QR_ENABLED:'true',VITAL_PROFILE_QR_STORAGE_ENDPOINT:'https://storage.example.test',VITAL_PROFILE_QR_STORAGE_BUCKET:'demo-qr',VITAL_PROFILE_QR_STORAGE_REGION:'local',VITAL_PROFILE_QR_STORAGE_ACCESS_KEY:'fictional-access',VITAL_PROFILE_QR_STORAGE_SECRET_KEY:'fictional-secret'};
+  assert.throws(() => profileQrRuntime({corePool:{} as Pool},env), /CONFIGURATION_MISSING/);
+  assert.ok(profileQrRuntime({corePool:{} as Pool},{...env,VITAL_PROFILE_QR_CLAMAV_SOCKET:'/run/clamav/clamd.sock',VITAL_PROFILE_QR_CLAMAV_CONFIG:'/run/clamav/clamd.conf'}));
 });

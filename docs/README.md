@@ -8,8 +8,8 @@
 - [Security](security.md): trusted identity and transport requirements.
 - [Capstone documents](capstone-documents.md): S6 signing, controlled medicines,
   acknowledgments, migrations and verification limits.
-- [Temporary capstone file validation](capstone-file-validation.md): source-owned
-  demo policy, truthful inspection evidence and restoration of antivirus.
+- [File inspection and historical evidence](capstone-file-validation.md):
+  required antivirus for new writes and compatibility with the temporary demo policy.
 
 The root [VM runbook](../../docs/deployment/single-contabo-vm.md) is authoritative
 for server provisioning and manual staging deployment. Feature contract documents

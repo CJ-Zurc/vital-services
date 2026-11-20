@@ -5,6 +5,13 @@ function emit(record: Record<string, unknown>) {
   try { console.log(JSON.stringify(record)); } catch { /* Telemetry never changes domain outcomes. */ }
 }
 
+export function observeUploadScan(outcome: 'clean' | 'rejected' | 'unavailable', durationMs: number,
+  correlationId?: string, signature?: { engineVersion: string; databaseVersion: number }) {
+  emit({ event_type: 'upload_scan', plane: 'system', outcome, duration_ms: durationMs,
+    correlation_id: correlationId && /^[a-zA-Z0-9_.:-]{1,128}$/.test(correlationId) ? correlationId : null,
+    engine_version: signature?.engineVersion, database_version: signature?.databaseVersion });
+}
+
 export function observeDeliveryOutcome(destination: 'audit' | 'notification', status: 'accepted' | 'retry_pending' | 'blocked',
   failure?: { reason: 'configuration' | 'transport' | 'http_rejected' | 'receipt' | 'storage'; http_status?: number }) {
   emit({ event_type: 'delivery_outcome', destination, status, ...(failure ? { failure_reason: failure.reason,

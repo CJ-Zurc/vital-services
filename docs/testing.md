@@ -116,15 +116,17 @@ processing is repaired, eligible test appointments were unavailable, and Payment
 composition reports unavailable. Notifications remain intentionally deferred.
 No staging deployment/configuration/database operation was performed.
 
-## Temporary capstone validation-only build (2026-10-22)
+## Historical capstone validation-only build (2026-10-22)
 
-Services selects `capstone-validation-only` centrally in `inspection.ts`. ClamAV
+That build selected `capstone-validation-only` centrally in `inspection.ts`. ClamAV
 is retained for restoration but is not constructed/contacted by signature,
 attachment/document or payment-QR processing in this build. See
 [policy/evidence and rollback](capstone-file-validation.md). No new .env, public
 API shape, database migration, Gateway or Capstone_BGH change is included.
 Earlier scanner repairs/results above remain historical; current demo writes
-truthfully record `not_scanned` validation evidence rather than clean scan claims.
+truthfully recorded `not_scanned` validation evidence. The current runtime
+requires ClamAV for new writes. Current tests cover scanner configuration,
+QR scanning before staging and reads of historical validation-only evidence.
 
 Maintained test registration for this revision:
 

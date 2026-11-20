@@ -3,9 +3,8 @@ import { ClamAvScanner, type ClamAvConfig, type ScanEvidence } from './scanner.j
 import { ArtifactError, sha256, validateUpload } from './upload-validation.js';
 
 export type FileInspectionPolicy = 'clamav' | 'capstone-validation-only';
-// Explicit temporary capstone build setting. Restore 'clamav' to require
-// antivirus for new writes; NODE_ENV and browser input never select this policy.
-export const FILE_INSPECTION_POLICY: FileInspectionPolicy = 'capstone-validation-only';
+// New writes use ClamAV. Historical validation-only evidence remains readable.
+export const FILE_INSPECTION_POLICY: FileInspectionPolicy = 'clamav';
 
 const binding = { contentHash: z.string().regex(/^[a-f0-9]{64}$/), byteLength: z.number().int().positive() };
 const antivirusEvidence = z.object({ ...binding, engine: z.literal('clamav'), engineVersion: z.string().min(1),
@@ -17,7 +16,7 @@ export type FileInspectionEvidence = ScanEvidence | ValidationOnlyEvidence;
 export interface FileInspector {
   // Older antivirus adapters/test doubles have no explicit policy property.
   readonly policy?: FileInspectionPolicy;
-  scan(bytes: Buffer, signal?: AbortSignal): Promise<FileInspectionEvidence>;
+  scan(bytes: Buffer, signal?: AbortSignal, correlationId?: string): Promise<FileInspectionEvidence>;
 }
 
 export function verifyFileInspection(evidence: unknown, expected: { contentHash: string; byteLength: number },
@@ -39,7 +38,7 @@ export function createFileInspector(clamav: () => ClamAvConfig, policy: FileInsp
   now: () => number = Date.now): FileInspector {
   if (policy === 'clamav') {
     const scanner = new ClamAvScanner(clamav());
-    return { policy, scan: (bytes, signal) => scanner.scan(bytes, signal) };
+    return { policy, scan: (bytes, signal, correlationId) => scanner.scan(bytes, signal, correlationId) };
   }
   if (policy !== 'capstone-validation-only') throw new ArtifactError('FILE_INSPECTION_POLICY_INVALID');
   return { policy, async scan(input, signal) {

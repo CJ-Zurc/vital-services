@@ -67,10 +67,12 @@ export class RecordsArtifactWorker {
     try {
       requireLease();
       let bytes: Buffer; let mimeType: RecordsMime; let inputEvidence: FileInspectionEvidence | undefined;
+      let scanBudget = signal;
       if (job.kind === "upload") {
         if (!job.input) throw new ArtifactError("ARTIFACT_INPUT_MISSING", true);
         const raw = await storage.readQuarantine(job.input.objectKey, job.input, signal);
-        inputEvidence = await scanner.scan(raw, signal); evidenceMatches(inputEvidence, raw, this.now(), scanner); requireLease();
+        scanBudget = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
+        inputEvidence = await scanner.scan(raw, scanBudget, claim.operationId); evidenceMatches(inputEvidence, raw, this.now(), scanner); requireLease();
         const output = await validateUpload(raw, job.input.mimeType); bytes = output.bytes; mimeType = output.mimeType;
       } else {
         const canonical = await this.dependencies.decryptCanonicalData(job);
@@ -82,7 +84,7 @@ export class RecordsArtifactWorker {
       const prepared: ArtifactPrepared = { contentHash: sha256(bytes), byteLength: bytes.length, mimeType, objectKey: storage.key("final", job.assetId, sha256(bytes), mimeType) };
       if (job.prepared && !samePrepared(job.prepared, prepared)) throw new ArtifactError("ARTIFACT_CANONICAL_OUTPUT_CONFLICT");
       requireLease(await repository.savePrepared(claim, prepared));
-      const finalEvidence = await scanner.scan(bytes, signal); evidenceMatches(finalEvidence, bytes, this.now(), scanner); requireLease();
+      const finalEvidence = await scanner.scan(bytes, scanBudget, claim.operationId); evidenceMatches(finalEvidence, bytes, this.now(), scanner); requireLease();
       const scanEvidence: ArtifactScanEvidence = { ...(inputEvidence ? { input: inputEvidence } : {}), final: finalEvidence };
       requireLease(await repository.recordScan(claim, scanEvidence));
       await storage.ensureFinal(prepared.objectKey, bytes, mimeType, signal); requireLease();

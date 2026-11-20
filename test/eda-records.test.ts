@@ -490,7 +490,7 @@ test('S6 signature scanner failures return safe retryable errors with metadata-o
   const bytes=await sharp({create:{width:10,height:10,channels:3,background:'#000000'}}).png().toBuffer();
   for(const failure of ['SCANNER_POLICY_UNVERIFIED','SCANNER_UNAVAILABLE','SCANNER_DATABASE_STALE']){
     const f=signingFixture(failure),actor=f.actor();
-    await assert.rejects(f.module.upload(actor,randomUUID(),{base64:bytes.toString('base64'),mimeType:'image/png'}),error=>error instanceof DomainError&&error.status===503&&error.code==='SIGNATURE_SERVICE_UNAVAILABLE'&&!error.message.includes('SCANNER'));
+    await assert.rejects(f.module.upload(actor,randomUUID(),{base64:bytes.toString('base64'),mimeType:'image/png'}),error=>error instanceof DomainError&&error.status===503&&error.code==='UPLOAD_SCANNER_UNAVAILABLE'&&!error.message.includes('SCANNER'));
     assert.equal(f.rows.length,0);assert.equal(f.events.length,0);assert.ok(!f.queries.includes('BEGIN'));
     assert.deepEqual(JSON.parse(String(diagnostics.at(-1)![0])),{level:'error',event:'vital.signature.upload_failed',correlationId:actor.correlationId,stage:'input_scan',code:failure});
   }
@@ -508,12 +508,12 @@ test('S6 signature HTTP scanner failure returns 503 and Retry-After instead of a
     const token=jwt.sign({actor,action:'POST '+path,requestHash:requestHash('POST',path,body)},privateKey,{algorithm:'RS256',keyid:'test',issuer:'vital-web',audience:'vital-services',subject:actor.authId,jwtid:randomUUID(),expiresIn:30});
     const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+path,{method:'POST',headers:{'Content-Type':'application/json','X-Vital-Actor-Assertion':token},body:JSON.stringify(body)});
     assert.equal(response.status,503);assert.equal(response.headers.get('retry-after'),'5');assert.equal(response.headers.get('x-correlation-id'),actor.correlationId);
-    assert.deepEqual(await response.json(),{success:false,code:'SIGNATURE_SERVICE_UNAVAILABLE',message:'Signature processing is temporarily unavailable. Please try again later.'});
+    assert.deepEqual(await response.json(),{success:false,code:'UPLOAD_SCANNER_UNAVAILABLE',message:'Signature processing is temporarily unavailable. Please try again later.'});
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
-test('Capstone signature upload preview replacement and replay do not require antivirus',async()=>{
-  const f=signingFixture(undefined,createFileInspector(()=>{throw new Error('No scanner configuration');}));
+test('Historical capstone mode retains signature preview replacement and replay compatibility',async()=>{
+  const f=signingFixture(undefined,createFileInspector(()=>{throw new Error('No scanner configuration');},'capstone-validation-only'));
   const bytes=await sharp({create:{width:30,height:10,channels:4,background:'#111111'}}).png().toBuffer(),raw={base64:bytes.toString('base64'),mimeType:'image/png'},operation=randomUUID();
   const first=await f.module.upload(f.actor(),operation,raw);assert.equal(f.scans(),0);assert.equal((await f.module.read(f.actor(false))).signature?.id,first.id);
   assert.deepEqual(await f.module.upload(f.actor(),operation,raw),first);assert.equal(f.rows.length,1);
@@ -521,14 +521,16 @@ test('Capstone signature upload preview replacement and replay do not require an
   assert.equal(f.events.length,2);await assert.rejects(f.module.read({...f.actor(false),role:'patient'}),isCode('SIGNATURE_DOCTOR_REQUIRED'));
 });
 
-test('Capstone Records runtime constructs signing and artifact owners without scanner paths',async()=>{
+test('Records runtime requires scanner paths for signing and artifact owners',async()=>{
   const directory=await mkdtemp(join(tmpdir(),'vital-inspection-test-'));
   try{
     const keyFile=join(directory,'keys.json'),evidenceFile=join(directory,'evidence.json');
     await writeFile(keyFile,JSON.stringify({activeKeyId:'demo',keys:{demo:randomBytes(32).toString('base64')}}));
     await writeFile(evidenceFile,JSON.stringify({ehr:publicKey}));
-    const runtime=recordsRuntime({corePool:{} as Pool},undefined,{VITAL_EDA_ENABLED:'true',VITAL_EDA_RECORDS_ENABLED:'true',VITAL_EDA_RECORDS_ARTIFACTS_ENABLED:'true',
-      VITAL_RECORDS_KEYRING_FILE:keyFile,VITAL_EHR_RECORDS_PUBLIC_KEYS_FILE:evidenceFile,VITAL_RECORDS_STORAGE_ENDPOINT:'https://storage.example.test',VITAL_RECORDS_STORAGE_PUBLIC_ENDPOINT:'https://media.example.test',VITAL_RECORDS_STORAGE_BUCKET:'demo-records',VITAL_RECORDS_STORAGE_REGION:'local',VITAL_RECORDS_STORAGE_ACCESS_KEY:'fictional-access',VITAL_RECORDS_STORAGE_SECRET_KEY:'fictional-secret',VITAL_PAYMENT_APP_ORIGIN:'https://vital.example.test',VITAL_AUTH_INTERNAL_URL:'https://auth.example.test',VITAL_SERVICES_AUTH_PROFILE_KEY:'fictional-test-key',VITAL_RECORDS_FONT_REGULAR_FILE:'demo-regular.ttf',VITAL_RECORDS_FONT_BOLD_FILE:'demo-bold.ttf'});
+    const env={VITAL_EDA_ENABLED:'true',VITAL_EDA_RECORDS_ENABLED:'true',VITAL_EDA_RECORDS_ARTIFACTS_ENABLED:'true',
+      VITAL_RECORDS_KEYRING_FILE:keyFile,VITAL_EHR_RECORDS_PUBLIC_KEYS_FILE:evidenceFile,VITAL_RECORDS_STORAGE_ENDPOINT:'https://storage.example.test',VITAL_RECORDS_STORAGE_PUBLIC_ENDPOINT:'https://media.example.test',VITAL_RECORDS_STORAGE_BUCKET:'demo-records',VITAL_RECORDS_STORAGE_REGION:'local',VITAL_RECORDS_STORAGE_ACCESS_KEY:'fictional-access',VITAL_RECORDS_STORAGE_SECRET_KEY:'fictional-secret',VITAL_PAYMENT_APP_ORIGIN:'https://vital.example.test',VITAL_AUTH_INTERNAL_URL:'https://auth.example.test',VITAL_SERVICES_AUTH_PROFILE_KEY:'fictional-test-key',VITAL_RECORDS_FONT_REGULAR_FILE:'demo-regular.ttf',VITAL_RECORDS_FONT_BOLD_FILE:'demo-bold.ttf'};
+    assert.throws(()=>recordsRuntime({corePool:{} as Pool},undefined,env),/RECORDS_CONFIGURATION_MISSING:VITAL_RECORDS_CLAMAV_SOCKET/);
+    const runtime=recordsRuntime({corePool:{} as Pool},undefined,{...env,VITAL_RECORDS_CLAMAV_SOCKET:'/run/clamav/clamd.sock',VITAL_RECORDS_CLAMAV_CONFIG:'/run/clamav/clamd.conf'});
     assert.ok(runtime?.signing);assert.equal(typeof runtime.artifactTick,'function');
   }finally{await rm(directory,{recursive:true,force:true});}
 });

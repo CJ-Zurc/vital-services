@@ -1,17 +1,18 @@
-# Temporary capstone file validation
+# File inspection and historical evidence
 
-Services selects `capstone-validation-only` in
-`src/eda/modules/records/inspection.ts`. This is an explicit temporary capstone
-build setting. NODE_ENV, environment variables and browser requests do not
-select it. No new environment variable or database migration is required.
+Services selects `clamav` in `src/eda/modules/records/inspection.ts`.
+The API and worker require their configured scanner socket and policy paths
+when they construct the relevant runtimes. Signature uploads and incoming
+payment QR images are scanned before their first write. Patient files enter
+private quarantine and workers require clean, hash-bound evidence before
+publishing patient attachments, normalized QR images and clinical PDFs.
+No new environment variable or database migration is required.
 
-## Behavior
+## Historical capstone behavior
 
 Doctor signatures, patient attachments, payment QR images and generated clinical
-PDFs use real file validation without antivirus scanning. These runtimes do not
-construct/contact ClamAV or require scanner paths in demo mode. Existing Compose
-may still start a scanner container; its infrastructure and health dependencies
-are not changed by this revision.
+PDFs used file validation while the temporary `capstone-validation-only`
+policy was active. They may retain historical validation evidence.
 
 Size/type bounds, image decoding/normalization, PDF parsing/active-content
 rejection, hashes, encrypted signature storage, ownership, authentication,
@@ -27,17 +28,12 @@ scanned timestamp or clean antivirus verdict is invented. Evidence is bound to
 exact bytes and processing time before publication. Public API shapes remain
 unchanged; evidence is backend-owned metadata.
 
-## Restoring antivirus
+## Deployment and compatibility
 
-Change the single source setting to `clamav` and rebuild/deploy the matching API
-and worker. The retained adapter requires configured ClamAV and real clean
-evidence for new writes; validation-only evidence cannot authorize publication
-in that mode. Previously finalized demo files remain authorized/readable and
-are never retroactively claimed to have been scanned. Legacy ClamAV evidence
-remains readable under either policy.
-
-Earlier scanner-configuration repairs in Capstone_BGH are separate work and
-were not modified. No commit, push or deployment is included here.
+Roll out the shared daemon policy first and deploy the matching API and worker
+builds together. Pending quarantine uploads are scanned under the active
+policy before publication. Authorized reads of finalized demo files retain
+their original validation evidence. Existing ClamAV evidence also stays readable.
 
 ## Maintained verification
 
