@@ -1,10 +1,10 @@
 # VITAL–TRACE integration revision for TRACE review
 
-Updated 20 November 2026. Status — initial proposal awaiting TRACE and BGH API Gateway agreement.
+Updated 21 November 2026. Status — agreed workflow revision; exact Gateway routes, payloads, and authorization contracts await confirmation.
 
 VITAL proposes that patients submit telemedicine appointment disputes inside VITAL and that all VITAL–TRACE communication pass through BGH API Gateway. This revision replaces Google Forms intake, prefilled appeal links, form submission deadlines, and form synchronization as the proposed patient reporting flow. The earlier implementation is recorded in the [historical Google Forms ledger](../trace-integration-changes.md).
 
-The report modal, TRACE approval queue, Gateway contracts, patient progress tracker, and patient resolution actions described below require further implementation after the teams agree on the contract. This documentation proposal is prepared on a fresh branch from development. The earlier integration branches remain historical implementation context. Keep `VITAL_TRACE_DISPUTES_ENABLED=false` until the replacement flow and paired acceptance checks are ready.
+The agreed workflow below incorporates TRACE’s execution plan at `b27107d` and the subsequent five-stage tracker agreement. See the [execution plan](VITAL_TRACE_In_System_Dispute_Execution_Plan.md). These capabilities require implementation against the remaining transport and payload contracts. This documentation proposal is prepared on a fresh branch from development. The earlier integration branches remain historical implementation context. Keep `VITAL_TRACE_DISPUTES_ENABLED=false` until the replacement flow and paired acceptance checks are ready.
 
 ## Agreed scope and responsibilities
 
@@ -25,9 +25,9 @@ Every authenticated account with the TRACE Admin role may approve or reject repo
 1. On an eligible appointment's details page, show a red **Report an issue** button with an exclamation icon, an accessible name, and visible explanatory text.
 2. Open a modal containing a subject, description, approved dispute category, applicable subcategory, and optional report evidence. Explain what is being submitted and display validation errors without losing the patient's input. Opening or cancelling the modal has no appointment effect.
 3. On submission, VITAL verifies the signed-in patient's ownership and current appointment eligibility. Derive the appointment, doctor, patient, and Auth identity from trusted server data. Under the appointment lock, persist the report, completion hold, original completion deadline, and outbound delivery intent together so submission cannot race automatic completion.
-4. VITAL returns the stable report reference. Deliver the report through Gateway using that reference for retries. Show **Pending delivery** until TRACE confirms durable receipt. An unavailable Gateway or TRACE keeps the report and hold pending reconciliation. Retry without creating a second report or ticket.
-5. TRACE persists a report in a **Pending approval** queue visible to its Admin accounts and returns a receiving identifier. This receipt is distinct from approval or staff acknowledgment. Approval creates or activates exactly one linked ticket and continues TRACE's normal ticket workflow.
-6. Rejection requires a patient-visible reason. VITAL records it, clears the report's completion hold, and resumes the original completion deadline through normal payment and clinical-record checks. Rejecting a report must not bypass those checks.
+4. VITAL returns the stable report reference. Deliver the report through Gateway using that reference for retries. Show **Dispute Sent** once the patient confirms submission and VITAL successfully records the report and hold. Delivery and retries run in the background using the same report ID. An unavailable Gateway or TRACE retains the recorded report and hold for reconciliation. If VITAL cannot record the submission, retain the form input and show an error.
+5. TRACE persists a report in a **Pending approval** queue visible to its Admin accounts and returns a receiving identifier. This receipt is distinct from approval or staff acknowledgment. Approval creates or activates exactly one linked ticket, records the deciding TRACE Admin and decision timestamp, and makes that Admin the initial assignee. Later staff assignment continues TRACE's normal ticket workflow. The patient remains the report's creator.
+6. Rejection records the deciding Admin, timestamp, and mandatory reason as an action/comment against the dispute record, including when no ticket has been created. VITAL shows **Dispute Rejected** and the rejection modal, clears the hold, and resumes the original completion deadline through normal payment and clinical-record checks. If that deadline has passed, run those checks immediately. The deadline is preserved rather than extended by the review duration.
 7. A concern redirected to VITAL Admin retains its review hold until an authorized resolution. TRACE should confirm whether redirection remains a supported queue action alongside approval and rejection.
 
 TRACE must confirm eligibility by appointment state and incident type, the cutoff for completion disputes, the policy for duplicate active reports, and handling of complaints submitted after appointment completion. A post-completion report must not silently reverse a completed appointment.
@@ -76,26 +76,41 @@ Agree exact routes, schemas, response codes, and authorization with the Gateway 
 
 All VITAL–TRACE submissions, reads, evidence exchanges, updates, and patient resolution actions pass through Gateway. The owners must agree user and service authentication, directional scopes, and a supported return route into VITAL's existing Web/API trust boundary. Patients need an authorized route even when they have no TRACE staff account or TRACE staff system role. A browser-supplied creator UUID or an unverified identity header cannot grant access.
 
-Durable report delivery and TRACE state changes must retain their retry intent with the owning transaction. Accepted events are deduplicated. Older or out-of-order updates must not overwrite newer progress. Reconcile by stable report/ticket identity after delivery failures, and show a pending or stale state until the owner confirms the outcome. Define retry exhaustion and manual review handling without silently releasing a completion hold.
+Durable report delivery and TRACE state changes must retain their retry intent with the owning transaction. Accepted events are deduplicated. Older or out-of-order updates must not overwrite newer progress. Reconcile by stable report/ticket identity after delivery failures, and preserve the agreed tracker stage while delivery remains unconfirmed; record synchronization state separately. Define retry exhaustion and manual review handling without silently releasing a completion hold.
 
 ## Progress, appointment outcomes, and patient acknowledgment
 
-VITAL requests TRACE's progress-bar component or a design reference with its stage definitions, order, labels, colors, and dynamic-status behavior. Adapt it to appointment details as a patient-visible tracker. Patients view staff progress and use only their authorized response actions.
+VITAL owns its five-stage progress bar. TRACE supplies the linked dispute state, Admin-approved resolution, relevant timestamps, and permitted patient actions. Internal TRACE ticket stages are grouped within **Dispute in Process**.
 
-| TRACE event/state | VITAL presentation and appointment effect |
-| --- | --- |
-| Report pending delivery or approval | Show that stage and retain the review hold. |
-| Approved, assigned, or investigation progressing | Show TRACE's current stage and keep the appointment In Review. |
-| Staff work Completed | Show the resolution and acknowledgment deadline with **Acknowledge resolution** and **Issue not resolved** actions. Staff completion alone does not determine the appointment outcome. |
-| Patient rejects completion | Require a reason, submit it to TRACE, and reflect TRACE's resulting state. Keep the hold while the matter remains unresolved. |
-| Patient acknowledges or TRACE automatically resolves | Show the confirmed resolution method and timestamp. Apply only an accompanying explicit, eligible appointment disposition. |
-| Ticket Closed or another terminal staff status | Show the patient-visible status. Obtain an explicit disposition before clearing the appointment hold or changing its outcome. |
+| Stage | Patient-visible state | Trigger and effect |
+| --- | --- | --- |
+| 1 | **Dispute Sent** | Patient confirms submission and VITAL successfully records the report and hold. Background Gateway delivery may still be pending. |
+| 2 | **Dispute Approved or Rejected** | Any TRACE Admin decides. Approval records that Admin as initial assignee and proceeds to Stage 3. Rejection ends this submission, displays the rejection modal, and resumes the original completion checks. |
+| 3 | **Dispute in Process** | TRACE investigates and routes staff work. Before returning a resolution, the ticket goes back to Admin for a mandatory **Reschedule**, **Invalidate**, or **Complete** tag and patient-visible explanation. |
+| 4 | **Completed** | VITAL receives the Admin-approved tag and explanation and displays TRACE's 72-hour acknowledgment deadline. Staff finishing work requires the final Admin review before this stage. |
+| 5 | **Acknowledged** or **Automatically Resolved** | The patient accepts, or TRACE resolves after its 72-hour window. Record the resolution method and timestamp, then apply the explicit tagged outcome through VITAL's existing checks. Automatic resolution is distinguished from patient acknowledgment. |
 
-TRACE's development code currently marks staff work Completed and automatically resolves it after **72 hours** if the creator does not respond. An older completion backlog still states **48 hours**. VITAL proposes following TRACE's current framework and displaying a TRACE-supplied `acknowledgment_deadline_at`, subject to TRACE's confirmation. VITAL does not calculate its own ticket-resolution deadline. This ticket acknowledgment clock is distinct from VITAL's existing 48-hour consultation completion window and the target for a human intake acknowledgment.
+At Stage 4, **Issue Not Resolved** requires the original patient's reason. VITAL sends it through Gateway; TRACE returns the ticket from Completed to Open, clears `completed_at` and `acknowledgment_deadline_at`, and records the patient's reason as a ticket comment. VITAL returns the tracker to Stage 3 and retains the review hold. Further investigation requires renewed Admin review and a tag before returning to Stage 4 with a new TRACE-supplied deadline. Rejecting completion does not finish Stage 5.
 
-TRACE should confirm when the acknowledgment clock starts, notification and reminder behavior, rejection/reopening rules, and how automatic resolution is reported. A system auto-resolution must be identified as automatic; it must not be recorded as the patient's explicit acknowledgment.
+The agreed response window is **72 hours** from TRACE's final Admin-approved completion/return to the patient. TRACE supplies `acknowledgment_deadline_at`; VITAL displays that deadline. Its scheduler must not resolve the dispute before Admin's final review and tag. Internal staff completion before that review does not start the patient response window. This clock is separate from VITAL's original 48-hour consultation completion deadline and the human intake acknowledgment target. The older 48-hour TRACE backlog is superseded for this workflow.
 
-Preserve the agreed appointment dispositions. **Appeal dismissed** resumes the original completion deadline and normal checks. **Appointment invalidated** records Invalid. **Reschedule agreed** starts VITAL's validated rescheduling workflow. Corrections carry a new decision ID referencing the active decision being superseded. Stale, conflicting, or no-longer-valid transitions go to VITAL Admin. The final mapping and timing relative to patient acknowledgment require TRACE's confirmation.
+Both patient acknowledgment and rejection originate inside VITAL, travel through Gateway to TRACE, and require TRACE's confirmed resulting state before VITAL applies an outcome. TRACE's automatic-resolution update follows the same Gateway return path and includes the Admin-approved tag. A generic Closed or Resolved status without that tag requires reconciliation or Admin review.
+
+| Admin tag | Existing disposition | VITAL action after patient acceptance or TRACE automatic resolution |
+| --- | --- | --- |
+| **Reschedule** | `reschedule_agreed` | Start validated rescheduling with slot availability and required confirmations. |
+| **Invalidate** | `appointment_invalidated` | Record Invalid; keep refund approval and issuance separate. |
+| **Complete** | `appeal_dismissed` | Resume the original completion deadline and normal payment/clinical-record checks; complete only when eligible. |
+
+Decision corrections carry a new decision ID referencing the active decision being superseded. Stale, conflicting, or no-longer-valid transitions go to VITAL Admin. A finalized appointment cannot be silently reversed by a later dispute.
+
+### Intake rejection modal
+
+Show **Your dispute was rejected**, the Admin's patient-visible reason, and this contact guidance:
+
+> If you believe this decision was a mistake, please call **[BGH contact number — pending]** or visit **[BGH address — pending]**.
+
+Include a **Close** action. The hospital will supply the number and address later. These placeholders identify pending configuration and must be replaced with verified contact details before release.
 
 ## Refunds, privacy, and other retained policies
 
@@ -111,11 +126,11 @@ Existing agreed check-in, no-show, reconnect, paperwork, payment, completion, an
 
 | Confirmation | Details needed |
 | --- | --- |
-| Pending reports and approval | Schema, ticket creation timing, any TRACE Admin's approval authority, rejection reasons, and redirection support. |
+| Pending reports and approval | Wire schema for agreed Admin decisions, deciding Admin/timestamp, initial assignee, rejection action/comment on the dispute record, and redirection support. |
 | Patient creator identity | Mapping from Auth identity to TRACE ownership, patients without staff accounts, and restrictions on read/acknowledge/reject actions. |
-| Progress UI | Component or design reference, core and dynamic stages, patient-visible fields, and update/reconciliation mechanism. |
-| Acknowledgment | Confirm the 72-hour framework, returned deadline, reminders, automatic resolution, completion rejection, and reopening behavior. |
-| Appointment effects | Explicit dispositions, when each releases a hold, correction handling, and timing relative to patient acknowledgment. |
+| Progress integration | Fields and events supporting VITAL’s agreed five-stage tracker, timestamps, permitted patient actions, and reconciliation. |
+| Acknowledgment contract | Return the agreed 72-hour deadline after final Admin review, resolution method, rejection-to-Stage-3 update, renewed review cycle, and reminder behavior. |
+| Appointment effects | Payloads for the agreed tag/disposition mapping after acceptance or automatic resolution, valid hold release, and decision corrections. |
 | Evidence and privacy | Upload lifecycle and limits, validation/scanning, report attachment ownership, internal-message masking, and Accounting restrictions. |
 | Gateway transport | Route/method matrix, user/service credentials and scopes, versioning, retries, deduplication, and outage reconciliation. |
 | Eligibility and reporting policy | Allowed states and incident categories, duplicate active reports, post-completion complaints, withdrawal, and unresolved-hold escalation. |
@@ -124,11 +139,11 @@ Existing agreed check-in, no-show, reconnect, paperwork, payment, completion, an
 
 - Patient submits from their own eligible telemedicine appointment. Trusted appointment, doctor, patient, and Auth IDs reach TRACE and one pending report appears in the Admin queue.
 - Opening/cancelling the modal leaves the appointment untouched. Valid submission racing automatic completion produces one consistent result under the appointment lock.
-- Duplicate clicks or a timeout after TRACE persisted the report recover the same report/ticket. An unavailable Gateway/TRACE preserves the pending state and hold, and retry eventually delivers once.
-- TRACE Admin approval starts one ticket. Rejection returns its reason and resumes existing completion checks. A non-Admin account cannot approve a report.
+- Duplicate clicks or a timeout after TRACE persisted the report recover the same report/ticket. An unavailable Gateway/TRACE preserves Dispute Sent and the hold while background delivery is retried, and recovery delivers once.
+- TRACE Admin approval starts one ticket, records the deciding Admin/time, and sets the initial assignee without replacing the patient creator. Rejection before ticket creation records an action/comment on the dispute, shows the modal, and resumes the original completion checks. A non-Admin account cannot approve a report.
 - Progress updates appear on the correct appointment. Duplicate, stale, out-of-order, or missed updates are deduplicated or reconciled without regressing the tracker.
-- Staff completion presents the resolution and TRACE deadline. Only the original patient can acknowledge or reject it. Rejection requires a reason and follows TRACE's framework.
-- TRACE automatic resolution updates VITAL with an automatic-resolution marker. It does not masquerade as patient acknowledgment or automatically establish a refund or appointment outcome.
+- Staff work returns to Admin for a tag and explanation before Stage 4 and the 72-hour deadline. Only the original patient can acknowledge or reject it. Rejection returns to Stage 3, clears the countdown, records a ticket comment, and requires renewed Admin review before Stage 4.
+- TRACE automatic resolution updates VITAL with its method and approved tag. VITAL applies the eligible tagged outcome once, displays Automatically Resolved, and records refund issuance separately.
 - An explicit disposition, correction, or duplicate refund confirmation follows the existing appointment/payment guards. Mutual absence produces no refund.
 - Another patient, a forged identifier, or a patient without TRACE staff access cannot obtain unrelated reports, staff-only actions, internal comments, or protected evidence. Accounting restrictions hold through every response and attachment route.
 
@@ -141,3 +156,5 @@ Reviewed against TRACE development `4220edf`, TRACE's previous integration branc
 - [TRACE ticket fields](https://github.com/Oeubx/TRACE_Backend/blob/4220edf/app/modules/ticket/schemas.py), [ticket service](https://github.com/Oeubx/TRACE_Backend/blob/4220edf/app/modules/ticket/services.py), and [72-hour auto-resolution scheduler](https://github.com/Oeubx/TRACE_Backend/blob/4220edf/app/services/scheduler.py).
 - [TRACE lifecycle and progress layout](https://github.com/Oeubx/TRACE_Backend/blob/4220edf/docs/backlogs/module-5-lifecycle-escalation/status_state_machine.md) and [older completion backlog with the 48-hour discrepancy](https://github.com/Oeubx/TRACE_Backend/blob/4220edf/docs/backlogs/module-5-lifecycle-escalation/work_completion_and_resolution.md).
 - [Previous Forms integration handoff](https://github.com/Oeubx/TRACE_Backend/blob/cfee9cc/docs/integration/patient-feedback/vital-trace-implementation-handoff.md), retained as historical implementation context.
+
+Workflow agreement updated 21 November 2026 after incorporating the execution plan at `b27107d`.

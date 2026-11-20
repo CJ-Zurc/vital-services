@@ -1,9 +1,9 @@
 # VITAL–TRACE In-System Dispute Resolution Implementation Plan
 
-**Target Systems:** `vital-services`, `vital-web`, `BGH_API_GATEWAY`, `TRACE_Backend`, `TRACE_Frontend`  
-**Reference Document:** `./VITAL_Feedback_on_TRACE_Integration_Plan.md`  
-**Document Status:** Architecture & Implementation Plan for Cross-Service Execution  
-**Last Updated:** 20 November 2026  
+**Target Systems:** `vital-services`, `vital-web`, `BGH_API_GATEWAY`, `TRACE_Backend`, `TRACE_Frontend`
+**Reference Document:** [VITAL workflow agreement](VITAL_Feedback_on_TRACE_Integration_Plan.md)
+**Document Status:** Agreed workflow; exact Gateway routes, payloads, and authentication contracts await confirmation
+**Last Updated:** 21 November 2026
 
 ---
 
@@ -11,7 +11,7 @@
 
 This document operationalizes the transition from the legacy Google Forms telemedicine dispute workflow to a **native in-system dispute resolution architecture**. It incorporates all architectural agreements, clarifications on boundaries and user permissions, UI/UX requirements for TRACE and VITAL, and explicit state machine transitions for dispute handling.
 
-All cross-service communications between `vital-services`, `vital-web`, and `TRACE_Backend` are mediated strictly by **`BGH_API_GATEWAY`** with authenticated headers and `X-Correlation-ID` propagation.
+All VITAL–TRACE communications in both directions pass through **`BGH_API_GATEWAY`** with authenticated context and `X-Correlation-ID` propagation. The route names and field names below are illustrative contracts pending owner confirmation. This document describes planned implementation, with deployment acceptance still pending.
 
 ```
 +---------------------------------------------------------------------------------------------------------+
@@ -28,7 +28,7 @@ All cross-service communications between `vital-services`, `vital-web`, and `TRA
 |   +-----------+-----------+              +-----------+-----------+              +---------+---------+   |
 |   |    VITAL Services     |<------------>|  Gateway Route Mesh   |<------------>|   TRACE Backend   |   |
 |   |  - Hold State Machine |              |  /trace/api/disputes  |              |  - Pending Queue  |   |
-|   |  - 48h Lock Freeze    |              |  /vital/api/disputes  |              |  - Ticket Engine  |   |
+|   |  - Original 48h Hold    |              |  /vital/api/disputes  |              |  - Ticket Engine  |   |
 |   |  - Dispositions       |              |                       |              |  - 72h Scheduler  |   |
 |   +-----------------------+              +-----------------------+              +-------------------+   |
 +---------------------------------------------------------------------------------------------------------+
@@ -43,22 +43,34 @@ All cross-service communications between `vital-services`, `vital-web`, and `TRA
 * **Clinical Privacy Quarantine**: Doctor consultation notes, full EHR records, prescriptions, and medical certificates are **strictly excluded** from automatic transmission to TRACE. Only dispute-specific patient inputs (`subject`, `description`, `category_id`, and patient-chosen attachments) along with system identifiers are sent.
 
 ### 2.2 Dispute Report Submission & Admin Approval Queue
-* **Intake Mechanism**: When a patient submits a dispute in VITAL Web, VITAL Services creates an internal dispute record and freezes the 48-hour completion timer (`reviewHold = true`).
-* **Not Directly a Ticket**: VITAL dispatches the report to TRACE's **Pending Approval** queue (`intake_status = 'pending_approval'`).
-* **Admin Gate**: Any authenticated user with the TRACE Admin role may approve or reject the report.
-  * **Approved**: Spawns an official TRACE `Ticket` (assigned to HR & Medical Affairs / HIMD / IT Support based on category) and links `ticket_id` to the dispute case.
-  * **Rejected**: Requires a mandatory, patient-visible rejection reason. TRACE notifies VITAL; VITAL clears the `reviewHold` and resumes the original 48-hour completion countdown.
 
-### 2.3 72-Hour Staff Completion Window & Patient Rejection ("Issue Not Resolved")
-* **Staff Completion**: When TRACE staff finishes investigation and marks the ticket `Completed`, a **72-hour countdown** (`acknowledgment_deadline_at`) begins.
-* **Patient Actions on VITAL**:
-  1. **Acknowledge Resolution**: Confirms patient agreement; triggers agreed appointment disposition (e.g., `appointment_invalidated` or `appeal_dismissed`).
-  2. **Issue Not Resolved (Reject Staff Completion)**:
-     * Patient provides a mandatory explanation of why the issue remains unresolved.
-     * **TRACE State Action**: TRACE transitions the ticket status from `Completed` to **`Open`**.
-     * **Timer Reset**: Stamping status back to `Open` sets `completed_at = None`, immediately resetting and clearing the 72-hour auto-resolution countdown.
-     * **Comment Creation**: The patient's rejection narrative is saved as a formal **`Comment`** on the ticket on TRACE's end (attributed to the patient via `reporter_auth_id`).
-* **Auto-Resolution**: If the patient takes no action within 72 hours, TRACE's background scheduler automatically transitions the ticket to `Resolved` and tags it as `System_Auto_Resolution`.
+* Patient confirmation and successful VITAL recording atomically create the dispute, hold, and delivery intent. VITAL immediately shows **Dispute Sent**. Opening/cancelling the modal has no appointment effect. Failed VITAL recording retains the form with an error.
+* Gateway delivery and retries run in the background with the same report ID. Preserve the hold while reconciliation is pending.
+* TRACE stores the report in **Pending Approval**. Any authenticated TRACE Admin may approve or reject it.
+* Approval records the deciding Admin and decision timestamp, creates one linked ticket, and sets the approving Admin as the initial assignee. Later HR / HIMD / IT / Accounting routing follows TRACE's workflow. The patient remains the original creator.
+* Rejection records the deciding Admin, timestamp, and mandatory patient-visible reason as an action/comment on the dispute record, including when no ticket exists. VITAL displays **Dispute Rejected** and the rejection modal, clears the hold, and resumes the original completion deadline through normal payment and clinical-record checks. Preserve the original deadline; if it has passed, run those checks immediately.
+* The modal states **Your dispute was rejected**, displays the reason, and offers **Close** with this guidance: “If you believe this decision was a mistake, please call [BGH contact number — pending] or visit [BGH address — pending].” The hospital will supply verified details before release.
+
+### 2.3 VITAL Five-Stage Tracker & Patient Resolution
+
+VITAL owns its progress bar. TRACE's internal ticket stages are grouped into Stage 3.
+
+| Stage | Label | Agreed trigger |
+| --- | --- | --- |
+| 1 | **Dispute Sent** | Patient confirms and VITAL successfully records submission; delivery proceeds in the background. |
+| 2 | **Dispute Approved or Rejected** | Admin decides. Approval continues to Stage 3; rejection ends this submission and shows the reason/contact modal. |
+| 3 | **Dispute in Process** | Investigation and staff routing. The ticket returns to Admin for final review and a **Reschedule**, **Invalidate**, or **Complete** tag with an explanation. |
+| 4 | **Completed** | VITAL receives the Admin-approved tag and explanation and shows the TRACE-supplied 72-hour acknowledgment deadline. |
+| 5 | **Acknowledged** or **Automatically Resolved** | Patient acceptance or TRACE's 72-hour automatic resolution permits application of the explicit tagged outcome through VITAL's normal checks. Record which method resolved it. |
+
+* Staff finishing work requires final Admin review before returning the resolution to the patient. TRACE starts the patient response window at the final Admin-approved completion/return and supplies `acknowledgment_deadline_at`. Internal staff completion before review cannot start automatic resolution.
+* **Acknowledge Resolution** originates from the original patient inside VITAL, goes through Gateway to TRACE, and returns a confirmed resolution to VITAL.
+* **Issue Not Resolved** requires a patient reason and follows the same Gateway path. TRACE changes Completed to Open, clears `completed_at` and `acknowledgment_deadline_at`, and saves the reason as a patient-attributed ticket comment. VITAL returns to Stage 3 and retains the hold. Renewed investigation requires another Admin review/tag before Stage 4 and a new deadline.
+* After 72 hours without a patient response, TRACE resolves with `System_Auto_Resolution` and sends the approved tag and resolution method through Gateway. VITAL shows Automatically Resolved and applies that eligible outcome once. It does not record this as explicit patient acknowledgment.
+* **Reschedule** maps to `reschedule_agreed` and starts VITAL's validated slot/confirmation workflow. **Invalidate** maps to `appointment_invalidated`. **Complete** maps to `appeal_dismissed` and resumes the original completion deadline/checks. Acceptance never bypasses payment, clinical-record, or current-state guards.
+* Preserve decision IDs and superseding-decision links for corrections. Incompatible transitions, including reversal of a finalized appointment, go to VITAL Admin.
+* Refund approval and actual external issuance remain separate from invalidation or ticket resolution. Accounting confirms issuance with a reconciliation reference. Mutual absence remains ineligible. Accounting's access to complaint narrative and evidence stays restricted.
+* This 72-hour ticket response window is distinct from VITAL's original 48-hour consultation completion deadline.
 
 ### 2.4 Doctor Access & Ticket Log Boundaries
 * **No Doctor Access**: Attending doctors do **not** have access to ticket logs or dispute management. The dispute is strictly between the patient and hospital administration.
@@ -81,53 +93,71 @@ All cross-service communications between `vital-services`, `vital-web`, and `TRA
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Patient as Patient (vital-web)
-    participant VS as vital-services
-    participant GW as BGH_API_GATEWAY
-    participant TB as TRACE_Backend
-    participant TF as TRACE_Frontend (Admin/HR)
+    actor Patient
+    participant VW as VITAL Web
+    participant VS as VITAL Services
+    participant GW as BGH API Gateway
+    participant TB as TRACE Backend
+    participant Admin as TRACE Admin
 
-    Note over Patient, VS: 1. Dispute Initiation & Lock
-    Patient->>VS: POST /api/patient/appointments/:id/appeal (Subject, Desc, Category)
-    VS->>VS: Set reviewHold = true, status = 'in_review'<br/>Freeze 48h completion clock
-    VS->>GW: POST /trace/api/disputes/intake (Metadata + Report)
-    GW->>TB: Forward with X-Internal-Service / Gateway Secret
-    TB->>TB: Store in Patient_Dispute_Case (intake_status='pending_approval')
-    TB-->>VS: Return durable receipt (case_id, report_id)
+    Note over Patient, VS: Stage 1 - Dispute Sent
+    Patient->>VW: Confirm report submission
+    VW->>VS: Submit as verified appointment owner
+    VS->>VS: Atomically record report, hold and delivery intent
+    VS-->>VW: Successful recording with stable report ID
+    VW-->>Patient: Dispute Sent
+    VS->>GW: Deliver report with stable identity
+    GW->>TB: Forward under agreed authentication
+    TB->>TB: Persist Pending Approval report
+    TB-->>GW: Durable receipt
+    GW-->>VS: Record receiving identity
 
-    Note over TB, TF: 2. TRACE Admin Approval Queue
-    TF->>TB: GET /trace/api/disputes (Pending approval list)
-    alt Admin Rejects Report
-        TF->>TB: POST /trace/api/disputes/:id/triage (action='reject', reason='...')
-        TB->>GW: POST /vital/api/disputes/receipt-rejected
-        GW->>VS: Clear reviewHold, resume 48h completion clock
-    else Admin Approves Report
-        TF->>TB: POST /trace/api/disputes/:id/triage (action='approve')
-        TB->>TB: Create Ticket (Status='Open', Dept=HR/HIMD)<br/>Link ticket_id to dispute case
-        TB->>GW: POST /vital/api/disputes/ticket-linked
-        GW->>VS: Update traceTicketId, keep reviewHold active
-    end
+    Note over TB, Admin: Stage 2 - Admin decision
+    Admin->>TB: Approve or reject
+    alt Report rejected
+        TB->>TB: Record Admin, time and reason on dispute
+        TB->>GW: Rejection update
+        GW->>VS: Confirm rejection
+        VS->>VS: Clear hold and run original deadline checks
+        VS-->>VW: Rejected state and reason
+        VW-->>Patient: Rejection modal with hospital contact guidance
+    else Report approved
+        TB->>TB: Record Admin/time, create ticket, initial assignee is Admin
+        TB->>GW: Approval and linked ticket
+        GW->>VS: Update report linkage
+        VS-->>VW: Dispute Approved
+        Note over TB, Admin: Stage 3 - Investigation and staff routing
+        TB->>Admin: Return staff work for final review
+        Admin->>TB: Select Reschedule / Invalidate / Complete and explanation
+        TB->>TB: Finalize return and start 72-hour response window
+        TB->>GW: Approved tag, explanation and acknowledgment deadline
+        GW->>VS: Record proposed resolution
+        VS-->>VW: Stage 4 - Completed with deadline
+        VW-->>Patient: Resolution and response actions
 
-    Note over TB, TF: 3. Investigation & Staff Completion
-    TF->>TB: Staff completes work -> Status = 'Completed'<br/>Set completed_at = NOW(), starts 72h window
-    TB->>GW: POST /vital/api/disputes/status-update (status='Completed', deadline_72h)
-    GW->>VS: Update patient-visible state to 'Staff Completed'
-
-    Note over Patient, TB: 4. Patient Resolution Choice
-    alt Patient Acknowledges Resolution
-        Patient->>VS: POST /api/patient/disputes/:id/acknowledge
-        VS->>GW: POST /trace/api/disputes/:id/acknowledge
-        GW->>TB: Transition Ticket to 'Resolved'
-        VS->>VS: Apply disposition (invalid / dismissed)
-    else Patient Submits "Issue Not Resolved"
-        Patient->>VS: POST /api/patient/disputes/:id/reject-completion (reason)
-        VS->>GW: POST /trace/api/disputes/:id/reject-completion
-        GW->>TB: 1. Transition Ticket Status 'Completed' -> 'Open'<br/>2. Set completed_at = NULL (reset 72h timer)<br/>3. Create Comment with patient reason
-        TB-->>VS: Confirm Reopened (Status='Open')
-        VS->>VS: Keep reviewHold = true, status = 'in_review'
-    else 72 Hours Expire Without Response
-        TB->>TB: APScheduler auto-resolves ticket -> Status='Resolved'<br/>Tag System_Auto_Resolution
-        TB->>GW: POST /vital/api/disputes/status-update (status='Resolved', auto=true)
+        alt Patient acknowledges
+            Patient->>VW: Acknowledge Resolution
+            VW->>VS: Submit verified owner action
+            VS->>GW: Forward acknowledgment
+            GW->>TB: Validate owner and resolve
+            TB->>GW: Confirm patient resolution with approved tag
+            GW->>VS: Apply eligible explicit tagged outcome once
+            VS-->>VW: Stage 5 - Acknowledged
+        else Patient rejects completion
+            Patient->>VW: Issue Not Resolved with reason
+            VW->>VS: Submit verified owner reason
+            VS->>GW: Forward rejection of completion
+            GW->>TB: Reopen ticket, clear completion/deadline, save comment
+            TB->>GW: Confirm return to investigation
+            GW->>VS: Keep hold and return tracker to Stage 3
+            VS-->>VW: Dispute in Process
+            Note over TB, Admin: Renewed investigation and Admin review required before Stage 4
+        else No response within 72 hours
+            TB->>TB: System_Auto_Resolution
+            TB->>GW: Automatic resolution with approved tag
+            GW->>VS: Apply eligible explicit tagged outcome once
+            VS-->>VW: Stage 5 - Automatically Resolved
+        end
     end
 ```
 
@@ -140,26 +170,26 @@ sequenceDiagram
 #### `app/modules/patient_form/models.py` & Database Migrations
 * Extend `Patient_Dispute_Case`:
   * Ensure `intake_status` supports: `'pending_approval'`, `'approved_ticket_created'`, `'rejected'`, `'in_investigation'`, `'completed'`, `'resolved'`.
-  * Ensure `rejection_reason` (`Text`, nullable) is persisted if admin rejects intake.
-  * Ensure `acknowledgment_deadline_at` (`Timestamptz`, nullable) tracks 72h window.
+  * Persist the deciding Admin, decision timestamp, and `rejection_reason` when intake is rejected. The rejection action/comment belongs to the dispute even if `ticket_id` is absent.
+  * Persist the final reviewing Admin, approved tag, patient-visible explanation, decision identity, and resolution method. Track the 72-hour window with `acknowledgment_deadline_at` and clear it on rejection of completion. Exact payload/storage names await confirmation.
 
 #### `app/modules/patient_form/dispute_router.py` & `services.py`
 * **Intake Endpoint**:
   * `POST /trace/api/disputes/intake`: Validates payload from Gateway, creates `Patient_Dispute_Case` in `pending_approval` state, returns `case_id`.
 * **Triage / Approval Endpoint**:
   * `POST /trace/api/disputes/{case_id}/triage`:
-    * If `action == "approve"`: Spawns ticket in `TicketModel`, assigns to appropriate department (HR / Medical Affairs), updates case with `ticket_id`, sets status `approved_ticket_created`.
-    * If `action == "reject"`: Requires `rejection_reason`, updates case to `rejected`, emits callback to VITAL.
+    * If `action == "approve"`: Record Admin/time, create one linked ticket, and set that Admin as initial assignee. Subsequent department/staff routing follows TRACE. Preserve patient creator identity and set `approved_ticket_created`.
+    * If `action == "reject"`: Require `rejection_reason`, record the deciding Admin/time and an action/comment on the dispute, set `rejected`, and send the patient-visible result through Gateway. This must work before any ticket exists.
 * **Patient Rejection ("Issue Not Resolved") Endpoint**:
   * `POST /trace/api/disputes/{case_id}/reject-completion`:
-    * Validates dispute case and linked ticket in `Completed` state.
+    * Validate the original reporting patient through the agreed Auth-to-TRACE identity mapping, the active decision, and the linked ticket in `Completed` state. Patients with VITAL accounts can use this flow without TRACE staff permissions.
     * Updates ticket status from `Completed` to `Open`.
-    * Sets `EmployeeTicketModel.completed_at = None` (resets 72h auto-resolve timer).
+    * Clear `EmployeeTicketModel.completed_at` and `acknowledgment_deadline_at`, invalidate the pending completion proposal, and return the patient tracker to Stage 3. Require renewed Admin review/tag before Stage 4.
     * Creates a `CommentModel` on the ticket containing the patient's rejection reason.
     * Logs ticket update in `Ticket_Log`.
 * **Dispute Progress Endpoint for Gateway**:
   * `GET /trace/api/disputes/{case_id}/progress`:
-    * Returns sanitized progress payload: `status`, `stage_label`, `acknowledgment_deadline_at`, `can_acknowledge`, `can_reject`.
+    * Return sanitized data for VITAL’s five-stage tracker, including the active approved tag/explanation, Admin decision timestamp, response deadline, resolution method, permitted actions, and event version. Confirm exact names with VITAL and Gateway.
 
 ---
 
@@ -191,8 +221,8 @@ sequenceDiagram
 * Uses `DisplayContainer` with:
   * Filter pills: `All`, `Pending Approval`, `Active / In Investigation`, `Completed`, `Resolved`.
   * Search bar filtering by patient name, appointment reference, or dispute category.
-  * Columns: Dispute ID, Appointment Ref, Category, Patient Auth ID, Intake Status, Submitted Date, Actions (Review, Approve, Reject).
-  * Modal dialog for Admin Triage (Approve $\rightarrow$ spawn ticket / Reject with reason).
+  * Columns: Dispute ID, Appointment Ref, Category, Patient Auth ID, Intake Status, Submitted Date, Actions (Review, Approve, Reject). Show deciding Admin and decision time in the authorized detail view.
+  * Admin triage records approval/rejection and makes the approving Admin initial assignee. Final review requires Reschedule, Invalidate, or Complete and a patient-visible explanation before returning the resolution.
 
 ---
 
@@ -202,19 +232,20 @@ sequenceDiagram
 * **`POST /internal/v1/appointments/:id/appeal`**:
   * Validates patient ownership and appointment eligibility.
   * Sets `reviewHold = true`, `status = 'in_review'`.
-  * Dispatches `POST /trace/api/disputes/intake` via Gateway.
+  * Record Dispute Sent on successful patient-confirmed submission. Persist delivery intent atomically and dispatch through Gateway with retries using the same report ID.
 * **`POST /internal/v1/appointments/appeals/reject-completion`**:
   * Invoked by patient when selecting "Issue not resolved".
   * Calls Gateway `POST /trace/api/disputes/{case_id}/reject-completion`.
   * Retains `reviewHold = true` and `status = 'in_review'`.
 * **`POST /internal/v1/appointments/appeals/receipt-rejected`**:
   * Ingests admin rejection callback from TRACE.
-  * Clears `reviewHold = false`, resumes original 48h completion countdown.
+  * Clear the hold and resume the original completion deadline through existing payment/clinical-record checks. If elapsed, run the checks immediately without extending the deadline.
 
 #### `vital-web`
 * **Appointment Detail View**:
-  * Render **Dispute Tracker** banner / progress bar instead of generic alerts.
-  * When status is `Completed`, display countdown timer to `acknowledgment_deadline_at`.
+  * Render VITAL’s own five-stage Dispute Tracker using the agreed labels in Section 2.3. Show Dispute Sent after successful local recording, including while delivery is retried.
+  * At Stage 4, display Admin’s approved tag/explanation and countdown to TRACE’s `acknowledgment_deadline_at`. At Stage 5, distinguish patient acknowledgment from automatic resolution.
+  * On intake rejection, show the reason/contact modal and Dispute Rejected. Phone and address remain pending hospital confirmation.
   * Render two primary actions:
     1. **"Acknowledge Resolution"** (Success button).
     2. **"Issue Not Resolved"** (Warning/Destructive button) $\rightarrow$ opens modal requesting reason, dispatches rejection to TRACE to reopen ticket.
@@ -226,13 +257,13 @@ sequenceDiagram
 ### 5.1 Unit & Integration Tests
 * **`TRACE_Backend`**:
   * Test intake creation: verify `intake_status == 'pending_approval'` and no ticket is prematurely created.
-  * Test triage approval: verify ticket is created in HR department, linked to dispute case.
-  * Test triage rejection: verify rejection reason is required and callback dispatched.
-  * Test patient rejection ("Issue Not Resolved"): verify ticket transitions from `Completed` to `Open`, `completed_at` is set to `None`, and a comment is created.
-  * Test scheduler: verify tickets in `Completed` for $>72\text{h}$ auto-resolve, while tickets reset to `Open` are untouched.
+  * Test triage approval: verify one ticket is linked to the dispute, deciding Admin/time are recorded, and that Admin is initial assignee while patient creator identity is retained.
+  * Test triage rejection before ticket creation: require a reason, record the Admin/time and dispute action/comment, and deliver rejection through Gateway.
+  * Test patient rejection: verify Completed to Open, clear completion/deadline, record a patient comment, return to Stage 3, and require renewed Admin review/tag before Stage 4.
+  * Test scheduler: final Admin-approved completion starts the 72-hour response window. Automatic resolution returns its method and approved tag; reopened tickets and staff work awaiting Admin review are untouched.
 * **`vital-services`**:
   * Verify `startAppeal` atomically flags `reviewHold = true` and halts completion maintenance worker.
-  * Verify intake rejection clears hold and resumes completion checks.
+  * Verify intake rejection preserves the original deadline, clears the hold, and runs normal completion checks even when that deadline has elapsed.
   * Verify "Issue Not Resolved" retains hold.
 * **`TRACE_Frontend`**:
   * Verify Dispute Container renders on `/patient-feedback`.
@@ -240,13 +271,15 @@ sequenceDiagram
   * Verify `/dispute` filters correctly between Pending Approval, Active, and Resolved cases.
 
 ### 5.2 Manual End-to-End Walkthrough
-1. Log in as Patient on `vital-web` with a completed consultation.
-2. Click **"Report an issue"**, select category, enter description, submit.
-3. Check `vital-services`: appointment status is `in_review`, `reviewHold` is `true`.
-4. Log in as TRACE Admin on `TRACE_Frontend`, navigate to `/patient-feedback`: dispute appears in the new container block.
-5. Click **"View All"** to navigate to `/dispute`. Approve the dispute $\rightarrow$ Ticket is generated and routed to HR.
-6. As HR staff, investigate and transition ticket to `Completed`.
-7. Refresh `vital-web`: patient sees 72-hour countdown timer with "Acknowledge" and "Issue Not Resolved" buttons.
-8. Click **"Issue Not Resolved"**, enter reason: "Doctor did not send lab requisition."
-9. Refresh TRACE: Ticket status returned to `Open`, timer reset, and patient reason appears in ticket comments.
-10. Verify neither the attending doctor nor unauthorized parties can see ticket logs or export disputes.
+
+1. Sign in as the patient who owns an eligible telemedicine appointment awaiting completion confirmation.
+2. Open and cancel the report modal; verify the appointment is unchanged. Then confirm a valid report and verify **Dispute Sent** immediately after VITAL records it.
+3. Simulate unavailable delivery; verify the report ID and hold persist while retries recover one TRACE report.
+4. TRACE Admin approves the report. Verify the deciding Admin/time, that Admin as initial assignee, the retained patient creator, and **Dispute Approved** in VITAL.
+5. Investigate and route work in TRACE while VITAL shows **Dispute in Process**. Return staff work to Admin, who selects Reschedule, Invalidate, or Complete with an explanation.
+6. Verify VITAL shows **Completed**, the approved tag/explanation, and TRACE's 72-hour deadline only after final Admin review.
+7. Select **Issue Not Resolved** with a reason. Verify a patient-attributed ticket comment, Open state, cleared completion/deadline, retained hold, and Stage 3.
+8. Investigate again and obtain renewed Admin review/tag. Verify Stage 4 and a fresh deadline.
+9. Acknowledge as the original patient. Verify the confirmed Gateway round trip, Stage 5 **Acknowledged**, and one eligible tagged outcome. Separately exercise expiry and verify **Automatically Resolved** with the approved tag.
+10. Reject another intake before ticket creation. Verify its dispute action/comment, deciding Admin/time, patient modal, pending phone/address configuration, and original completion checks.
+11. Verify wrong-patient actions are denied, doctors cannot access ticket logs, internal comments stay private, Accounting evidence restrictions hold, and refunds remain separate from invalidation.
