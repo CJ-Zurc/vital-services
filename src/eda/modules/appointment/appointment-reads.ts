@@ -110,6 +110,18 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
         a."proposedEndAt" AT TIME ZONE 'UTC',a."scheduledAt" AT TIME ZONE 'UTC')<=$6::timestamptz`:'';
     const pageResult=await readCollectionPage<ReadRow>(pool,page,{sql:`SELECT a.*,p."authId" AS "patientAuthId",d."authId" AS "doctorAuthId",d.specialty,
       s."slotDate"::text AS "slotDate",s."startTime"::text AS "startTime",s."endTime"::text AS "endTime",s."isPublished",s."consultationType" AS "slotType",
+      ad.id AS "disputeId",
+      ad."traceCaseId",
+      ad."traceTicketId",
+      ad."traceTicketNumber",
+      ad."traceDisputeSeq",
+      ad.stage AS "disputeStage",
+      ad.description AS "disputeReason",
+      ad."rejectionReason" AS "disputeRejectionReason",
+      ad."proposedOutcomeTag" AS "proposedResolutionTag",
+      ad."proposedExplanation",
+      ad."acknowledgmentDeadlineAt",
+      ad."createdAt" AS "disputedAt",
       (SELECT f."starRating" FROM feedback f WHERE f."appointmentId"=a.id AND f."patientId"=a."patientId") AS "ownRating",
       (SELECT f."submittedAt" FROM feedback f WHERE f."appointmentId"=a.id AND f."patientId"=a."patientId") AS "ratingSubmittedAt",
       EXISTS(SELECT 1 FROM appointment_payment_projections pp WHERE pp."appointmentId"=a.id AND pp.status='paid' AND NOT pp."reviewRequired"
@@ -123,6 +135,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
       FROM appointments a JOIN vital_patients p ON p."userId"=a."patientId" JOIN vital_doctors d ON d."userId"=a."doctorId"
       LEFT JOIN schedules s ON s.id=a."scheduleSlotId" LEFT JOIN pre_consultations pc ON pc."appointmentId"=a.id
       LEFT JOIN consultations c ON c."appointmentId"=a.id
+      LEFT JOIN appointment_disputes ad ON ad."appointmentId"=a.id
       WHERE a."${actor.role==='patient'?'patientId':'doctorId'}"=$1
       AND ($2::text IS NULL OR a.status::text=$2) AND ($3::timestamp IS NULL OR a."scheduledAt">=$3)
       AND ($4::timestamp IS NULL OR a."scheduledAt"<$4)
@@ -169,6 +182,18 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
         doctorConfirmedAt:row.doctorConfirmedAt,patientConfirmedAt:row.patientConfirmedAt,completionDeadlineAt:row.completionDeadlineAt,autoCompletedAt:row.autoCompletedAt,paperworkLockedAt:row.paperworkLockedAt,
         rating:actor.role==='patient'&&row.status==='completed'&&row.ownRating!=null&&row.ownRating>=1&&row.ownRating<=5?{rating:row.ownRating,submittedAt:row.ratingSubmittedAt}:null,
         canRate:actor.role==='patient'&&row.status==='completed'&&row.ownRating==null&&(row.consultationType==='in_person'||row.ratingPaymentEligible===true),
+        reviewHold:row.reviewHold??false,
+        traceCaseId:row.traceCaseId??null,
+        traceTicketId:row.traceTicketId??null,
+        traceTicketNumber:row.traceTicketNumber??null,
+        traceDisputeSeq:row.traceDisputeSeq??null,
+        disputeReason:row.disputeReason??null,
+        disputedAt:row.disputedAt??null,
+        proposedResolutionTag:row.proposedResolutionTag??null,
+        proposedExplanation:row.proposedExplanation??null,
+        acknowledgmentDeadlineAt:row.acknowledgmentDeadlineAt??null,
+        disputeStage:row.disputeStage??1,
+        disputeRejectionReason:row.disputeRejectionReason??null,
         preConsultation:{summary,privacyWithheld:restricted&&(reviewText(row.chiefComplaint,knownIdentities).withheld||!isDeepStrictEqual(reviewIntake(row.opqrst,knownIdentities),row.opqrst)),chiefComplaint:noIntake?null:restricted?reviewText(row.chiefComplaint,knownIdentities).text:row.chiefComplaint??null,opqrst:noIntake?null:restricted?reviewIntake(row.opqrst,knownIdentities):row.opqrst??null},statusLogs:restricted?logs.map(l=>({...l,note:null})):logs,
         sourceAppointment:restricted?null:related.find(r=>r.id===row.sourceAppointmentId)?relation(related.find(r=>r.id===row.sourceAppointmentId)!):null,
         rescheduleProposals:restricted?[]:related.filter(r=>r.sourceAppointmentId===row.id).map(relation),followUpAppointments:restricted?[]:related.filter(r=>r.followUpOfAppointmentId===row.id).map(r=>({id:r.id,status:r.status})),

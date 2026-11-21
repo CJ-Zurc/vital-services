@@ -22,9 +22,24 @@ import { videoSelection,selectionHash,type VideoSelection } from '../video/contr
 
 const selectAppointment = `SELECT a.*, p."authId" AS "patientAuthId", d."authId" AS "doctorAuthId",
   CASE WHEN s.id IS NOT NULL THEN (s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila' END AS "slotEndsAt",
-  (SELECT "changedByRole" FROM appointment_logs WHERE "appointmentId"=a.id ORDER BY "changedAt",id LIMIT 1) AS "proposalRole"
+  (SELECT "changedByRole" FROM appointment_logs WHERE "appointmentId"=a.id ORDER BY "changedAt",id LIMIT 1) AS "proposalRole",
+  ad.id AS "disputeId",
+  ad."traceCaseId",
+  ad."traceTicketId",
+  ad."traceTicketNumber",
+  ad."traceDisputeSeq",
+  ad.stage AS "disputeStage",
+  ad.subject AS "disputeSubject",
+  ad.category AS "disputeCategory",
+  ad.description AS "disputeReason",
+  ad."rejectionReason" AS "disputeRejectionReason",
+  ad."proposedOutcomeTag" AS "proposedResolutionTag",
+  ad."proposedExplanation",
+  ad."acknowledgmentDeadlineAt",
+  ad."createdAt" AS "disputedAt"
   FROM appointments a JOIN vital_patients p ON p."userId"=a."patientId"
-  JOIN vital_doctors d ON d."userId"=a."doctorId" LEFT JOIN schedules s ON s.id=a."scheduleSlotId"`;
+  JOIN vital_doctors d ON d."userId"=a."doctorId" LEFT JOIN schedules s ON s.id=a."scheduleSlotId"
+  LEFT JOIN appointment_disputes ad ON ad."appointmentId"=a.id`;
 const bookingInput = z.object({ doctorId: z.uuid().optional(), scheduleSlotId: z.uuid(), consultationType: z.enum(["virtual","in_person"]),
   consentVersion:z.literal('appointment-sharing-v1'),consentAccepted: z.literal(true), chiefComplaint: complaintSchema, opqrst: intakeSchema, emergencyContact: emergencyContactSchema,
   intakeSessionBinding:z.string().regex(/^[a-f0-9]{64}$/).optional(),ehrPatientId: z.uuid(), intakeReference:intakeReferenceSchema.optional(), reviewIdentityValues:z.array(z.string().max(400)).max(25).optional(), reviewSex:z.string().max(40).nullable().optional(), aiAgeYears:z.number().int().min(0).max(150).nullable().optional() }).strict();
@@ -47,6 +62,27 @@ const preparedInput = z.object({ workflowId: z.uuid(), appointmentId: z.uuid(), 
 const commitInput = z.object({ inputHash: z.string().regex(/^[a-f0-9]{64}$/), receipt: z.object({
   ehrPatientId: z.uuid(), ehrCaseId: z.uuid(), externalSystemRef: z.string().max(96), requestHash: z.string().regex(/^[a-f0-9]{64}$/)
 }).strict() }).strict();
+const appealInput = z.object({
+  expectedVersion: versionSchema.optional(),
+  subject: z.string().trim().min(1).max(255),
+  category_id: z.string().trim().min(1).max(100),
+  description: z.string().trim().min(1).max(5000),
+  reason: z.string().trim().min(1).max(2000).optional(),
+  traceCaseId: z.string().uuid().optional(),
+}).passthrough();
+const linkDisputeInput = z.object({
+  traceCaseId: z.string().uuid(),
+  traceTicketId: z.string().uuid().optional(),
+  traceTicketNumber: z.string().optional(),
+  traceDisputeSeq: z.number().int().optional(),
+}).passthrough();
+const rejectCompletionInput = z.object({
+  expectedVersion: versionSchema.optional(),
+  reason: z.string().trim().min(1).max(2000),
+}).strict();
+const acknowledgeDisputeInput = z.object({
+  expectedVersion: versionSchema.optional(),
+}).passthrough();
 function fail(status: number, code: string): never { throw new DomainError(status, code, "Appointment operation is unavailable."); }
 export async function calendarLock(tx: PoolClient, doctorId: string) {
   await tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", ["appointment-calendar:"+doctorId]);
@@ -506,9 +542,10 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       if(row.status==='confirmed'&&(actor.role==='doctor'?row.doctorConfirmedAt:row.patientConfirmedAt))return{id,version:row.version,status:row.status,operationStatus:"completed"};
       const records=requireOwner(owners.records,"records");const financial=requireOwner(owners.financial,"financial");const projection=(await tx.query('SELECT * FROM appointment_payment_projections WHERE "appointmentId"=$1',[id])).rows[0];
       if(row.status!=="confirmed"||row.scheduledAt.getTime()>clock()||!projection||projection.status!=="paid"||projection.reviewRequired||projection.billingLineageId!==row.billingLineageId||projection.associationVersion!==row.associationVersion)fail(409,"APPOINTMENT_COMPLETION_INVALID");
+      if(row.reviewHold||row.status==='in_review')fail(409,"APPOINTMENT_UNDER_DISPUTE_HOLD");
       await financial.verifyPaid(row,projection);
       if(effectiveCompletionDeadline(row).getTime()<=clock())fail(409,"APPOINTMENT_COMPLETION_DEADLINE");
-      const deadline=row.completionDeadlineAt??new Date(clock()+86400000);
+      const deadline=row.completionDeadlineAt??new Date(clock()+172800000);
       const context={operationId:meta.operationId,beforeState:row.status,afterState:"confirmed",effectiveAt:new Date(clock()),financialEvidence:projection};
       if(actor.role==="doctor"){
         if(!records.beforeDoctorAcknowledgement)fail(503,"RECORDS_SNAPSHOT_OWNER_UNAVAILABLE");
@@ -534,6 +571,229 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       const competitors=(await tx.query<AppointmentRow>(selectAppointment+` WHERE a."doctorId"=$1 AND a.id<>$2 AND a."scheduledAt"=$3 AND a.status='pending'
         AND a."sourceAppointmentId" IS NULL FOR UPDATE OF a`,[row.doctorId,row.id,row.scheduledAt])).rows;
       for(const competing of competitors)await appointmentTransition(tx,competing,"rejected",null,evidence.eventId,evidence.correlationId,"slot_taken");
+    },
+    async startAppeal(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {
+      const input = appealInput.parse(body ?? {});
+      return mutate(actor, "start_appeal", id, meta, input, async tx => {
+        const row = await lockAppointment(tx, id);
+        appointmentOwn(actor, row);
+        if (actor.role !== "patient") fail(403, "PATIENT_ROLE_REQUIRED");
+        if (input.expectedVersion !== undefined) expected(row, input.expectedVersion);
+        if (row.status !== "confirmed" || !row.doctorConfirmedAt) fail(409, "APPOINTMENT_APPEAL_INELIGIBLE");
+        if (row.reviewHold || row.status === "in_review") fail(409, "APPEAL_ALREADY_ACTIVE");
+        if (effectiveCompletionDeadline(row).getTime() <= clock()) fail(409, "APPOINTMENT_COMPLETION_DEADLINE_EXPIRED");
+
+        const disputedAt = new Date(clock());
+        const reason = input.reason || input.subject;
+
+        await tx.query(
+          `UPDATE appointments SET
+            "reviewHold" = true,
+            status = 'in_review',
+            version = version + 1,
+            "updatedAt" = NOW()
+          WHERE id = $1`,
+          [id]
+        );
+        row.version++;
+        row.status = "in_review";
+        row.reviewHold = true;
+
+        const disputeId = randomUUID();
+        await tx.query(
+          `INSERT INTO appointment_disputes (
+            id, "appointmentId", "traceCaseId", stage, subject, category, description, "createdAt", "updatedAt"
+          ) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, NOW())
+          ON CONFLICT ("appointmentId") DO UPDATE SET
+            "traceCaseId" = EXCLUDED."traceCaseId",
+            stage = 1,
+            subject = EXCLUDED.subject,
+            category = EXCLUDED.category,
+            description = EXCLUDED.description,
+            "updatedAt" = NOW()`,
+          [disputeId, id, input.traceCaseId || null, input.subject, input.category_id, input.description, disputedAt]
+        );
+        row.disputeStage = 1;
+        row.disputedAt = disputedAt;
+        row.disputeReason = reason;
+        if (input.traceCaseId) row.traceCaseId = input.traceCaseId;
+
+        const logId = randomUUID();
+        await tx.query(
+          `INSERT INTO appointment_logs (id, "appointmentId", "fromStatus", "toStatus", "changedByRole", "changedByAuthId", note, "changedAt")
+          VALUES ($1, $2, 'confirmed', 'in_review', 'patient', $3, $4, $5)`,
+          [logId, id, actor.authId, `appeal_started: ${input.subject}`, disputedAt]
+        );
+
+        await appendSqlOutbox(tx, {
+          producer: "appointment",
+          eventType: "vital.appointment.appeal_started",
+          aggregateId: id,
+          aggregateVersion: row.version,
+          correlationId: actor.correlationId,
+          causationId: meta.operationId,
+          data: {
+            ...appointmentFactData(row, actor.authId, meta.operationId),
+            disputeReason: reason,
+            disputedAt: disputedAt.toISOString(),
+            subject: input.subject,
+            category_id: input.category_id,
+            description: input.description,
+            traceCaseId: input.traceCaseId || null,
+          }
+        });
+
+        await appendSqlOutbox(tx, {
+          producer: "appointment",
+          eventType: "vital.audit.requested",
+          aggregateId: id,
+          aggregateVersion: row.version,
+          correlationId: actor.correlationId,
+          causationId: meta.operationId,
+          data: {
+            auditType: "vital.appointment.appeal_started",
+            actorAuthId: actor.authId,
+            resourceId: id,
+            resourceType: "appointment"
+          }
+        });
+
+        return {
+          id,
+          version: row.version,
+          status: "in_review",
+          reviewHold: true,
+          disputeStage: 1,
+          disputedAt,
+          disputeReason: reason,
+          traceCaseId: row.traceCaseId ?? null,
+          operationStatus: "completed"
+        };
+      });
+    },
+    async linkDisputeCase(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {
+      const input = linkDisputeInput.parse(body);
+      return mutate(actor, "link_dispute", id, meta, input, async tx => {
+        const row = await lockAppointment(tx, id);
+        appointmentOwn(actor, row);
+        await tx.query(
+          `UPDATE appointment_disputes SET
+            "traceCaseId" = $2,
+            "traceTicketId" = COALESCE($3, "traceTicketId"),
+            "traceTicketNumber" = COALESCE($4, "traceTicketNumber"),
+            "traceDisputeSeq" = COALESCE($5, "traceDisputeSeq"),
+            "updatedAt" = NOW()
+          WHERE "appointmentId" = $1`,
+          [id, input.traceCaseId, input.traceTicketId || null, input.traceTicketNumber || null, input.traceDisputeSeq || null]
+        );
+        await tx.query(
+          `UPDATE appointments SET
+            version = version + 1,
+            "updatedAt" = NOW()
+          WHERE id = $1`,
+          [id]
+        );
+        row.version++;
+        row.traceCaseId = input.traceCaseId;
+        if (input.traceTicketId) row.traceTicketId = input.traceTicketId;
+        if (input.traceTicketNumber) row.traceTicketNumber = input.traceTicketNumber;
+        if (input.traceDisputeSeq) row.traceDisputeSeq = input.traceDisputeSeq;
+        return {
+          id,
+          traceCaseId: row.traceCaseId,
+          traceTicketId: row.traceTicketId,
+          traceTicketNumber: row.traceTicketNumber,
+          traceDisputeSeq: row.traceDisputeSeq,
+          operationStatus: "completed"
+        };
+      });
+    },
+    async rejectCompletion(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {
+      const input = rejectCompletionInput.parse(body);
+      return mutate(actor, "reject_completion", id, meta, input, async tx => {
+        const row = await lockAppointment(tx, id);
+        appointmentOwn(actor, row);
+        if (actor.role !== "patient") fail(403, "PATIENT_ROLE_REQUIRED");
+        if (row.status !== "in_review" && !row.reviewHold) fail(409, "DISPUTE_NOT_IN_REVIEW");
+        const changedAt = new Date(clock());
+        await tx.query(
+          `UPDATE appointment_disputes SET
+            stage = 3,
+            "rejectionReason" = $2,
+            "proposedOutcomeTag" = NULL,
+            "acknowledgmentDeadlineAt" = NULL,
+            "updatedAt" = NOW()
+          WHERE "appointmentId" = $1`,
+          [id, input.reason]
+        );
+        await tx.query(
+          `UPDATE appointments SET
+            version = version + 1,
+            "updatedAt" = NOW()
+          WHERE id = $1`,
+          [id]
+        );
+        row.version++;
+        row.disputeStage = 3;
+        row.proposedResolutionTag = null;
+        row.acknowledgmentDeadlineAt = null;
+
+        await tx.query(
+          `INSERT INTO appointment_logs (id, "appointmentId", "fromStatus", "toStatus", "changedByRole", "changedByAuthId", note, "changedAt")
+          VALUES ($1, $2, 'in_review', 'in_review', 'patient', $3, $4, $5)`,
+          [randomUUID(), id, actor.authId, `issue_not_resolved: ${input.reason}`, changedAt]
+        );
+
+        return { id, disputeStage: 3, reviewHold: true, operationStatus: "completed" };
+      });
+    },
+    async acknowledgeDispute(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {
+      const input = acknowledgeDisputeInput.parse(body ?? {});
+      return mutate(actor, "acknowledge_dispute", id, meta, input, async tx => {
+        const row = await lockAppointment(tx, id);
+        appointmentOwn(actor, row);
+        if (actor.role !== "patient") fail(403, "PATIENT_ROLE_REQUIRED");
+        const changedAt = new Date(clock());
+        let terminalStatus = row.status;
+        let reviewHold = false;
+        if (row.proposedResolutionTag === "invalidate") {
+          terminalStatus = "invalid";
+        } else if (row.proposedResolutionTag === "complete") {
+          terminalStatus = "completed";
+        }
+
+        await tx.query(
+          `UPDATE appointment_disputes SET
+            stage = 5,
+            "resolutionMethod" = 'patient_acknowledged',
+            "resolvedAt" = NOW(),
+            "updatedAt" = NOW()
+          WHERE "appointmentId" = $1`,
+          [id]
+        );
+
+        await tx.query(
+          `UPDATE appointments SET
+            "reviewHold" = $2,
+            status = $3::"AppointmentStatus",
+            version = version + 1,
+            "updatedAt" = NOW()
+          WHERE id = $1`,
+          [id, reviewHold, terminalStatus]
+        );
+        row.version++;
+        row.disputeStage = 5;
+        row.reviewHold = reviewHold;
+        row.status = terminalStatus;
+
+        await tx.query(
+          `INSERT INTO appointment_logs (id, "appointmentId", "fromStatus", "toStatus", "changedByRole", "changedByAuthId", note, "changedAt")
+          VALUES ($1, $2, 'in_review', $3, 'patient', $4, 'dispute_acknowledged', $5)`,
+          [randomUUID(), id, terminalStatus, actor.authId, changedAt]
+        );
+
+        return { id, disputeStage: 5, status: terminalStatus, reviewHold, operationStatus: "completed" };
+      });
     },
   };
 }
