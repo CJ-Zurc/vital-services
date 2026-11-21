@@ -13,7 +13,15 @@ export interface ExportPage {
   meta: { nextCursor: string | null; lastCursor: string | null; hasMore: boolean; upperBound: string | null };
 }
 
+export interface AdminAppointmentOverview {
+  statusCounts: Record<string,number>;
+  consultationCounts: {virtual:number;in_person:number};
+  monthly: {from:string;to:string;asOf:string;completed:number;cancelled:number;noShow:number};
+  doctorSpotlight: {leaders:{id:string;authId:string;specialty:string|null;completedCount:number;rating:number|null;reviewCount:number}[]};
+}
+
 export interface CompletionAppointmentOwner {
+  adminOverview(actor: Actor): Promise<AdminAppointmentOverview>;
   patient(actor: Actor): Promise<{ patientId: string; appointments: AppointmentReadSnapshot[]; statusCounts: Record<string, number>;
     associations: CompletionAssociation[]; validate(): Promise<void> }>;
   statusCounts(actor: Actor): Promise<Record<string, number>>;

@@ -1,3 +1,4 @@
+import { createAdminAppointmentOverview } from './appointment-admin-overview.js';
 import { appointmentAccessState } from './appointment-access.js';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
@@ -20,6 +21,7 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
   owners: AppointmentReadOwners = {}, clock = Date.now): CompletionAppointmentOwner {
   const profile = createCompletionProfileOwner(pool);
   return {
+    adminOverview: createAdminAppointmentOverview(pool,clock),
     async patient(actor) {
       completionRole(actor, 'patient', 'completion.patient.dashboard');
       const patientId = await profile.patient(actor), tx = await pool.connect();

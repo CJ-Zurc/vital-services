@@ -29,3 +29,6 @@ See the [production configuration reference](configuration-reference.md) for eve
 See [VITAL audit integration](audit-integration.md) for universal metadata, admin history, bounded CSV export and coordinated rollout.
 
 See [face-to-face booking](f2f-booking.md) for booking-only acceptance, doctor outcomes, acknowledgment routes and paired rollout.
+
+
+See [dashboard and doctor discovery redesign](dashboard-redesign.md) for chart scopes, monthly highlights, privacy and paired reporting contracts.

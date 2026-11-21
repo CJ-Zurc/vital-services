@@ -93,3 +93,6 @@ See [face-to-face booking](f2f-booking.md) for booking-only acceptance, doctor o
 
 
 Manual Google Meet links replace the retired connection/generation feature. See [manual meeting workflow](manual-meet-links.md).
+
+
+See [dashboard and doctor discovery redesign](dashboard-redesign.md) for chart scopes, monthly highlights, privacy and paired reporting contracts.

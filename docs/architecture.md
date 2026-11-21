@@ -56,3 +56,6 @@ See [portal consistency v2](portal-consistency-v2.md) for anonymous patient rati
 
 
 Manual Google Meet links replace the retired connection/generation feature. See [manual meeting workflow](manual-meet-links.md).
+
+
+See [dashboard and doctor discovery redesign](dashboard-redesign.md) for chart scopes, monthly highlights, privacy and paired reporting contracts.

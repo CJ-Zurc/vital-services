@@ -47,7 +47,7 @@ function get(path: string) {
 function method(path: string, verb = 'GET') { return get(path).methods.find((row: any) => row.method === verb); }
 
 test('route contract review maps every current Web route and exported method without claiming runtime parity', () => {
-  assert.equal(current.length, 171, 'A changed route inventory requires explicit source review.');
+  assert.equal(current.length, 172, 'A changed route inventory requires explicit source review.');
   for (const route of current) {
     const result = get(route.path);
     assert.equal(result.reviewed, true, route.path + ': ' + JSON.stringify(result.gates));
@@ -219,4 +219,9 @@ test('route contract review gates unknown missing changed and mismatched route e
   assert.ok(oldBlanket.remainingGates.includes('front_door_blocks_target_mode_route'));
   const unsafe = review({ ...original, path: '/../../outside', source: '../../outside.ts' });
   assert.equal(unsafe.reviewed, false); assert.ok(codes(unsafe).includes('ROUTE_INPUT_INVALID'));
+});
+
+test('Complaint pattern read has signed Intelligence ownership and no patient member projection',()=>{
+ const row=method('/api/admin/analytics/patterns','GET');assert.equal(row.family,'intelligence');assert.equal(row.dispatch.symbol,'targetIntelligence');assert.equal(row.requiredRole,'admin');
+ assert.equal(method('/api/admin/analytics/dashboard','GET').family,'intelligence');
 });
