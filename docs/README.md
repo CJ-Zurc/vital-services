@@ -34,3 +34,5 @@ See [face-to-face booking](f2f-booking.md) for booking-only acceptance, doctor o
 - [VITAL–TRACE in-system dispute proposal for TRACE review](integrations/trace/patient-feedback/VITAL_Feedback_on_TRACE_Integration_Plan.md).
 - [VITAL–TRACE in-system dispute execution plan](integrations/trace/patient-feedback/VITAL_TRACE_In_System_Dispute_Execution_Plan.md).
 - [Historical TRACE Google Forms implementation ledger](integrations/trace/trace-integration-changes.md).
+
+- [Native TRACE implementation changes, contracts and verification](integrations/trace/patient-feedback/VITAL_TRACE_Implementation_Changes_and_Verification.md).

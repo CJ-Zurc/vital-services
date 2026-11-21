@@ -374,6 +374,9 @@ model Appointment {
 
   reviewHold         Boolean           @default(false)
   dispute            AppointmentDispute?
+  disputeAuthorizationId String?
+  disputeDecisionId String? @db.Uuid
+  disputeEvidence TraceDisputeEvidence[]
 
   statusLogs          AppointmentLog[]
   preConsultation     PreConsultation?
@@ -401,6 +404,26 @@ model Appointment {
 }
 
 model AppointmentDispute {
+  reporterAuthId String?
+  originalStatus String?
+  originalCompletionDeadlineAt DateTime? @db.Timestamptz
+  stateVersion Int @default(0)
+  decisionId String? @db.Uuid
+  outcomeAppliedDecisionId String? @db.Uuid
+  resolutionAvailableAt DateTime? @db.Timestamptz
+  deliveryStatus String @default("needs_review")
+  refundApproved Boolean @default(false)
+  faultClassification String?
+  refundIssuedAt DateTime? @db.Timestamptz
+  refundReference String?
+  rescheduleGranted Boolean @default(false)
+  rescheduleConsumedAt DateTime? @db.Timestamptz
+  evidenceIds Json @default("[]")
+  deliveries TraceDisputeDelivery[]
+  responses TraceDisputeResponse[]
+  timeouts TraceDisputeTimeout[]
+  reviews TraceDisputeReview[]
+  evidence TraceDisputeEvidence[]
   id                        String      @id @default(uuid())
   appointmentId             String      @unique
   appointment               Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
@@ -1268,4 +1291,78 @@ model BookingAcknowledgment {
   supersededBy String?
   replacement Appointment? @relation("SupersededBooking", fields: [supersededBy], references: [id], onDelete: Restrict, onUpdate: Cascade)
   @@map("appointment_booking_acknowledgments")
+}
+
+model TraceDisputeDelivery {
+  id String @id @db.Uuid
+  reportId String
+  report AppointmentDispute @relation(fields:[reportId],references:[id])
+  kind String
+  payload Json
+  correlationId String @db.Uuid
+  status String @default("pending")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now()) @db.Timestamptz
+  leaseUntil DateTime? @db.Timestamptz
+  leaseOwner String? @db.Uuid
+  result Json?
+  createdAt DateTime @default(now()) @db.Timestamptz
+  @@index([status,nextAttemptAt],map:"trace_dispute_due")
+  @@map("trace_dispute_deliveries")
+}
+model TraceDisputeInbox {
+  eventId String @id @db.Uuid
+  reportId String
+  hash String
+  result Json
+  receivedAt DateTime @default(now()) @db.Timestamptz
+  @@map("trace_dispute_inbox")
+}
+model TraceDisputeResponse {
+  id String @id @db.Uuid
+  reportId String
+  report AppointmentDispute @relation(fields:[reportId],references:[id])
+  decisionId String @db.Uuid
+  action String
+  reason String?
+  acceptedAt DateTime @db.Timestamptz
+  status String @default("pending")
+  @@unique([reportId,decisionId])
+  @@map("trace_dispute_responses")
+}
+model TraceDisputeTimeout {
+  id String @id @db.Uuid
+  reportId String
+  report AppointmentDispute @relation(fields:[reportId],references:[id])
+  decisionId String @db.Uuid
+  confirmedAt DateTime @default(now()) @db.Timestamptz
+  @@unique([reportId,decisionId])
+  @@map("trace_dispute_timeouts")
+}
+model TraceDisputeReview {
+  id String @id @db.Uuid
+  reportId String
+  report AppointmentDispute @relation(fields:[reportId],references:[id])
+  decisionId String? @db.Uuid
+  reason String
+  createdAt DateTime @default(now()) @db.Timestamptz
+  resolvedAt DateTime? @db.Timestamptz
+  @@unique([reportId,decisionId,reason])
+  @@map("trace_dispute_reviews")
+}
+model TraceDisputeEvidence {
+  id String @id @db.Uuid
+  appointmentId String
+  appointment Appointment @relation(fields:[appointmentId],references:[id])
+  reporterAuthId String
+  reportId String?
+  report AppointmentDispute? @relation(fields:[reportId],references:[id])
+  title String
+  mimeType String
+  contentHash String
+  byteLength Int
+  storageKey String
+  status String @default("quarantined")
+  createdAt DateTime @default(now()) @db.Timestamptz
+  @@map("trace_dispute_evidence")
 }

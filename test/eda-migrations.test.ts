@@ -16,7 +16,7 @@ test("EDA fresh migration histories create each owned model once before Profile 
     const created: string[] = [];
     for (const directory of directories) {
       const sql = readFileSync(new URL(`${directory}/migration.sql`, history), "utf8");
-      created.push(...Array.from(sql.matchAll(/CREATE TABLE\s+(?:"([^"]+)"|([a-z_][a-z_0-9]*))/gi),
+      created.push(...Array.from(sql.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(?:"([^"]+)"|([a-z_][a-z_0-9]*))/gi),
         match => match[1] ?? match[2]!.toLowerCase()));
     }
     const { datamodel } = await getDMMF({ datamodel: readFileSync(new URL("schema.prisma", base), "utf8") });

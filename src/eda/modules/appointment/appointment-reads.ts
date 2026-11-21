@@ -15,7 +15,7 @@ import type { PaymentStore } from '../payment/payment-store.js';
 import type { VideoRuntime } from '../video/runtime.js';
 import { prepareReadPage, readCollectionPage, readPageInput, collectReadPages } from '../../infrastructure/read-pages.js';
 
-const states = ['pending','approved','confirmed','pending_patient_confirmation','pending_payment_verification','rejected','rescheduled','cancelled','completed','no_show'] as const;
+const states = ['pending','approved','confirmed','pending_patient_confirmation','pending_payment_verification','rejected','rescheduled','cancelled','completed','no_show','in_review','invalid'] as const;
 const filters = z.object({status:z.enum([...states,'all','expired']).optional(),dateFrom:dateOnly.optional(),dateTo:dateOnly.optional(),...readPageInput}).strict()
   .refine(x=>!x.dateFrom||!x.dateTo||x.dateFrom<=x.dateTo);
 const active = ['pending','approved','confirmed','pending_patient_confirmation'];
@@ -110,7 +110,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
         a."proposedEndAt" AT TIME ZONE 'UTC',a."scheduledAt" AT TIME ZONE 'UTC')<=$6::timestamptz`:'';
     const pageResult=await readCollectionPage<ReadRow>(pool,page,{sql:`SELECT a.*,p."authId" AS "patientAuthId",d."authId" AS "doctorAuthId",d.specialty,
       s."slotDate"::text AS "slotDate",s."startTime"::text AS "startTime",s."endTime"::text AS "endTime",s."isPublished",s."consultationType" AS "slotType",
-      ad.id AS "disputeId",
+      ad.id AS "disputeId", ad."resolutionMethod", ad."rescheduleGranted" AND ad."rescheduleConsumedAt" IS NULL AS "disputeRescheduleAvailable",
       ad."traceCaseId",
       ad."traceTicketId",
       ad."traceTicketNumber",
@@ -182,18 +182,20 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
         doctorConfirmedAt:row.doctorConfirmedAt,patientConfirmedAt:row.patientConfirmedAt,completionDeadlineAt:row.completionDeadlineAt,autoCompletedAt:row.autoCompletedAt,paperworkLockedAt:row.paperworkLockedAt,
         rating:actor.role==='patient'&&row.status==='completed'&&row.ownRating!=null&&row.ownRating>=1&&row.ownRating<=5?{rating:row.ownRating,submittedAt:row.ratingSubmittedAt}:null,
         canRate:actor.role==='patient'&&row.status==='completed'&&row.ownRating==null&&(row.consultationType==='in_person'||row.ratingPaymentEligible===true),
+        disputesEnabled:actor.role==='patient'&&process.env.VITAL_TRACE_DISPUTES_ENABLED==='true',
         reviewHold:row.reviewHold??false,
-        traceCaseId:row.traceCaseId??null,
-        traceTicketId:row.traceTicketId??null,
-        traceTicketNumber:row.traceTicketNumber??null,
-        traceDisputeSeq:row.traceDisputeSeq??null,
-        disputeReason:row.disputeReason??null,
-        disputedAt:row.disputedAt??null,
-        proposedResolutionTag:row.proposedResolutionTag??null,
-        proposedExplanation:row.proposedExplanation??null,
-        acknowledgmentDeadlineAt:row.acknowledgmentDeadlineAt??null,
-        disputeStage:row.disputeStage??1,
-        disputeRejectionReason:row.disputeRejectionReason??null,
+        resolutionMethod:actor.role==='patient'?(row.resolutionMethod??null):null,disputeRescheduleAvailable:actor.role==='patient'&&row.disputeRescheduleAvailable===true,
+        traceCaseId:actor.role==='patient'?(row.traceCaseId??null):null,
+        traceTicketId:actor.role==='patient'?(row.traceTicketId??null):null,
+        traceTicketNumber:actor.role==='patient'?(row.traceTicketNumber??null):null,
+        traceDisputeSeq:actor.role==='patient'?(row.traceDisputeSeq??null):null,
+        disputeReason:actor.role==='patient'?(row.disputeReason??null):null,
+        disputedAt:actor.role==='patient'?(row.disputedAt??null):null,
+        proposedResolutionTag:actor.role==='patient'?(row.proposedResolutionTag??null):null,
+        proposedExplanation:actor.role==='patient'?(row.proposedExplanation??null):null,
+        acknowledgmentDeadlineAt:actor.role==='patient'?(row.acknowledgmentDeadlineAt??null):null,
+        disputeStage:actor.role==='patient'?(row.disputeStage??1):1,
+        disputeRejectionReason:actor.role==='patient'?(row.disputeRejectionReason??null):null,
         preConsultation:{summary,privacyWithheld:restricted&&(reviewText(row.chiefComplaint,knownIdentities).withheld||!isDeepStrictEqual(reviewIntake(row.opqrst,knownIdentities),row.opqrst)),chiefComplaint:noIntake?null:restricted?reviewText(row.chiefComplaint,knownIdentities).text:row.chiefComplaint??null,opqrst:noIntake?null:restricted?reviewIntake(row.opqrst,knownIdentities):row.opqrst??null},statusLogs:restricted?logs.map(l=>({...l,note:null})):logs,
         sourceAppointment:restricted?null:related.find(r=>r.id===row.sourceAppointmentId)?relation(related.find(r=>r.id===row.sourceAppointmentId)!):null,
         rescheduleProposals:restricted?[]:related.filter(r=>r.sourceAppointmentId===row.id).map(relation),followUpAppointments:restricted?[]:related.filter(r=>r.followUpOfAppointmentId===row.id).map(r=>({id:r.id,status:r.status})),

@@ -5,6 +5,7 @@ const privateHosts = new Set([
   'audit-service:8081',
   'notification-api:8000',
   'trace-backend-api:8004',
+  'bgh-gateway:8080',
 ]);
 
 export function trustedInternalOrigin(url: URL, environment: NodeJS.ProcessEnv = process.env): boolean {

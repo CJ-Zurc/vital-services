@@ -1,3 +1,5 @@
+import { disputeRescheduleGrant } from './dispute-reschedule.js';
+import { submitNativeDispute, respondNativeDispute } from './native-dispute.js';
 import { saveBookingAcknowledgment } from './booking-acknowledgment.js';
 import { previewSlotBatch, createSlotBatch } from './appointment-slot-batch.js';
 import { saveOperationalBrief } from './appointment-summary.js';
@@ -23,7 +25,7 @@ import { videoSelection,selectionHash,type VideoSelection } from '../video/contr
 const selectAppointment = `SELECT a.*, p."authId" AS "patientAuthId", d."authId" AS "doctorAuthId",
   CASE WHEN s.id IS NOT NULL THEN (s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila' END AS "slotEndsAt",
   (SELECT "changedByRole" FROM appointment_logs WHERE "appointmentId"=a.id ORDER BY "changedAt",id LIMIT 1) AS "proposalRole",
-  ad.id AS "disputeId",
+  ad.id AS "disputeId", ad."resolutionMethod", ad."rescheduleGranted" AND ad."rescheduleConsumedAt" IS NULL AS "disputeRescheduleAvailable",
   ad."traceCaseId",
   ad."traceTicketId",
   ad."traceTicketNumber",
@@ -145,7 +147,7 @@ export async function appointmentCommand<T>(pool: Pool, actor: Actor, action: st
   } catch(error) {await tx.query("ROLLBACK");throw error;} finally{tx.release();}
 }
 export async function appointmentTransition(tx: PoolClient,row: AppointmentRow,status:string,actor: Actor|null,operationId:string,correlationId:string,note:string|null=null,extra:Record<string,unknown>={},rescheduleDetails:Record<string,unknown>|null=null) {
-  if (status === 'completed' || status === 'no_show') await patientRetentionLock(tx, row.patientId);
+  if (status === 'completed' || status === 'no_show' || status === 'invalid') await patientRetentionLock(tx, row.patientId);
   const logId=randomUUID(); const changedAt=new Date(); const prior=row.status;
   const result=await tx.query('UPDATE appointments SET status=$2::"AppointmentStatus",version=version+1,"updatedAt"=$3 WHERE id=$1 AND version=$4 RETURNING version',[row.id,status,changedAt,row.version]);
   if(result.rowCount!==1) fail(409,"APPOINTMENT_VERSION_CHANGED");
@@ -154,7 +156,7 @@ export async function appointmentTransition(tx: PoolClient,row: AppointmentRow,s
   const access=await accessRow(tx,row.id);
   const doctorChanged=access&&access.doctorId!==row.doctorId;
   if(row.consultationType!=='in_person'&&(doctorChanged&&['approved','confirmed'].includes(status)||status==='approved'&&prior!=='approved'||status==='confirmed'&&!['approved','pending_payment_verification','confirmed'].includes(prior)))await issueAppointmentCode(tx,row);
-  if(['cancelled','rejected','rescheduled','completed','no_show'].includes(status))await revokeAppointmentAccess(tx,row.id);
+  if(['cancelled','rejected','rescheduled','completed','no_show','invalid'].includes(status))await revokeAppointmentAccess(tx,row.id);
   await tx.query(`INSERT INTO appointment_logs (id,"appointmentId","fromStatus","toStatus","changedByRole",note,"changedAt","changedByAuthId","rescheduleDetails") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,[logId,row.id,prior,status,actor?.role??"service",note,changedAt,actor?.authId??null,rescheduleDetails?JSON.stringify(rescheduleDetails):null]);
   const action=status==="pending"||status==="pending_patient_confirmation"?"requested":status;
   await appendSqlOutbox(tx,{producer:"appointment",eventType:("vital.appointment."+action) as Parameters<typeof appendSqlOutbox>[1]["eventType"],aggregateId:row.id,
@@ -227,7 +229,8 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
     previewDateBlocks: (actor: Actor, selection: unknown) => previewDateBlocks(pool, actor, selection, clock()),
     batchDateBlocks: (actor: Actor, meta: AppointmentCommand, input: unknown) => saveDateBlocks(pool, actor, meta, input, clock()),
     access:createAppointmentAccess(pool,readAppointment,process.env,clock,owners.financial),
-    async read(actor:Actor,id:string) {requireScope(actor,"appointments.read",id);await membership(pool,actor);const row=await readAppointment(pool,id);appointmentOwn(actor,row);if(actor.role==='doctor'){const access=await appointmentAccessState(pool,row);if(!access.identityUnlocked)return{id:row.id,version:row.version,status:row.status,consultationType:row.consultationType,patientId:null,sourceAppointmentId:row.sourceAppointmentId,doctorConfirmedAt:row.doctorConfirmedAt,doctorId:row.doctorId,doctorAuthId:row.doctorAuthId,scheduledAt:row.scheduledAt,proposedEndAt:row.proposedEndAt,access};return{...row,access};}return row;},
+    async read(actor:Actor,id:string) {requireScope(actor,"appointments.read",id);await membership(pool,actor);const row=await readAppointment(pool,id);appointmentOwn(actor,row);if(actor.role==='doctor'){const access=await appointmentAccessState(pool,row);if(!access.identityUnlocked)return{id:row.id,version:row.version,status:row.status,consultationType:row.consultationType,patientId:null,sourceAppointmentId:row.sourceAppointmentId,doctorConfirmedAt:row.doctorConfirmedAt,doctorId:row.doctorId,doctorAuthId:row.doctorAuthId,scheduledAt:row.scheduledAt,proposedEndAt:row.proposedEndAt,access};return{...row,access,traceCaseId:null,traceTicketId:null,traceTicketNumber:null,traceDisputeSeq:null,disputeId:null,
+      disputeReason:null,disputeSubject:null,disputeCategory:null,disputeRejectionReason:null,proposedResolutionTag:null,proposedExplanation:null,acknowledgmentDeadlineAt:null,disputedAt:null,resolutionMethod:null,disputeRescheduleAvailable:false};}return row;},
     async createSchedule(actor:Actor,meta:AppointmentCommand,body:unknown) {const input=scheduleInput.parse(body);
       return mutate(actor,"schedule.write",actor.authId,meta,input,async tx=>{const member=await membership(tx,actor,"doctor");await calendarLock(tx,member.userId);
         if(!member.specialty?.trim()) fail(422,"DOCTOR_SPECIALTY_REQUIRED");
@@ -382,12 +385,14 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       if(row.status!=="pending"||appointmentExpired(row,clock()))fail(409,"APPOINTMENT_REJECT_INVALID");await tx.query('UPDATE appointments SET "rejectionReason"=$2 WHERE id=$1',[id,input.reason]);await appointmentTransition(tx,row,"rejected",actor,meta.operationId,actor.correlationId,input.reason);if(row.sourceAppointmentId)await appointmentNotification(tx,row,actor,meta.operationId,"appointment.reschedule_declined",row.patientAuthId,row.sourceAppointmentId);else await appointmentNotification(tx,row,actor,meta.operationId,"appointment_rejected",row.patientAuthId);return{id,version:row.version,status:row.status,operationStatus:"completed"};});},
     async propose(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=(actor.role==="patient"?patientProposalInput:proposalInput).parse(body);return mutate(actor,"reschedule",id,meta,input,async tx=>{
       const row=await lockAppointment(tx,id);appointmentOwn(actor,row);expected(row,input.expectedVersion);await noTransition(tx,row);await noProposal(tx,row);
-      if(!["approved","confirmed"].includes(row.status)||appointmentExpired(row,clock()))fail(409,"RESCHEDULE_INVALID");if(!rescheduleAllowed(row,actor.role as "patient"|"doctor"))fail(409,"RESCHEDULE_LIMIT_REACHED");
+      const grant=actor.role==='patient'?await disputeRescheduleGrant(tx,row):null;
+      if(!grant&&(!["approved","confirmed"].includes(row.status)||appointmentExpired(row,clock())))fail(409,"RESCHEDULE_INVALID");if(!grant&&!rescheduleAllowed(row,actor.role as "patient"|"doctor"))fail(409,"RESCHEDULE_LIMIT_REACHED");
       const scheduleSlotId="scheduleSlotId" in input?input.scheduleSlotId:null;
       const range="scheduleSlotId" in input?await publishedSlot(tx,input.scheduleSlotId,row.doctorId,row.consultationType):slotInterval(input.slotDate,input.startTime,input.endTime);if(range.startsAt.getTime()<=clock())fail(400,"SLOT_IN_PAST");await assertCalendarAvailable(tx,row.doctorId,range.startsAt,range.endsAt,[row.id]);
       const next=randomUUID();await tx.query(`INSERT INTO appointments (id,"patientId","doctorId","sourceAppointmentId","consultationType",status,"scheduledAt","proposedEndAt","billingLineageId","associationVersion","patientRescheduleCount","doctorRescheduleCount","scheduleSlotId","createdAt","updatedAt")
         VALUES($1,$2,$3,$4,$5::"ConsultationType",$6::"AppointmentStatus",$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())`,[next,row.patientId,row.doctorId,row.id,row.consultationType,actor.role==="doctor"?"pending_patient_confirmation":"pending",range.startsAt,range.endsAt,row.billingLineageId,row.associationVersion,row.patientRescheduleCount,row.doctorRescheduleCount,scheduleSlotId]);
       await tx.query('INSERT INTO pre_consultations (id,"appointmentId","chiefComplaint",opqrst,"isSubmitted","submittedAt","aiSubmissionId") SELECT $1,$2,"chiefComplaint",opqrst,"isSubmitted","submittedAt","aiSubmissionId" FROM pre_consultations WHERE "appointmentId"=$3',[randomUUID(),next,row.id]);
+      if(grant)await tx.query('UPDATE appointments SET "disputeAuthorizationId"=$2,"disputeDecisionId"=$3 WHERE id=$1',[next,grant.id,grant.decisionId]);
       const proposal=await readAppointment(tx,next);await appointmentTransition(tx,proposal,proposal.status,actor,meta.operationId,actor.correlationId,input.reason);await appointmentNotification(tx,proposal,actor,meta.operationId,"appointment.reschedule_proposed",actor.role==="doctor"?proposal.patientAuthId:proposal.doctorAuthId);return{id:next,version:proposal.version,status:proposal.status,operationStatus:"completed"};});},
     async decline(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=reasonInput.parse(body);return mutate(actor,"decline-reschedule",id,meta,input,async tx=>{
       const row=await lockAppointment(tx,id);appointmentOwn(actor,row);expected(row,input.expectedVersion);await noTransition(tx,row);
@@ -542,7 +547,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       if(row.status==='confirmed'&&(actor.role==='doctor'?row.doctorConfirmedAt:row.patientConfirmedAt))return{id,version:row.version,status:row.status,operationStatus:"completed"};
       const records=requireOwner(owners.records,"records");const financial=requireOwner(owners.financial,"financial");const projection=(await tx.query('SELECT * FROM appointment_payment_projections WHERE "appointmentId"=$1',[id])).rows[0];
       if(row.status!=="confirmed"||row.scheduledAt.getTime()>clock()||!projection||projection.status!=="paid"||projection.reviewRequired||projection.billingLineageId!==row.billingLineageId||projection.associationVersion!==row.associationVersion)fail(409,"APPOINTMENT_COMPLETION_INVALID");
-      if(row.reviewHold||row.status==='in_review')fail(409,"APPOINTMENT_UNDER_DISPUTE_HOLD");
+      if(row.reviewHold)fail(409,"APPOINTMENT_UNDER_DISPUTE_HOLD");
       await financial.verifyPaid(row,projection);
       if(effectiveCompletionDeadline(row).getTime()<=clock())fail(409,"APPOINTMENT_COMPLETION_DEADLINE");
       const deadline=row.completionDeadlineAt??new Date(clock()+172800000);
@@ -572,228 +577,17 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
         AND a."sourceAppointmentId" IS NULL FOR UPDATE OF a`,[row.doctorId,row.id,row.scheduledAt])).rows;
       for(const competing of competitors)await appointmentTransition(tx,competing,"rejected",null,evidence.eventId,evidence.correlationId,"slot_taken");
     },
-    async startAppeal(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {
-      const input = appealInput.parse(body ?? {});
-      return mutate(actor, "start_appeal", id, meta, input, async tx => {
-        const row = await lockAppointment(tx, id);
-        appointmentOwn(actor, row);
-        if (actor.role !== "patient") fail(403, "PATIENT_ROLE_REQUIRED");
-        if (input.expectedVersion !== undefined) expected(row, input.expectedVersion);
-        if (row.status !== "confirmed" || !row.doctorConfirmedAt) fail(409, "APPOINTMENT_APPEAL_INELIGIBLE");
-        if (row.reviewHold || row.status === "in_review") fail(409, "APPEAL_ALREADY_ACTIVE");
-        if (effectiveCompletionDeadline(row).getTime() <= clock()) fail(409, "APPOINTMENT_COMPLETION_DEADLINE_EXPIRED");
-
-        const disputedAt = new Date(clock());
-        const reason = input.reason || input.subject;
-
-        await tx.query(
-          `UPDATE appointments SET
-            "reviewHold" = true,
-            status = 'in_review',
-            version = version + 1,
-            "updatedAt" = NOW()
-          WHERE id = $1`,
-          [id]
-        );
-        row.version++;
-        row.status = "in_review";
-        row.reviewHold = true;
-
-        const disputeId = randomUUID();
-        await tx.query(
-          `INSERT INTO appointment_disputes (
-            id, "appointmentId", "traceCaseId", stage, subject, category, description, "createdAt", "updatedAt"
-          ) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, NOW())
-          ON CONFLICT ("appointmentId") DO UPDATE SET
-            "traceCaseId" = EXCLUDED."traceCaseId",
-            stage = 1,
-            subject = EXCLUDED.subject,
-            category = EXCLUDED.category,
-            description = EXCLUDED.description,
-            "updatedAt" = NOW()`,
-          [disputeId, id, input.traceCaseId || null, input.subject, input.category_id, input.description, disputedAt]
-        );
-        row.disputeStage = 1;
-        row.disputedAt = disputedAt;
-        row.disputeReason = reason;
-        if (input.traceCaseId) row.traceCaseId = input.traceCaseId;
-
-        const logId = randomUUID();
-        await tx.query(
-          `INSERT INTO appointment_logs (id, "appointmentId", "fromStatus", "toStatus", "changedByRole", "changedByAuthId", note, "changedAt")
-          VALUES ($1, $2, 'confirmed', 'in_review', 'patient', $3, $4, $5)`,
-          [logId, id, actor.authId, `appeal_started: ${input.subject}`, disputedAt]
-        );
-
-        await appendSqlOutbox(tx, {
-          producer: "appointment",
-          eventType: "vital.appointment.appeal_started",
-          aggregateId: id,
-          aggregateVersion: row.version,
-          correlationId: actor.correlationId,
-          causationId: meta.operationId,
-          data: {
-            ...appointmentFactData(row, actor.authId, meta.operationId),
-            disputeReason: reason,
-            disputedAt: disputedAt.toISOString(),
-            subject: input.subject,
-            category_id: input.category_id,
-            description: input.description,
-            traceCaseId: input.traceCaseId || null,
-          }
-        });
-
-        await appendSqlOutbox(tx, {
-          producer: "appointment",
-          eventType: "vital.audit.requested",
-          aggregateId: id,
-          aggregateVersion: row.version,
-          correlationId: actor.correlationId,
-          causationId: meta.operationId,
-          data: {
-            auditType: "vital.appointment.appeal_started",
-            actorAuthId: actor.authId,
-            resourceId: id,
-            resourceType: "appointment"
-          }
-        });
-
-        return {
-          id,
-          version: row.version,
-          status: "in_review",
-          reviewHold: true,
-          disputeStage: 1,
-          disputedAt,
-          disputeReason: reason,
-          traceCaseId: row.traceCaseId ?? null,
-          operationStatus: "completed"
-        };
-      });
+    async startAppeal(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){
+      return submitNativeDispute(pool,actor,id,meta,body,clock);
     },
-    async linkDisputeCase(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {
-      const input = linkDisputeInput.parse(body);
-      return mutate(actor, "link_dispute", id, meta, input, async tx => {
-        const row = await lockAppointment(tx, id);
-        appointmentOwn(actor, row);
-        await tx.query(
-          `UPDATE appointment_disputes SET
-            "traceCaseId" = $2,
-            "traceTicketId" = COALESCE($3, "traceTicketId"),
-            "traceTicketNumber" = COALESCE($4, "traceTicketNumber"),
-            "traceDisputeSeq" = COALESCE($5, "traceDisputeSeq"),
-            "updatedAt" = NOW()
-          WHERE "appointmentId" = $1`,
-          [id, input.traceCaseId, input.traceTicketId || null, input.traceTicketNumber || null, input.traceDisputeSeq || null]
-        );
-        await tx.query(
-          `UPDATE appointments SET
-            version = version + 1,
-            "updatedAt" = NOW()
-          WHERE id = $1`,
-          [id]
-        );
-        row.version++;
-        row.traceCaseId = input.traceCaseId;
-        if (input.traceTicketId) row.traceTicketId = input.traceTicketId;
-        if (input.traceTicketNumber) row.traceTicketNumber = input.traceTicketNumber;
-        if (input.traceDisputeSeq) row.traceDisputeSeq = input.traceDisputeSeq;
-        return {
-          id,
-          traceCaseId: row.traceCaseId,
-          traceTicketId: row.traceTicketId,
-          traceTicketNumber: row.traceTicketNumber,
-          traceDisputeSeq: row.traceDisputeSeq,
-          operationStatus: "completed"
-        };
-      });
+    async linkDisputeCase(_actor:Actor,_id:string,_meta:AppointmentCommand,_body:unknown){
+      fail(410,'APPOINTMENT_DISPUTE_LINK_RETIRED');
     },
-    async rejectCompletion(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {
-      const input = rejectCompletionInput.parse(body);
-      return mutate(actor, "reject_completion", id, meta, input, async tx => {
-        const row = await lockAppointment(tx, id);
-        appointmentOwn(actor, row);
-        if (actor.role !== "patient") fail(403, "PATIENT_ROLE_REQUIRED");
-        if (row.status !== "in_review" && !row.reviewHold) fail(409, "DISPUTE_NOT_IN_REVIEW");
-        const changedAt = new Date(clock());
-        await tx.query(
-          `UPDATE appointment_disputes SET
-            stage = 3,
-            "rejectionReason" = $2,
-            "proposedOutcomeTag" = NULL,
-            "acknowledgmentDeadlineAt" = NULL,
-            "updatedAt" = NOW()
-          WHERE "appointmentId" = $1`,
-          [id, input.reason]
-        );
-        await tx.query(
-          `UPDATE appointments SET
-            version = version + 1,
-            "updatedAt" = NOW()
-          WHERE id = $1`,
-          [id]
-        );
-        row.version++;
-        row.disputeStage = 3;
-        row.proposedResolutionTag = null;
-        row.acknowledgmentDeadlineAt = null;
-
-        await tx.query(
-          `INSERT INTO appointment_logs (id, "appointmentId", "fromStatus", "toStatus", "changedByRole", "changedByAuthId", note, "changedAt")
-          VALUES ($1, $2, 'in_review', 'in_review', 'patient', $3, $4, $5)`,
-          [randomUUID(), id, actor.authId, `issue_not_resolved: ${input.reason}`, changedAt]
-        );
-
-        return { id, disputeStage: 3, reviewHold: true, operationStatus: "completed" };
-      });
+    async rejectCompletion(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){
+      return respondNativeDispute(pool,actor,id,meta,body,'reject',clock);
     },
-    async acknowledgeDispute(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {
-      const input = acknowledgeDisputeInput.parse(body ?? {});
-      return mutate(actor, "acknowledge_dispute", id, meta, input, async tx => {
-        const row = await lockAppointment(tx, id);
-        appointmentOwn(actor, row);
-        if (actor.role !== "patient") fail(403, "PATIENT_ROLE_REQUIRED");
-        const changedAt = new Date(clock());
-        let terminalStatus = row.status;
-        let reviewHold = false;
-        if (row.proposedResolutionTag === "invalidate") {
-          terminalStatus = "invalid";
-        } else if (row.proposedResolutionTag === "complete") {
-          terminalStatus = "completed";
-        }
-
-        await tx.query(
-          `UPDATE appointment_disputes SET
-            stage = 5,
-            "resolutionMethod" = 'patient_acknowledged',
-            "resolvedAt" = NOW(),
-            "updatedAt" = NOW()
-          WHERE "appointmentId" = $1`,
-          [id]
-        );
-
-        await tx.query(
-          `UPDATE appointments SET
-            "reviewHold" = $2,
-            status = $3::"AppointmentStatus",
-            version = version + 1,
-            "updatedAt" = NOW()
-          WHERE id = $1`,
-          [id, reviewHold, terminalStatus]
-        );
-        row.version++;
-        row.disputeStage = 5;
-        row.reviewHold = reviewHold;
-        row.status = terminalStatus;
-
-        await tx.query(
-          `INSERT INTO appointment_logs (id, "appointmentId", "fromStatus", "toStatus", "changedByRole", "changedByAuthId", note, "changedAt")
-          VALUES ($1, $2, 'in_review', $3, 'patient', $4, 'dispute_acknowledged', $5)`,
-          [randomUUID(), id, terminalStatus, actor.authId, changedAt]
-        );
-
-        return { id, disputeStage: 5, status: terminalStatus, reviewHold, operationStatus: "completed" };
-      });
+    async acknowledgeDispute(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){
+      return respondNativeDispute(pool,actor,id,meta,body,'acknowledge',clock);
     },
   };
 }

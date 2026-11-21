@@ -30,6 +30,8 @@ export const acknowledgementInput = z.object({ expectedVersion: versionSchema })
 export const dateBlockInput = z.object({ startDate: dateOnly, endDate: dateOnly, weekday: z.number().int().min(0).max(6).nullable().default(null),
   confirmedAppointmentCount: z.number().int().nonnegative().optional() }).strict().refine(x => x.endDate >= x.startDate);
 export interface AppointmentRow {
+  resolutionMethod?:string|null; disputeRescheduleAvailable?:boolean;
+  disputeAuthorizationId?:string|null; disputeDecisionId?:string|null;
   id: string; doctorId: string; patientId: string; patientAuthId: string; doctorAuthId: string;
   status: string; version: number; billingLineageId: string; associationVersion: number;
   scheduledAt: Date; proposedEndAt: Date | null; slotEndsAt: Date | null; scheduleSlotId: string | null;

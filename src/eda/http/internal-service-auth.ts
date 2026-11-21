@@ -21,7 +21,7 @@ export function createInternalServiceAuth(expectedService = "trace"): RequestHan
         res.set("X-Correlation-ID", correlationId);
       }
 
-      const expectedKey = process.env.VITAL_INTERNAL_SERVICE_KEY || "BGH_LOCAL_INTERNAL_API_KEY_2026";
+      const expectedKey = process.env.VITAL_INTERNAL_SERVICE_KEY;
 
       if (service !== expectedService || !safeCompare(key, expectedKey)) {
         throw new DomainError(403, "FORBIDDEN_UNTRUSTED_INTERNAL_SERVICE", "Untrusted internal service caller.");
