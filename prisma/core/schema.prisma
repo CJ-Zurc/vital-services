@@ -60,6 +60,8 @@ enum AppointmentStatus {
   rescheduled
   cancelled
   completed
+  in_review
+  invalid
 }
 
 enum MessageSenderRole {
@@ -370,6 +372,9 @@ model Appointment {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
+  reviewHold         Boolean           @default(false)
+  dispute            AppointmentDispute?
+
   statusLogs          AppointmentLog[]
   preConsultation     PreConsultation?
   consultation        Consultation?
@@ -383,6 +388,7 @@ model Appointment {
 
   @@index([followUpOfAppointmentId])
   @@index([completionDeadlineAt])
+  @@index([reviewHold])
   @@map("appointments")
   version Int @default(0)
   billingLineageId String @default(uuid())
@@ -392,6 +398,38 @@ model Appointment {
   paymentProjection AppointmentPaymentProjection?
   bookingAcknowledgment BookingAcknowledgment? @relation("BookingDocument")
   supersededBookingAcknowledgments BookingAcknowledgment[] @relation("SupersededBooking")
+}
+
+model AppointmentDispute {
+  id                        String      @id @default(uuid())
+  appointmentId             String      @unique
+  appointment               Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  traceCaseId               String?     @db.Uuid
+  traceTicketId             String?     @db.Uuid
+  traceTicketNumber         String?     @db.VarChar(50)
+  traceDisputeSeq           Int?
+
+  stage                     Int         @default(1)
+  subject                   String      @db.VarChar(255)
+  category                  String      @db.VarChar(100)
+  description               String      @db.Text
+  rejectionReason           String?     @db.Text
+
+  proposedOutcomeTag        String?     @db.VarChar(32)
+  proposedExplanation       String?     @db.Text
+  acknowledgmentDeadlineAt  DateTime?   @db.Timestamptz
+
+  resolutionMethod          String?     @db.VarChar(50)
+  resolvedAt                DateTime?   @db.Timestamptz
+
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+
+  @@index([appointmentId])
+  @@index([traceCaseId])
+  @@index([stage])
+  @@map("appointment_disputes")
 }
 
 model AppointmentLog {
