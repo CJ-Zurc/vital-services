@@ -229,23 +229,57 @@ sequenceDiagram
 ### 4.3 `vital-services` & `vital-web`
 
 #### `vital-services`
+* **Approach B Dedicated Database Architecture**:
+  * Instead of polluting the core `appointments` table with dispute metadata, VITAL keeps `appointments` lightweight with only `reviewHold: Boolean` (default false) and `status: AppointmentStatus` (`in_review`, `invalid`).
+  * Dedicated `appointment_disputes` table (1-to-1 with `appointments(id)` on delete cascade):
+    * `id`: UUID (primary key)
+    * `appointmentId`: UUID (foreign key to `appointments(id)`, unique index)
+    * `traceCaseId`: UUID (TRACE dispute case identifier)
+    * `traceTicketId`: UUID (TRACE ticket identifier)
+    * `traceTicketNumber`: VARCHAR(50) (e.g., `TICK-1042` for friendly display)
+    * `traceDisputeSeq`: INT (sequential dispute ID for display)
+    * `stage`: INT (1 to 5, mapping to VITAL 5-Stage Tracker)
+    * `subject`: VARCHAR(255)
+    * `category`: VARCHAR(100)
+    * `description`: TEXT
+    * `rejectionReason`: TEXT
+    * `proposedOutcomeTag`: VARCHAR(32) (`reschedule`, `invalidate`, `complete`)
+    * `proposedExplanation`: TEXT
+    * `acknowledgmentDeadlineAt`: TIMESTAMPTZ (72h countdown)
+    * `resolutionMethod`: VARCHAR(50) (`patient_acknowledged`, `auto_resolved_72h`, `admin_triage_rejected`)
+    * `resolvedAt`: TIMESTAMPTZ
+    * `createdAt`, `updatedAt`: TIMESTAMPTZ
+  * Schema defined in `prisma/core/schema.prisma` (`model AppointmentDispute`) and migrated via `202611210001_in_system_dispute_resolution/migration.sql`.
 * **`POST /internal/v1/appointments/:id/appeal`**:
   * Validates patient ownership and appointment eligibility.
-  * Sets `reviewHold = true`, `status = 'in_review'`.
-  * Record Dispute Sent on successful patient-confirmed submission. Persist delivery intent atomically and dispatch through Gateway with retries using the same report ID.
+  * Sets `reviewHold = true`, `status = 'in_review'` on `appointments`.
+  * Inserts record into `appointment_disputes` (`stage = 1`).
+  * Persist delivery intent atomically and dispatch through Gateway with retries using the same report ID.
 * **`POST /internal/v1/appointments/appeals/reject-completion`**:
   * Invoked by patient when selecting "Issue not resolved".
   * Calls Gateway `POST /trace/api/disputes/{case_id}/reject-completion`.
-  * Retains `reviewHold = true` and `status = 'in_review'`.
-* **`POST /internal/v1/appointments/appeals/receipt-rejected`**:
-  * Ingests admin rejection callback from TRACE.
-  * Clear the hold and resume the original completion deadline through existing payment/clinical-record checks. If elapsed, run the checks immediately without extending the deadline.
+  * Updates `appointment_disputes` (`stage = 3`, `proposedOutcomeTag = NULL`, `acknowledgmentDeadlineAt = NULL`).
+  * Retains `reviewHold = true` and `status = 'in_review'` on `appointments`.
+* **`POST /internal/v1/appointments/appeals/decision`**:
+  * Ingests Admin triage approval or rejection from TRACE.
+  * If approved: updates `appointment_disputes` with `traceTicketId`, `traceTicketNumber`, `traceCaseId`, `stage = 3`.
+  * If rejected: updates `appointment_disputes` with `stage = 2`, `rejectionReason`. Clears `reviewHold = false` on `appointments` and resumes completion checks.
+* **`POST /internal/v1/appointments/appeals/completion`**:
+  * Ingests Admin resolution proposal.
+  * Updates `appointment_disputes` (`stage = 4`, `proposedOutcomeTag`, `proposedExplanation`, `acknowledgmentDeadlineAt`).
+* **`POST /internal/v1/appointments/appeals/auto-resolved`**:
+  * Ingests 72h auto-resolution from TRACE scheduler.
+  * Updates `appointment_disputes` (`stage = 5`, `resolutionMethod = 'auto_resolved_72h'`, `resolvedAt = NOW()`).
+  * Applies terminal status on `appointments` (`completed` or `invalid`, `reviewHold = false`).
 
 #### `vital-web`
+* **Patient Privacy & Identity Rule (SEQ ID Display vs Admin UUID Masking)**:
+  * **Patients & Regular Users**: Only see the friendly Ticket or Dispute SEQ ID (e.g., `Ticket TICK-1042` or `Dispute #1042`). Raw database UUIDs are completely hidden from non-admin UI.
+  * **VITAL Admins Only**: Allowed to access the raw case UUID behind a password-style masked UI (`••••••••-••••-••••`) featuring an untoggle reveal button (`<Eye />` / `<EyeOff />`) and a one-click clipboard copy button (`<Copy />`).
 * **Appointment Detail View**:
-  * Render VITAL’s own five-stage Dispute Tracker using the agreed labels in Section 2.3. Show Dispute Sent after successful local recording, including while delivery is retried.
+  * Render VITAL’s own five-stage Dispute Tracker using the agreed labels in Section 2.3. Show Dispute Sent after successful local recording.
   * At Stage 4, display Admin’s approved tag/explanation and countdown to TRACE’s `acknowledgment_deadline_at`. At Stage 5, distinguish patient acknowledgment from automatic resolution.
-  * On intake rejection, show the reason/contact modal and Dispute Rejected. Phone and address remain pending hospital confirmation.
+  * On intake rejection, show the reason/contact modal and Dispute Rejected.
   * Render two primary actions:
     1. **"Acknowledge Resolution"** (Success button).
     2. **"Issue Not Resolved"** (Warning/Destructive button) $\rightarrow$ opens modal requesting reason, dispatches rejection to TRACE to reopen ticket.
