@@ -49,6 +49,10 @@ export function createAppointmentRouters(runtime?:AppointmentRuntime){
   appointments.post('/:id/accept-reschedule',handle((actor,id,meta,input)=>runtime!.saga.accept(actor,id,command(meta),input)));
   appointments.post('/:id/cancel',handle((actor,id,meta,input)=>runtime!.module.cancel(actor,id,command(meta),input)));
   appointments.post('/:id/complete',handle((actor,id,meta,input)=>runtime!.module.complete(actor,id,command(meta),input)));
+  appointments.post('/:id/appeal',handle((actor,id,meta,input)=>runtime!.module.startAppeal(actor,id,command(meta),input)));
+  appointments.post('/:id/link-dispute',handle((actor,id,meta,input)=>runtime!.module.linkDisputeCase(actor,id,command(meta),input)));
+  appointments.post('/:id/reject-completion',handle((actor,id,meta,input)=>runtime!.module.rejectCompletion(actor,id,command(meta),input)));
+  appointments.post('/:id/acknowledge-dispute',handle((actor,id,meta,input)=>runtime!.module.acknowledgeDispute(actor,id,command(meta),input)));
   schedules.get('/',handle((actor,_id,_meta,input)=>runtime!.reads.schedules(actor,input)));
   schedules.get('/:id/bookings',handle((actor,id,_meta,input)=>runtime!.reads.bookings(actor,id,input)));
   schedules.post('/preview',handle((actor,_id,_meta,input)=>runtime!.module.previewSlotBatch(actor,input)));
