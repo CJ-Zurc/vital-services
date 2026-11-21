@@ -23,7 +23,7 @@ export function appointmentExpired(row: { scheduledAt: Date; proposedEndAt?: Dat
   return (row.slotEndsAt ?? row.proposedEndAt ?? row.scheduledAt).getTime() <= now;
 }
 export function effectiveCompletionDeadline(row:{scheduledAt:Date;proposedEndAt:Date|null;completionDeadlineAt:Date|null}) {
-  return row.completionDeadlineAt??new Date((row.proposedEndAt??row.scheduledAt).getTime()+86_400_000);
+  return row.completionDeadlineAt??new Date((row.proposedEndAt??row.scheduledAt).getTime()+172_800_000);
 }
 export const reasonInput = z.object({ expectedVersion: versionSchema, reason: z.string().trim().min(1).max(2000) }).strict();
 export const acknowledgementInput = z.object({ expectedVersion: versionSchema }).strict();
@@ -38,6 +38,21 @@ export interface AppointmentRow {
   doctorConfirmedAt: Date | null; patientConfirmedAt: Date | null; completionDeadlineAt: Date | null;
   paperworkLockedAt: Date | null; completedAt: Date | null;
   proposalRole: string | null;
+  traceTicketId?: string | null;
+  traceTicketNumber?: string | null;
+  traceDisputeSeq?: number | null;
+  traceCaseId?: string | null;
+  reviewHold?: boolean;
+  disputeReason?: string | null;
+  disputedAt?: Date | null;
+  activeDecisionId?: string | null;
+  proposedResolutionTag?: string | null;
+  proposedExplanation?: string | null;
+  acknowledgmentDeadlineAt?: Date | null;
+  disputeStage?: number;
+  disputeRejectionReason?: string | null;
+  accountingRef?: string | null;
+  accountingRefundIssuedAt?: Date | null;
 }
 export interface AppointmentCommand { operationId: string; requestHash: string }
 export interface ParticipantReceipt {
