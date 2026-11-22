@@ -30,7 +30,7 @@ export function verifyFileInspection(evidence: unknown, expected: { contentHash:
     (!historical && (antivirus ? 'clamav' : value.policy) !== policy)) throw new ArtifactError('SCAN_EVIDENCE_MISMATCH');
   if (antivirus) {
     const databaseAt = Date.parse(value.databaseDate);
-    if (databaseAt > inspectedAt + 300000 || inspectedAt - databaseAt > 86400000) throw new ArtifactError('SCAN_EVIDENCE_MISMATCH');
+    if (databaseAt > inspectedAt + 300000 || inspectedAt - databaseAt > 48 * 3600000) throw new ArtifactError('SCAN_EVIDENCE_MISMATCH');
   }
 }
 
