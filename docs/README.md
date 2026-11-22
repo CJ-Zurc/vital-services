@@ -38,3 +38,6 @@ See [dashboard and doctor discovery redesign](dashboard-redesign.md) for chart s
 - [Historical TRACE Google Forms implementation ledger](integrations/trace/trace-integration-changes.md).
 
 - [Native TRACE implementation changes, contracts and verification](integrations/trace/patient-feedback/VITAL_TRACE_Implementation_Changes_and_Verification.md).
+
+
+See [doctor profiles, criterion ratings and directory pagination](doctor-profiles-ratings-pagination.md) for updated forms, rating eligibility, the trusted search projection, worker configuration and paired rollout.

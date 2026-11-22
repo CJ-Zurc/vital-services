@@ -24,7 +24,7 @@ function fixture() {
     else if (sql.includes('FROM command_operations')) return { rows: state.command ? [state.command] : [] };
     else if (sql.includes('FROM saga_operations')) return { rows: [] };
     else if (sql.includes('FROM appointment_payment_projections')) return { rows: [{ paymentId: randomUUID(), status: paid ? 'paid' : 'pending', sourceVersion: 4, billingLineageId: row.billingLineageId, associationVersion: 1 }] };
-    else if (sql.startsWith('INSERT INTO feedback')) { if(state.feedback)return {rows:[]}; state.feedback = { id: args[0], appointmentId: args[1], patientId: args[2], doctorId: args[3], starRating: args[4], feedback: args[5], submittedAt: args[6] }; return { rows: [state.feedback] }; }
+    else if (sql.startsWith('INSERT INTO feedback')) { if(state.feedback)return {rows:[]}; state.feedback = { id: args[0], appointmentId: args[1], patientId: args[2], doctorId: args[3], starRating: args[4], ratingVersion:2,friendlinessAttitude:args[7],professionalism:args[8],explanation:args[9],careServices:args[10], feedback: args[5], submittedAt: args[6] }; return { rows: [state.feedback] }; }
     else if (sql.startsWith('UPDATE vital_doctors')) state.ratingWrites++;
     else if (sql.startsWith('INSERT INTO command_operations')) state.command = { action: 'appointment.feedback', resourceId: args[3], requestHash: args[4], status: 'completed', result: JSON.parse(String(args[5])) };
     else if (sql.startsWith('SELECT * FROM feedback')) return { rows: state.feedback ? [state.feedback] : [] };
@@ -35,7 +35,7 @@ function fixture() {
   } };
   const pool = { connect: async () => tx, query: tx.query.bind(tx) } as unknown as Pool;
   const actor = (scope = 'appointments.feedback', role: 'patient' | 'doctor' = 'patient', resource = id): Actor => ({ authId: role === 'patient' ? authId : doctorAuthId, role, resource, scopes: [scope], correlationId: randomUUID(), serviceId: 'vital-web', isSuperAdmin: false });
-  return { id, row, patientId, calls, pool, actor, meta: { operationId: randomUUID(), requestHash: 'a'.repeat(64) }, input: { expectedVersion: 3, rating: 5 },
+  return { id, row, patientId, calls, pool, actor, meta: { operationId: randomUUID(), requestHash: 'a'.repeat(64) }, input: { expectedVersion: 3, friendlinessAttitude:5,professionalism:5,explanation:5,careServices:5 },
     owner: createAppointmentExtras(pool, { financial: { verifyPaid: async () => { verified++; } } }), state: () => state, verified: () => verified,
     revoke: () => { revoked = true; }, fail: () => { failAudit = true; }, unpaid: () => { paid = false; }, manyIntakes: () => { intakeCount = 11; } };
 }
@@ -57,7 +57,7 @@ test('feedback replay conflicts rollback and revoked ownership fail closed', asy
   const f = fixture(), actor = f.actor();
   await f.owner.feedback(actor, f.id, f.meta, f.input); await f.owner.feedback(actor, f.id, f.meta, f.input);
   assert.equal(f.state().events.length, 1); assert.equal(f.state().ratingWrites, 1);
-  await assert.rejects(f.owner.feedback(actor, f.id, f.meta, { ...f.input, rating: 1 }), { code: 'COMMAND_REPLAY_CONFLICT' });
+  await assert.rejects(f.owner.feedback(actor, f.id, f.meta, { ...f.input, explanation:1 }), { code: 'COMMAND_REPLAY_CONFLICT' });
   f.revoke(); await assert.rejects(f.owner.feedback(actor, f.id, f.meta, f.input), { code: 'APPOINTMENT_MEMBERSHIP_REVOKED' });
   const failed = fixture(); failed.fail(); await assert.rejects(failed.owner.feedback(failed.actor(), failed.id, failed.meta, failed.input), /audit failed/);
   assert.equal(failed.state().feedback, null); assert.equal(failed.state().command, null); assert.equal(failed.state().ratingWrites, 0);
@@ -104,4 +104,21 @@ test('completed face-to-face visits can be rated once without a payment owner',a
     const g=fixture();g.row.consultationType='in_person';g.row.status=status;
     await assert.rejects(createAppointmentExtras(g.pool,{}).feedback(g.actor(),g.id,g.meta,g.input),{code:'APPOINTMENT_FEEDBACK_INELIGIBLE'});
   }
+});
+
+
+test('four criteria persist their exact unrounded mean and reject obsolete or partial submissions',async()=>{
+ const f=fixture();const result=await f.owner.feedback(f.actor(),f.id,f.meta,{expectedVersion:3,friendlinessAttitude:5,professionalism:4,explanation:4,careServices:5});
+ assert.equal(result.feedback.starRating,4.5);assert.equal(result.feedback.ratingVersion,2);
+ const insert=f.calls.find(c=>c.sql.startsWith('INSERT INTO feedback'))!;assert.deepEqual(insert.args.slice(7),[5,4,4,5]);
+ assert(f.calls.find(c=>c.sql.startsWith('UPDATE vital_doctors'))!.sql.includes('ratingVersion'));
+ const g=fixture();await assert.rejects(g.owner.feedback(g.actor(),g.id,g.meta,{expectedVersion:3,rating:5}),{code:'APPOINTMENT_RATING_FORMAT_RETIRED'});
+ for(const patch of [{careServices:undefined},{careServices:0},{explanation:6},{professionalism:2.5},{overall:5}])await assert.rejects(g.owner.feedback(g.actor(),g.id,g.meta,{...g.input,...patch}));
+ assert.equal(g.state().feedback,null);
+});
+
+test('legacy feedback remains preserved and cannot be replaced by a second review',async()=>{
+ const f=fixture();f.state().feedback={id:randomUUID(),appointmentId:f.id,ratingVersion:1,starRating:5};
+ await assert.rejects(f.owner.feedback(f.actor(),f.id,f.meta,f.input),{code:'APPOINTMENT_ALREADY_RATED'});
+ assert.equal(f.state().feedback!.ratingVersion,1);assert.equal(f.state().ratingWrites,0);
 });

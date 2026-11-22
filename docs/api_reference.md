@@ -17,3 +17,12 @@ GET /api/admin/analytics/patterns adds the admin-only pattern snapshot read. The
 ## Native TRACE disputes
 
 See [the implemented contract and rollout ledger](integrations/trace/patient-feedback/VITAL_TRACE_Implementation_Changes_and_Verification.md). All native cross-system delivery uses Gateway; callbacks enter after JSON parsing and the existing Web mTLS/signed assertion boundary. `VITAL_TRACE_DISPUTES_ENABLED` defaults off. Complete resumes original payment/clinical checks; refund issuance is separate.
+
+
+## Doctor directory and criterion ratings
+
+Admin doctor reads now accept bounded page/pageSize/search parameters; patient
+discovery returns one cursor page. Feedback requires four integer criterion
+scores and expectedVersion, with the overall score computed by Services. See
+[doctor profiles, ratings and pagination](doctor-profiles-ratings-pagination.md)
+for request fields, legacy-review handling, worker configuration and rollout.

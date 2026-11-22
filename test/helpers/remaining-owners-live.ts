@@ -73,7 +73,7 @@ export async function remainingOwnersLiveScenarios(t: TestContext, context: Cont
     const owner = createAppointmentExtras(context.core, { financial: { verifyPaid: f.module.verifyAppointmentPaid } });
     const actor = { ...f.actor, scopes: ['appointments.feedback'] }, meta = command();
     try {
-      const input = { expectedVersion: 0, rating: 5 };
+      const input = { expectedVersion: 0, friendlinessAttitude:5,professionalism:5,explanation:5,careServices:5 };
       const [first, retry] = await Promise.all([owner.feedback(actor, f.appointmentId, meta, input), owner.feedback(actor, f.appointmentId, meta, input)]);
       assert.equal(first.feedback.id, retry.feedback.id);
       assert.equal((await context.core.query('SELECT COUNT(*) AS count FROM feedback WHERE "appointmentId"=$1', [f.appointmentId])).rows[0].count, '1');
@@ -82,7 +82,7 @@ export async function remainingOwnersLiveScenarios(t: TestContext, context: Cont
       const journal = (await context.core.query('SELECT result FROM command_operations WHERE "actorId"=$1 AND "operationId"=$2', [actor.authId, meta.operationId])).rows[0].result;
       assert.deepEqual(journal, { feedbackId: first.feedback.id });
       assert.equal((await context.core.query('SELECT COUNT(*) AS count FROM outbox_events WHERE "aggregateId"=$1 AND payload->>\'auditType\'=$2', [f.appointmentId, 'vital.appointment.feedback_saved'])).rows[0].count, '1');
-      await assert.rejects(owner.feedback(actor, f.appointmentId, meta, { ...input, rating: 1 }), { code: 'COMMAND_REPLAY_CONFLICT' });
+      await assert.rejects(owner.feedback(actor, f.appointmentId, meta, { ...input, explanation:1 }), { code: 'COMMAND_REPLAY_CONFLICT' });
     } finally { await context.core.query('DELETE FROM feedback WHERE "appointmentId"=$1', [f.appointmentId]); }
   }));
   await t.test('EDA remaining owners PostgreSQL patient-wide intake remains retired', () => fixture(context, async f => {

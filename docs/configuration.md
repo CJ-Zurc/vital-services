@@ -40,3 +40,6 @@ Manual Google Meet links replace the retired connection/generation feature. See 
 ## Native TRACE disputes
 
 See [the implemented contract and rollout ledger](integrations/trace/patient-feedback/VITAL_TRACE_Implementation_Changes_and_Verification.md). All native cross-system delivery uses Gateway; callbacks enter after JSON parsing and the existing Web mTLS/signed assertion boundary. `VITAL_TRACE_DISPUTES_ENABLED` defaults off. Complete resumes original payment/clinical checks; refund issuance is separate.
+
+
+See [doctor profiles, criterion ratings and directory pagination](doctor-profiles-ratings-pagination.md) for updated forms, rating eligibility, the trusted search projection, worker configuration and paired rollout.

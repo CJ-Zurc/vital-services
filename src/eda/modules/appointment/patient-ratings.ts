@@ -10,7 +10,7 @@ export async function patientDoctorRatings(pool:Pool,actor:Actor,doctorId:string
   const doctor=await pool.query(`SELECT d."userId" FROM vital_doctors d JOIN vital_users u ON u.id=d."userId" AND u."authId"=d."authId" WHERE d."userId"=$1 AND u.role='doctor' AND d."isDoctorOnboardingComplete"=true`,[doctorId]);
   if(!doctor.rows.length)throw new DomainError(404,'APPOINTMENT_DOCTOR_NOT_FOUND','Doctor not found.');
   const query=z.object(readPageInput).strict().parse(raw);
-  const source=`FROM feedback f JOIN appointments a ON a.id=f."appointmentId" WHERE a."doctorId"=$1 AND a.status='completed' AND f."starRating" BETWEEN 1 AND 5`;
+  const source=`FROM feedback f JOIN appointments a ON a.id=f."appointmentId" WHERE a."doctorId"=$1 AND a.status='completed' AND f."ratingVersion"=2 AND f."starRating" BETWEEN 1 AND 5`;
   const summary=async()=> (await pool.query<{count:number;average:string|null}>(`SELECT COUNT(*)::int AS count,AVG(f."starRating")::text AS average ${source}`,[doctorId])).rows[0]!;
   const before=await summary();
   const page=await readCollectionPage<{id:string;rating:number;submittedAt:Date}>(pool,prepareReadPage(actor,'patient-ratings:'+doctorId,{},query,clock),{

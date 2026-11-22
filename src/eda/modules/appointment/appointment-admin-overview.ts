@@ -35,7 +35,7 @@ export function createAdminAppointmentOverview(pool: Pool, clock = Date.now) {
       ) SELECT v.id,v."authId",v.specialty,v.volume::text AS "completedCount",f.rating::text,f.count::text AS "reviewCount"
         FROM volumes v LEFT JOIN LATERAL (
           SELECT AVG(f."starRating") AS rating,COUNT(*) AS count FROM feedback f JOIN appointments a ON a.id=f."appointmentId" AND a.status='completed'
-          WHERE f."doctorId"=v.id AND f."starRating" BETWEEN 1 AND 5
+          WHERE f."doctorId"=v.id AND f."ratingVersion"=2 AND f."starRating" BETWEEN 1 AND 5
         ) f ON TRUE WHERE v.volume=(SELECT MAX(volume) FROM volumes) ORDER BY v.id`,times)).rows;
       await profile.admin(actor,tx);await tx.query('COMMIT');
       return {statusCounts,consultationCounts,monthly:{from:period.from.toISOString(),to:period.to.toISOString(),asOf:period.asOf.toISOString(),

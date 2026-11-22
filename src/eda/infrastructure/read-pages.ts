@@ -46,7 +46,7 @@ export function prepareReadPage(actor: Actor, collection: string, filters: unkno
     try { cursor = cursorSchema.parse(JSON.parse(Buffer.from(input.cursor, 'base64url').toString('utf8'))); }
     catch { throw new DomainError(400, 'APPOINTMENT_READ_CURSOR_INVALID', 'Invalid read cursor.'); }
     if (cursor.subject !== subject || cursor.collection !== collection || cursor.filters !== filterHash
-      || cursor.at > clock() + 1000 || clock() - cursor.at > 30_000)
+      || cursor.at > clock() + 1000 || clock() - cursor.at > (collection==='doctor-discovery'?900_000:30_000))
       throw new DomainError(400, 'APPOINTMENT_READ_CURSOR_INVALID', 'Invalid read cursor.');
   }
   return { subject, collection, filters: filterHash, limit: input.limit, at: cursor?.at ?? clock(), cursor };
