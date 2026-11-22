@@ -169,12 +169,12 @@ test('EDA Records committed workflow cannot present changed snapshot data as an 
   assert.equal(f.state().snapshots.size,1);
 });
 test('EDA Records paperwork deadline closes without a snapshot or completion public status change',()=>{
-  const f=fixture(),row=f.state().appointment;assertPaperwork(row,f.now);row.proposedEndAt=new Date(f.now-86400000);assert.equal(paperworkDeadline(row).getTime(),f.now);
+  const f=fixture(),row=f.state().appointment;assertPaperwork(row,f.now);row.proposedEndAt=new Date(f.now-172800000);assert.equal(paperworkDeadline(row).getTime(),f.now);
   assert.throws(()=>assertPaperwork(row,f.now),isCode('RECORDS_PAPERWORK_CLOSED'));assert.equal(row.status,'confirmed');
   row.completionDeadlineAt=new Date(f.now+1);assertPaperwork(row,f.now);row.paperworkLockedAt=new Date(f.now);assert.throws(()=>assertPaperwork(row,f.now));
 });
 test('EDA Records expired appointment code grant cannot reopen live access through recovery',async()=>{
- const f=fixture();f.state().appointment.proposedEndAt=new Date(f.now-86400000-1);
+ const f=fixture();f.state().appointment.proposedEndAt=new Date(f.now-172800000-1);
  await assert.rejects(f.module.prepareSnapshot(f.actor('snapshot.prepare'),f.meta(),{workflowId:randomUUID(),appointmentId:f.id,expectedVersion:1,recovery:true}),isCode('APPOINTMENT_CODE_REQUIRED'));
  assert.equal(f.state().snapshots.size,0);
 });
@@ -296,7 +296,7 @@ test('EDA Records runtime and artifact flags default off and dependencies never 
   assert.throws(()=>recordsRuntime({corePool:f.pool},undefined,{VITAL_EDA_ENABLED:'true',VITAL_EDA_RECORDS_ENABLED:'true'}));assert.equal(f.calls.length,0);
 });
 test('EDA Records access-plan replay rechecks consent payment and effective deadline under lock',async()=>{
-  const invalidations:Array<(f:ReturnType<typeof fixture>)=>void>=[f=>f.consent(false),f=>f.stale(),f=>{f.state().appointment.proposedEndAt=new Date(f.now-86400000);}];
+  const invalidations:Array<(f:ReturnType<typeof fixture>)=>void>=[f=>f.consent(false),f=>f.stale(),f=>{f.state().appointment.proposedEndAt=new Date(f.now-172800000);}];
   for(const invalidate of invalidations){
     const f=fixture(),meta=f.meta(),actor=f.actor('access'),input={appointmentId:f.id,expectedVersion:1};
     await f.module.accessPlan(actor,meta,input);invalidate(f);await assert.rejects(f.module.accessPlan(actor,meta,input));

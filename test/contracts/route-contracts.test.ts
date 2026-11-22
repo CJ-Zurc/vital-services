@@ -47,7 +47,7 @@ function get(path: string) {
 function method(path: string, verb = 'GET') { return get(path).methods.find((row: any) => row.method === verb); }
 
 test('route contract review maps every current Web route and exported method without claiming runtime parity', () => {
-  assert.equal(current.length, 171, 'A changed route inventory requires explicit source review.');
+  assert.equal(current.length, 179, 'A changed route inventory requires explicit source review.');
   for (const route of current) {
     const result = get(route.path);
     assert.equal(result.reviewed, true, route.path + ': ' + JSON.stringify(result.gates));
@@ -99,6 +99,20 @@ test('route contract review verifies real BFF dispatch policies and method-speci
   assert.equal(readiness.dispatch.frontDoor.targetModeAccepted, null);
   assert.deepEqual(readiness.dispatch.frontDoor.probes, []);
   assert.match(readiness.gates.frontDoor, /not_applicable/);
+  const status = method('/api/patient/appointments/[appointmentId]/appeal-status');
+  assert.equal(status.requiredRole, 'patient');
+  assert.equal(status.dispatch.frontDoor.targetModeAccepted, true);
+  assert.ok(!status.gates.featureFlags.includes('VITAL_TRACE_DISPUTES_ENABLED'));
+  const reply = method('/api/patient/appointments/[appointmentId]/reject-completion', 'POST');
+  assert.equal(reply.dispatch.symbol, 'disputeBff');
+  assert.ok(reply.dispatch.frontDoor.ownerFlagChecks.every((check: any) =>
+    check.probes.every((probe: any) => probe.ingressGuardBlocked)));
+  const callback = method('/integrations/v1/trace-disputes/[action]', 'POST');
+  assert.match(callback.authentication, /adapter key.*mTLS/);
+  assert.equal(callback.dispatch.frontDoor.targetModeAccepted, true);
+  assert.equal(callback.dispatch.frontDoor.probes.length, 3);
+  assert.ok(callback.dispatch.frontDoor.ownerFlagChecks.every((check: any) =>
+    check.probes.every((probe: any) => probe.ingressGuardBlocked)));
 });
 
 test('route contract review distinguishes public Auth callback internal and retired exceptions', () => {
@@ -219,4 +233,9 @@ test('route contract review gates unknown missing changed and mismatched route e
   assert.ok(oldBlanket.remainingGates.includes('front_door_blocks_target_mode_route'));
   const unsafe = review({ ...original, path: '/../../outside', source: '../../outside.ts' });
   assert.equal(unsafe.reviewed, false); assert.ok(codes(unsafe).includes('ROUTE_INPUT_INVALID'));
+});
+
+test('Complaint pattern read has signed Intelligence ownership and no patient member projection',()=>{
+ const row=method('/api/admin/analytics/patterns','GET');assert.equal(row.family,'intelligence');assert.equal(row.dispatch.symbol,'targetIntelligence');assert.equal(row.requiredRole,'admin');
+ assert.equal(method('/api/admin/analytics/dashboard','GET').family,'intelligence');
 });

@@ -169,7 +169,7 @@ test("EDA Appointment calendar uses Philippine overnight intervals and end-time 
   assert.equal(appointmentExpired({scheduledAt:range.startsAt,proposedEndAt:range.endsAt},range.startsAt.getTime()+1),false);
   assert.equal(appointmentExpired({scheduledAt:range.startsAt,proposedEndAt:range.endsAt},range.endsAt.getTime()),true);
   assert.equal(appointmentExpired({scheduledAt:range.startsAt},range.startsAt.getTime()),true);
-  assert.equal(completionDue({scheduledAt:range.startsAt,proposedEndAt:null,slotEndsAt:range.endsAt,completionDeadlineAt:null},range.startsAt.getTime()+86400000),true);
+  assert.equal(completionDue({scheduledAt:range.startsAt,proposedEndAt:null,slotEndsAt:range.endsAt,completionDeadlineAt:null},range.endsAt.getTime()+172800000),true);
 });
 
 test('EDA Appointment completion shares the patient retention fence before publishing its transition', async () => {

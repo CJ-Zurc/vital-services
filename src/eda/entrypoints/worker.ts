@@ -1,4 +1,5 @@
 import { observeDelivery } from '../infrastructure/observation.js';
+import { deliverNativeDisputes, reconcileNativeDisputes } from '../modules/appointment/dispute-delivery.js';
 import "dotenv/config";
 import { setTimeout as sleep } from "node:timers/promises";
 import { createDatabases } from "../infrastructure/databases.js";
@@ -42,6 +43,7 @@ let lastDeliveryObservation = 0;
 let lastVideoScan=0;
 let lastAppointmentScan=0;
 let lastPaymentScan = 0;
+let lastDisputeScan = 0;
 let closing = false;
 const shutdown=new AbortController();
 process.once("SIGTERM", () => { closing = true;shutdown.abort(); });
@@ -101,6 +103,10 @@ async function run() {
           lastAppointmentScan=Date.now();await appointment.maintenanceTick();
         }
         if(records)await records.artifactTick(shutdown.signal);
+        if(process.env.VITAL_TRACE_DISPUTES_ENABLED==='true'){
+          await deliverNativeDisputes(databases.corePool,databases.integrationsPool,appointment?.module.owners);
+          if(Date.now()-lastDisputeScan>60000){lastDisputeScan=Date.now();await reconcileNativeDisputes(databases.corePool,appointment?.module.owners);}
+        }
         if(profileQr)await profileQr.recoverOnce(shutdown.signal);
         if(messaging){const retention=await messaging.retentionTick(shutdown.signal);
           if(retention&&!retention.busy&&(retention.scanned>0||retention.completed))console.log(JSON.stringify({level:'info',event:'eda.messaging.retention',mode:retention.mode,scanned:retention.scanned,eligible:retention.eligible,purged:retention.purged,completed:retention.completed}));}

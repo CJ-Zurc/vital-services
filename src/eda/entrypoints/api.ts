@@ -52,7 +52,7 @@ const app = createEdaApp(databases.core, {
   feed && messaging && appointment ? { feed, authorizeMessage: messaging.messages.authorizeStream, requests: appointment.listRequests } : undefined, completion, profileQr,
   appointment ? createAppointmentExtras(databases.corePool, payment ? { financial: { verifyPaid: payment.verifyAppointmentPaid } } : {}) : undefined,
   portalIntegrationsRuntime(databases), appointment ? createAppointmentCommandPreparation(databases.corePool) : undefined,
-  createIntelligence(databases.corePool),auditRuntime(databases.corePool));
+  createIntelligence(databases.corePool),auditRuntime(databases.corePool),databases.corePool);
 const server = createServer({ key: readFileSync(required("VITAL_API_TLS_KEY_FILE")), cert: readFileSync(required("VITAL_API_TLS_CERT_FILE")),
   ca: readFileSync(required("VITAL_SERVICE_CA_FILE")), requestCert: true, rejectUnauthorized: true, maxHeaderSize: 16384 }, (req, res) => {
   if (req.method !== 'GET' || req.url !== '/internal/readiness') { app(req, res); return; }

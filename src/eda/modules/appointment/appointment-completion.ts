@@ -1,3 +1,4 @@
+import { createAdminAppointmentOverview } from './appointment-admin-overview.js';
 import { appointmentAccessState } from './appointment-access.js';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
@@ -20,6 +21,7 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
   owners: AppointmentReadOwners = {}, clock = Date.now): CompletionAppointmentOwner {
   const profile = createCompletionProfileOwner(pool);
   return {
+    adminOverview: createAdminAppointmentOverview(pool,clock),
     async patient(actor) {
       completionRole(actor, 'patient', 'completion.patient.dashboard');
       const patientId = await profile.patient(actor), tx = await pool.connect();
@@ -48,7 +50,10 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
             FROM appointments r LEFT JOIN schedules rs ON rs.id=r."scheduleSlotId" WHERE r."sourceAppointmentId"=a.id AND r."patientId"=a."patientId" AND r."doctorId"=a."doctorId"),'[]'::jsonb) AS "rescheduleProposals",
           COALESCE((SELECT jsonb_agg(jsonb_build_object('id',r.id,'status',r.status) ORDER BY r.id) FROM appointments r
             WHERE r."followUpOfAppointmentId"=a.id AND r."patientId"=a."patientId" AND r."doctorId"=a."doctorId"),'[]'::jsonb) AS "followUpAppointments"
-          FROM appointments a JOIN vital_patients p ON p."userId"=a."patientId" JOIN vital_doctors d ON d."userId"=a."doctorId"
+          ,ad."traceCaseId",ad."traceTicketId",ad."traceTicketNumber",ad."traceDisputeSeq",ad.description AS "disputeReason",ad."createdAt" AS "disputedAt",
+          ad."proposedOutcomeTag" AS "proposedResolutionTag",ad."proposedExplanation",ad."acknowledgmentDeadlineAt",ad.stage AS "disputeStage",ad."rejectionReason" AS "disputeRejectionReason",
+          ad."resolutionMethod",ad."rescheduleGranted" AND ad."rescheduleConsumedAt" IS NULL AS "disputeRescheduleAvailable"
+          FROM appointments a LEFT JOIN appointment_disputes ad ON ad."appointmentId"=a.id JOIN vital_patients p ON p."userId"=a."patientId" JOIN vital_doctors d ON d."userId"=a."doctorId"
           LEFT JOIN schedules s ON s.id=a."scheduleSlotId" LEFT JOIN pre_consultations pc ON pc."appointmentId"=a.id
           LEFT JOIN consultations c ON c."appointmentId"=a.id
           WHERE a."patientId"=$1 AND a."scheduledAt">=$2 AND a.status NOT IN ('cancelled','rejected','completed','no_show')
@@ -77,6 +82,19 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
           statusLogs: r.statusLogs.map(l => ({ ...l, changedAt: new Date(l.changedAt).toISOString() })) });
         appointments.push({ access:await appointmentAccessState(pool,row as unknown as Parameters<typeof appointmentAccessState>[1],clock()),id: row.id, version: row.version, patientId: row.patientId, doctorId: row.doctorId, patientAuthId: row.patientAuthId, doctorAuthId: row.doctorAuthId,
           rating: null, canRate: false,
+          disputesEnabled:process.env.VITAL_TRACE_DISPUTES_ENABLED==='true',
+          reviewHold: ((row as unknown as Record<string, unknown>).reviewHold as boolean) ?? false,
+          traceCaseId: ((row as unknown as Record<string, unknown>).traceCaseId as string) ?? null,
+          traceTicketNumber: row.traceTicketNumber??null, traceDisputeSeq: row.traceDisputeSeq??null,
+          resolutionMethod:row.resolutionMethod??null,disputeRescheduleAvailable:row.disputeRescheduleAvailable===true,
+          traceTicketId: ((row as unknown as Record<string, unknown>).traceTicketId as string) ?? null,
+          disputeReason: ((row as unknown as Record<string, unknown>).disputeReason as string) ?? null,
+          disputedAt: ((row as unknown as Record<string, unknown>).disputedAt as Date) ?? null,
+          proposedResolutionTag: ((row as unknown as Record<string, unknown>).proposedResolutionTag as string) ?? null,
+          proposedExplanation: ((row as unknown as Record<string, unknown>).proposedExplanation as string) ?? null,
+          acknowledgmentDeadlineAt: ((row as unknown as Record<string, unknown>).acknowledgmentDeadlineAt as Date) ?? null,
+          disputeStage: ((row as unknown as Record<string, unknown>).disputeStage as number) ?? 1,
+          disputeRejectionReason: ((row as unknown as Record<string, unknown>).disputeRejectionReason as string) ?? null,
           specialty: row.specialty, status: row.status, consultationType: row.consultationType, scheduleSlotId: row.scheduleSlotId, scheduleSlot: row.scheduleSlot,
           sourceAppointmentId: row.sourceAppointmentId, appointmentKind: row.appointmentKind, followUpOfAppointmentId: row.followUpOfAppointmentId,
           patientRescheduleCount: row.patientRescheduleCount, doctorRescheduleCount: row.doctorRescheduleCount, cancellationReason: row.cancellationReason, rejectionReason: row.rejectionReason,

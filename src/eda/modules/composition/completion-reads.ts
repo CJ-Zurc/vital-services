@@ -27,12 +27,10 @@ export function createCompletionReads(profile: ReturnType<typeof createCompletio
       completionRole(actor, 'admin', 'completion.admin.dashboard');
       await profile.admin(actor);
       if (!owners.appointments) completionUnavailable('APPOINTMENT');
-      if (!owners.financial) completionUnavailable('PAYMENT');
       const accounts = await profile.accounts();
-      const statusCounts = await owners.appointments.statusCounts(actor);
-      const financial = await owners.financial.summary(actor);
+      const overview = await owners.appointments.adminOverview(actor);
       await profile.admin(actor);
-      return { summary: { ...accounts, paidVolume: financial.paidVolume }, statusCounts, paymentCounts: financial.paymentCounts };
+      return { summary: accounts, ...overview };
     },
     consents: profile.consents,
     consentStatus: profile.consentStatus,

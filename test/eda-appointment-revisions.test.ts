@@ -77,7 +77,7 @@ test('S6 complaint corrections deny another doctor stale versions workflows and 
   for(const status of ['completed','cancelled','rescheduled'])assert.equal(complaintEditable({...f.row,status},now),false);
   assert.equal(complaintEditable({...f.row,paperworkLockedAt:new Date(now)},now),false);
   assert.equal(complaintEditable({...f.row,status:'pending',sourceAppointmentId:randomUUID()},now),false);
-  assert.equal(complaintEditable(f.row,now+2*86400000),false);
+  assert.equal(complaintEditable(f.row,f.row.proposedEndAt!.getTime()+2*86400000),false);
   assert.equal(f.history.length,0);
 });
 

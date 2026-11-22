@@ -13,6 +13,20 @@ const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIO
 const hash = text => createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex');
 // A review snapshot, not a parity certificate. Changes require a fresh source review.
 const reviewedHashes = Object.freeze({
+  'lib/eda/dispute-bff.ts': 'c709c9b9ac28d9ec0093ff2153b8d13a27b9c621b1b24c8290574a86a159dcdf',
+  'lib/dispute-contract.ts': 'aa8c5c450e54f81ecbfaf85f4d9b522d12ec4d43d200201f99b2f4a7c1035028',
+  'app/integrations/v1/trace-disputes/[action]/route.ts': '6444bc8d823abcd237b8b7c18d42e75baf324fe11cd9102b3bf872ef7442e778',
+  'app/api/patient/appointments/[appointmentId]/reject-completion/route.ts': '555fb2d25e1e0c10d3a1c15dda761b042b0471ce39a13cacd21fb48ea187bd0c',
+  'app/api/patient/appointments/[appointmentId]/dispute-evidence/route.ts': '9fd5ce68b2381f69f1dbb1de6a61c71e6cc58147c5d1d67ee9ad810be4d7e1d9',
+  'app/api/patient/appointments/[appointmentId]/appeal/route.ts': '7c77bbec147f48986580f6293c3ea7b9fba0fadf94a17709fcf418db1a773f92',
+  'app/api/patient/appointments/[appointmentId]/appeal-status/route.ts': '73ba93e82b2c7ebbcaedaca955dc8c65e8c029eb0bf3a5e6e5af1064739273e7',
+  'app/api/patient/appointments/[appointmentId]/acknowledge/route.ts': '2a91c15bd1bff270740818a421179457d2b9346514fce94b80d7ebdb783c80b3',
+  'app/api/admin/disputes/route.ts': '341bf50749cddecd08e9f2fb60b2fba8fd9f17453a78b6e761bdc12a4279643a',
+  'tests/dashboard-charts.test.ts': '10de219cdbf25e38dd76ee1fdd967f7f0f8d6809da69441b22bc3fd21b88d1a1',
+  'tests/admin-dashboard-bff.test.ts': '8b6a1d7081929a464ee94ac0e95979743e9da2534e50317a06c1da94dd778722',
+  'lib/admin-dashboard.ts': '6b2bff0fa960d7659f3e61b533d92f2ee52d611b5bb8cfe16aa16d045f3b3c5f',
+  'lib/profile-picture.ts': '8880c1166bea38107783059a0de0dab496d76771b1961fb57225b79166a07e07',
+  'app/api/admin/analytics/patterns/route.ts': '802cf41e16091444bbc6762a4674ec1b9026c4edc502e1cce5d1a5192e63c511',
   'app/api/patient/appointments/[appointmentId]/booking-acknowledgment/route.ts': '9de6a1b74e15e7871d4ac9fb2512b68ac2d679e7aa022fa5d8aba403b73e5232',
   'app/api/patient/appointments/[appointmentId]/booking-acknowledgment/file/route.ts': '9de6a1b74e15e7871d4ac9fb2512b68ac2d679e7aa022fa5d8aba403b73e5232',
   'app/api/doctor/appointments/[appointmentId]/no-show/route.ts': '1d6de2b7c1172e1525b28e3bd9f029fa1962c29c4edede2ac345483d52ae00da',
@@ -23,8 +37,8 @@ const reviewedHashes = Object.freeze({
   'lib/eda/audit-bff.ts': 'c25f2fbd4a532a83d750a792de1f950eee2821b29e4078ab0001a53676e182b1',
   'app/api/admin/audit-logs/export/route.ts': 'a5e810c29912b92829c124dc619f9bfa382f41043131cba8afa09f98f8459a49',
   'app/api/admin/audit-logs/route.ts': '60c155976ad3e852c31dddadea4a2ea76f5060c1839076f1e2277bf442cef74e',
-  'lib/eda/intelligence-bff.ts': '054bf8aea1bcdaf0ee8d44f2eb20c28cc1f59fca28503bac4dbfb08f8c1f9fed',
-  'lib/eda/intelligence-paths.ts': 'be3682c582f8455cbbcdf6e496f7bfdd1986fecceffffbfaf501a0ad5cf07130',
+  'lib/eda/intelligence-bff.ts': 'be0a00cedde56039894cb4bb8ec64a30269e5eec0b10d4e720929694d8bc7f7c',
+  'lib/eda/intelligence-paths.ts': 'd4c2fb2fe0176d841e24b25be57fc25ae6e9169684e184201dd7a7f3e76334fb',
   'tests/intelligence-paths.test.ts': '9454af79d389f33c3edd0c796cb732dffc34a983334a8915fd5d4e090fb8676c',
   'tests/intelligence-departments.test.ts': 'ff4912c60f6ef9fc1169be3183dffefd643d1bc3b0e956040cb0fcff1000b462',
   'app/api/admin/ai/sandbox/analyze/route.ts': '693fc030699cace12bc77db386e8776bdc48c8e7fa87d0cd8db536578fb36abf',
@@ -198,7 +212,7 @@ const reviewedHashes = Object.freeze({
   'lib/admin-management.ts': 'c00eae44dc4bfbbf6f8d1ddc1c91f139ce06634169b8801300b263cf966b7da8',
   'lib/allergies.ts': '90c0767d3818cc6dea00d19dd374b35b40f08aae2421f38c88553c0d49e13ff1',
   'lib/appointment-action-state.ts': '2ae653de9b6bfe64f8505881987ff4f30a01172be866126a27eb17df484106ff',
-  'lib/appointment-lifecycle.ts': 'b4c5cec819a9e80d835bbcd6abe146730cf267115ee46dceeaa34ff7197fe49e',
+  'lib/appointment-lifecycle.ts': '083c9a2adaa26c9228df10312aa977737107bf709991fa25904c2d137e968fd3',
   'lib/appointment-serializer.ts': '275ddc71d3c8c1f500b69417ccefec46f95286e319736a791750cfbec210cc33',
   'lib/auth-error-response.ts': 'e0aa15e80079cbf066cb4926636a7f322c2c8c8cb9a722ff1c4254ccba0547d9',
   'lib/auth-errors.ts': 'a81541a86b92d8d06daa8db996e0f914dbb9c4124accc2699189b28ab5519e92',
@@ -216,13 +230,13 @@ const reviewedHashes = Object.freeze({
   'lib/eda/appointment-bff.ts': '74f0ea24f70b7d70e4f923afc4072ff7974c456a0bac7f5c8e05428a71a83fef',
   'lib/eda/appointment-compatibility.ts': 'e440b57b6724e2042529202c0abb495c277c48a6beeea27d2a0644f3be46eeec',
   'lib/eda/appointment-extras-bff.ts': 'cc922d17ca497c7d948a7b46914d2b77bd03a3f7d843019b1c9a13afb7bd84ef',
-  'lib/eda/appointment-paths.ts': '227ebe4638726181bc4b10c2a41e8e67f0781d5c7668a7485ab8a8dd73f66902',
-  'lib/eda/appointment-read-bff.ts': 'd98160252c8e0884c9a4b8a390dea1a00f69f6d949622a14338bee8c9589a33d',
-  'lib/eda/appointment-read-dto.ts': '60d39e38e72848759e29a385ee82075bc67c969728c5bbc9100619d87c0922b0',
+  'lib/eda/appointment-paths.ts': '491f5da49d106e1298c924b30d694e7bcb77936cb7afdf87576aeb786732c370',
+  'lib/eda/appointment-read-bff.ts': 'd39386441e54bef1bee8e70ac7b130fa20efccc4e9eeff1eff57c07a307b4e6b',
+  'lib/eda/appointment-read-dto.ts': 'd76643e476a323b7fc163e719240153f005417b75582b4771bb9b8211c171d7d',
   'lib/eda/candidate.ts': '94f79ef985d6ff3301f3c902871b912d77229039bcbcc8d8ea56c7625b649115',
-  'lib/eda/completion-bff.ts': '2653b48200c1910da17e11116dde49640a6c77f85493e697c7b4c8a53ac7e9a9',
+  'lib/eda/completion-bff.ts': 'd2b77078636a1d65a7d75fcabf9e50ed735423379ad95410b8ca9496fce276e4',
   'lib/eda/completion-consent-list.ts': '7dad713da1ae78a1d6efeaf2ea8722ef9ce4c8443db4e3201e61382185996175',
-  'lib/eda/completion-dto.ts': 'db86ccc156db73697e8eed79adda06e270335c36f8374a6995e7c49555a0517b',
+  'lib/eda/completion-dto.ts': 'fcee70559f8ab754f6f63b9b68cd3813f655b84b15ef092f79d2b62addd81e24',
   'lib/eda/completion-export.ts': '86253ac46aff7904b418b578799025eb6055e7cc3b5a6cac71518f1c49ac9fad',
   'lib/eda/completion-notifications.ts': 'f7b9410148be4a190bc81bf1a8a91adb1f7a07497ab13407e606453d1d1e2de3',
   'lib/eda/completion-paths.ts': 'e210185e3adf017132d5bc752e9f352e84367445f7503fbf4cc6d187db20a930',
@@ -234,7 +248,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/messaging.ts': '1ce8421f0dbd074d669eaf85d5ee119f2a98cddcfd62efb74e9b9c8b5ceb9cd9',
   'app/api/webhooks/paymongo/route.ts': '5fafa793573492d260e044bd08538aa6319b0a14c99ab97ef88f6876af62e6df',
   'tests/paymongo-webhook.test.ts': '34a99551283f302c713ba57ab2b16ddda5d0b82011a4496e854950e7a5d2cb7a',
-  'lib/eda/mode-policy.ts': '4912ba7efbb7fb3d179c655147ad9988fb67e6e7ef2fdad2c6962ff7bd3a014d',
+  'lib/eda/mode-policy.ts': 'fd673266f91204f33d8499a7cef2d799898b4c9071e7e9fcb3aacb9efc7360cd',
   'lib/eda/patient-onboarding.ts': 'bf14670643dc52a6693e4bb8ea452b247b43834246196f28554d9686673e092d',
   'lib/eda/patient-record-notice.ts': '966b336c56669936b94c6470a6598802335f0509f562e2373142f841a97db35c',
   'lib/eda/patient-workflow.ts': '81de5bf45249c1d71da5f7df9fda58866fcbd3a998cc5ca50e4b01b277533f4b',
@@ -265,7 +279,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/request-body.ts': '7a78782d69c435e689b110eee50541ed73795c6bfcdb2aaa43ca6da10c71b0d5',
   'lib/eda/stream-bff.ts': '2fa4d988f94763e0876d4b4995c843c155846c1a61dd96ad537fed6ed01e32c7',
   'lib/eda/stream-transport.ts': 'ada0197f643603eb27a9659728a2629b0301ea96e81477afa5b737730037fd5d',
-  'lib/eda/transport.ts': 'd79d30f899f10be442dce1d2d357e98766b43d1d23f4c03b98c28286cba58355',
+  'lib/eda/transport.ts': '6fa3a1d45686fe9c7efc90095cae4b88d1748c3f1eb9c66ebd317cdb5ffb0879',
   'app/api/internal/vital/readiness/route.ts': 'b7ffb181f5babb03300373584259088eb10b1d57494b09f579d93aa5183a0877',
   'tests/eda-readiness.test.ts': 'a37c0db033d0143465be8faf2472406e4a4ed75cb86000c6947ee1591cb2c16a',
   'lib/eda/video-cookie.ts': 'eb9a0292fa6fc35c3fd1a70a8f12d9cb54a5d2f7eed15b4834b8adf8e92e5936',
@@ -305,7 +319,7 @@ const reviewedHashes = Object.freeze({
   'tests/admin-management.test.ts': '35618c7f1c28586b85b6d58c90c4bf2ff0675b5dc269de7101129f9f4cbf7074',
   'tests/allergies.test.ts': '7f57fecb3c9f0a3a8d9389ababb33e9ef3b33d3e884b02bbcaf30cfc176038ac',
   'tests/appointment-error-safety.test.ts': '8f657aa7bd8394480e71c527e9039bffe8510590948bf6258f5c09073769c292',
-  'tests/appointment-lifecycle.test.ts': '3a009196eca70ed89f3a179bdb0ce8bb93e1e1f2aae869b4e8aceb15a87e1780',
+  'tests/appointment-lifecycle.test.ts': '94505bc74cce68ebfe7b86bbfcab106676a716d5fd8cc072afbe82e15551460f',
   'tests/auth-policy.test.ts': 'f724bb2b9f2f3f7e8175e8eed66846ea130d719260b591920ca37de37f44f7c5',
   'tests/bff-auth.test.ts': '60f12d85cfb5797cf89ac2d7ef641005371b85d560db12d827ec02ec6bad215f',
   'tests/cookies.test.ts': '9567dde1197dbc60db88e3d1a5bf5b9d0ffbd6375d0037f6ac5b6705055797af',
@@ -361,6 +375,32 @@ const reviewedHashes = Object.freeze({
 });
 
 const families = {
+  patientDispute: {
+    owner: 'Services Appointment; TRACE owns case decisions',
+    entry: 'lib/eda/dispute-bff.ts', dispatch: 'disputeBff',
+    files: ['lib/dispute-contract.ts', 'lib/eda/profile.ts', 'lib/eda/transport.ts'],
+    request: 'Owning patient session and appointment UUID; same-origin mutations with typed report, evidence or decision payload',
+    response: 'Versioned dispute state or accepted report, evidence or patient response receipt',
+    statuses: [200, 202, 400, 401, 403, 404, 409, 413, 503],
+    deps: ['Gateway session', 'Services Appointment', 'TRACE dispute workflow'],
+    flags: ['VITAL_EDA_ENABLED', 'VITAL_EDA_APPOINTMENT_ENABLED'],
+  },
+  disputeReview: {
+    owner: 'Services Appointment', dispatch: 'requireBffSession',
+    files: ['lib/eda/profile.ts', 'lib/eda/transport.ts'],
+    request: 'VITAL admin session with signed review scope; Services verifies administrator membership',
+    response: 'Bounded follow-up list and aggregate delivery, response and hold counts',
+    statuses: [200, 401, 403, 503], deps: ['Gateway session', 'Services Appointment', 'Core Profile'],
+    flags: ['VITAL_EDA_ENABLED', 'VITAL_EDA_APPOINTMENT_ENABLED'],
+  },
+  traceDisputeCallback: {
+    owner: 'Services Appointment', dispatch: 'createEdaTransport',
+    files: ['lib/eda/transport.ts'],
+    request: 'Versioned TRACE snapshot, refund confirmation, or timeout decision relayed by Gateway',
+    response: 'Versioned event application or timeout receipt',
+    statuses: [200, 400, 403, 404, 409, 413, 503], deps: ['Gateway dispute transport', 'Services Appointment'],
+    flags: ['VITAL_EDA_ENABLED', 'VITAL_EDA_APPOINTMENT_ENABLED', 'VITAL_TRACE_DISPUTES_ENABLED'],
+  },
   paymongoWebhook: { owner: 'Services Payment', files: ['lib/eda/transport.ts'], tests: ['paymongo-webhook.test.ts'],
     request: 'PayMongo sandbox signature and raw JSON up to 32 KiB; Web relays via signed mTLS',
     response: 'JSON acknowledgment after verified receipt and durable reconciliation scheduling',
@@ -371,7 +411,7 @@ const families = {
     request:'Current VITAL admin membership, fixed system=vital, safe exact filters; export same-origin POST with explicit hospital dates, at most31 days and10000 events',
     response:'Safe metadata-only cursor page or complete formula-protected UTF8 CSV; no raw details, patient names, partial exports or public download links',
     statuses:[200,400,401,403,409,413,502,503,504],deps:['Gateway session','Core Profile administrator marker','Core durable audit intents','BGH Audit business list'],flags:['VITAL_EDA_ENABLED']},
-  intelligence: {owner:'Services Intelligence',entry:'lib/eda/intelligence-bff.ts',dispatch:'targetIntelligence',files:['lib/eda/intelligence-paths.ts'],tests:['intelligence-paths.test.ts','intelligence-departments.test.ts'],request:'Role-bound, same-origin, bounded draft/confirmation or brief command; Gateway session deadline and private signed actor; sandbox synthetic cases only',response:'Session-bound draft, concepts, deterministic brief, analysis job202 or retired recommendations410; no diagnostic inference',statuses:[200,202,400,401,403,409,410,503],deps:['Core Intelligence','private NLP','Gateway session status'],flags:['VITAL_AI_ENABLED','VITAL_AI_PATIENT_ENABLED or VITAL_AI_SANDBOX_ENABLED; brief actions independent of AI flags']},
+  intelligence: {owner:'Services Intelligence',entry:'lib/eda/intelligence-bff.ts',dispatch:'targetIntelligence',files:['lib/eda/intelligence-paths.ts'],tests:['intelligence-paths.test.ts','intelligence-departments.test.ts'],request:'Role-bound, same-origin, bounded draft/confirmation or brief command; Gateway session deadline and private signed actor; sandbox synthetic cases only',response:'Session-bound draft, concepts, deterministic brief, analysis job202 or aggregate symptom/pattern reporting and version-bound label review; no diagnostic inference',statuses:[200,202,400,401,403,409,410,503],deps:['Core Intelligence','private NLP','Gateway session status'],flags:['VITAL_AI_ENABLED','VITAL_AI_PATIENT_ENABLED or VITAL_AI_SANDBOX_ENABLED; brief actions independent of AI flags']},
   intakeConfig: {owner:'Web authenticated capability projection',entry:'lib/auth.ts',dispatch:'requireBffSession',files:[],tests:['intelligence-paths.test.ts'],request:'Passive resolved session GET; no draft data',response:'enabled boolean for patient normalization; no-store',statuses:[200,401],deps:['Gateway session'],flags:['VITAL_EDA_ENABLED']},
 
   revisions: { owner:'Services Appointment',entry:'lib/eda/appointment-revisions-bff.ts',dispatch:'targetAppointmentRevision',
@@ -407,9 +447,9 @@ const families = {
   completion: { owner: 'Services Completion/Profile', entry: 'lib/eda/completion-bff.ts', dispatch: 'targetCompletion',
     policy: ['lib/eda/completion-route-policy.ts', 'completionRouteAllowed'],
     files: ['lib/eda/completion-dto.ts', 'lib/eda/completion-consent-list.ts', 'lib/eda/completion-notifications.ts'],
-    tests: ['eda-completion-aggregates.test.ts', 'eda-completion-qr.test.ts'],
+    tests: ['eda-completion-aggregates.test.ts', 'eda-completion-qr.test.ts','admin-dashboard-bff.test.ts'],
     request: 'Patient GET own consent status; admin GET optional patientId consent filter; patient POST explicit acceptance and current agreementVersion, same-origin, optional UUID idempotency key',
-    response: 'Completion dashboards, patient agreement status, or authorized consent receipts with agreementVersion',
+    response: 'Admin account totals, appointment modes, monthly outcomes and joint doctor leaders without financial dependency; patient dashboard or authorized consent receipts',
     statuses: [200, 201], deps: ['Core Completion/Profile', 'Appointment composition for patient dashboard', 'notification Gateway inbox'], flags: ['VITAL_EDA_ENABLED', 'VITAL_EDA_COMPLETION_ENABLED'] },
   payment: { owner: 'Services Payment', entry: 'lib/eda/payment-bff.ts', dispatch: 'targetPayment',
     policy: ['lib/eda/mode-policy.ts', 'isPaymentCommand'], files: ['lib/eda/payment.ts', 'lib/eda/payment-dto.ts'], tests: ['eda-payment.test.ts'],
@@ -682,7 +722,8 @@ GET /api/patient/ehr-access/session
 POST /api/patient/ehr-access/end-session
 POST /api/patient/ehr-access/face-capture-sessions
 POST /api/patient/ehr-access/face-capture-sessions/[sessionId]/complete patientFaceCaptureProxy`);
-add('intelligence', `GET /api/admin/analytics/dashboard
+add('intelligence', `GET /api/admin/analytics/patterns
+GET /api/admin/analytics/dashboard
 POST /api/admin/analytics/batches/refresh`);
 add('analytics', `GET /api/admin/analytics/batches/current`);
 add('readiness', 'GET /api/internal/vital/readiness edaReadiness');
@@ -699,6 +740,14 @@ GET /api/admin/concerns
 PATCH /api/admin/concerns/[concernId]
 POST /api/appointments/[appointmentId]/concerns`);
 add('worker', 'POST /api/internal/appointments/auto-complete');
+add('patientDispute', `
+GET /api/patient/appointments/[appointmentId]/appeal-status
+POST /api/patient/appointments/[appointmentId]/appeal
+POST /api/patient/appointments/[appointmentId]/dispute-evidence
+POST /api/patient/appointments/[appointmentId]/acknowledge
+POST /api/patient/appointments/[appointmentId]/reject-completion`);
+add('disputeReview', 'GET /api/admin/disputes');
+add('traceDisputeCallback', 'POST /integrations/v1/trace-disputes/[action]');
 
 function ast(text, file) { return require('typescript').createSourceFile(file, text, 99, true); }
 function visit(node, predicate) {
@@ -797,6 +846,9 @@ function ingressProbe(paths, method, read, environment) {
 }
 function examples(path) {
   let result = [path];
+  if (path === '/integrations/v1/trace-disputes/[action]') {
+    return ['events', 'refund-confirmed', 'timeout'].map(action => path.replace('[action]', action));
+  }
   for (const [parameter, values] of Object.entries({ documentType: ['prescription', 'medical-certificate'], section: ['bmi', 'allergies'], catalog: ['allergens', 'conditions', 'medicines', 'diagnostic-services'] }))
     result = result.flatMap(item => item.includes('[' + parameter + ']') ? values.map(value => item.replace('[' + parameter + ']', value)) : [item]);
   return result.map(item => item.replace(/\[[^/]+\]/g, uuid));
@@ -830,6 +882,7 @@ function walk(directory, root, output = []) {
   return output;
 }
 function roleFor(path, method, family) {
+  if (family === 'traceDisputeCallback') return 'TRACE service through Gateway; no user session';
   if (family === 'retired' || family === 'worker') return 'none; endpoint unavailable';
   if (family === 'readiness') return 'Gateway service probe; no patient/doctor role or user session';
   if (family === 'welcome') return 'any resolved session; URL role label is not a role check';
@@ -987,6 +1040,7 @@ export function reviewRouteContract(route, options = {}) {
       const environment = Object.fromEntries(['VITAL_EDA_ENABLED', 'VITAL_EDA_APPOINTMENT_ENABLED', 'VITAL_EDA_COMPLETION_ENABLED', 'VITAL_EDA_PAYMENT_ENABLED',
         'VITAL_EDA_RECORDS_ENABLED', 'VITAL_EDA_VIDEO_ENABLED', 'VITAL_EDA_MESSAGING_ENABLED', 'VITAL_EDA_MESSAGE_HOLDS_ENABLED', 'VITAL_EDA_SSE_ENABLED', 'VITAL_EDA_PROFILE_QR_ENABLED','VITAL_AI_ENABLED','VITAL_AI_PATIENT_ENABLED','VITAL_AI_SANDBOX_ENABLED','VITAL_AI_ANALYTICS_ENABLED'].map(name => [name, 'true']));
       environment.VITAL_PAYMONGO_WEBHOOK_ENABLED = 'true';
+      environment.VITAL_TRACE_DISPUTES_ENABLED = 'true';
       const ingress = rule.family === 'readiness' ? null : ingressProbe(examples(path), method, read, environment);
       frontDoor = rule.family === 'readiness'
         ? { file: source, review: 'static direct-probe classification; not a browser route or deployment claim',
@@ -995,16 +1049,18 @@ export function reviewRouteContract(route, options = {}) {
         : { file: 'proxy.ts', review: 'static all-owner-flags-enabled probe; not a request or deployed configuration',
             condition: ingress.condition, probes: ingress.probes, contractRoute: ingress.probes.every(probe => probe.contractRoute),
             targetModeAccepted: ingress.probes.every(probe => !probe.ingressGuardBlocked),
-            ownerFlagChecks: !['portal', 'recordsIntegration'].includes(rule.family) || method !== 'POST' ? []
-              : family.flags.filter(flag => flag !== 'VITAL_EDA_ENABLED').map(disabledFlag => ({ disabledFlag,
+            ownerFlagChecks: !['portal', 'recordsIntegration', 'patientDispute', 'traceDisputeCallback'].includes(rule.family) || method !== 'POST' ? []
+              : [...family.flags.filter(flag => flag !== 'VITAL_EDA_ENABLED'),
+                ...(rule.family === 'patientDispute' ? ['VITAL_TRACE_DISPUTES_ENABLED'] : [])].map(disabledFlag => ({ disabledFlag,
                 probes: ingressProbe(examples(path), method, read, { ...environment, [disabledFlag]: 'false' }).probes })),
             deniedStatus: 503, deniedCode: 'EDA_LEGACY_OWNER_DISABLED' };
     } catch (error) { issue('FRONT_DOOR_POLICY_UNREVIEWED', 'proxy.ts', String(error.message)); }
-    const internal = rule.family === 'export' || rule.family === 'readiness' || path.startsWith('/internal/users/');
+    const internal = ['export', 'readiness', 'traceDisputeCallback'].includes(rule.family) || path.startsWith('/internal/users/');
     const foreign = ['portal', 'recordsIntegration'].includes(rule.family);
     const publicRoute = rule.family === 'address' || rule.family === 'registration' || rule.family === 'auth' && !/\/me\/|\/password\/change$|\/picture$|\/credentials$/.test(path);
     const bearerOnly = ['/api/auth/me/password', '/api/auth/password/change'].includes(path);
     const authentication = rule.family === 'paymongoWebhook' ? 'PayMongo sandbox signature verified by Services after signed mTLS relay'
+      : rule.family === 'traceDisputeCallback' ? 'Gateway shared secret and target-specific adapter key; signed service actor over Web mTLS'
       : rule.family === 'readiness' ? 'Constant-time X-Gateway-Secret check at Web; verified mTLS to Services; no user or actor assertion'
       : foreign ? 'Gateway-secret validated X-User-* source and source expiry; signed scoped Services delegation; no local-role impersonation'
       : internal ? 'directional internal service/key before scoped signed backend request'
@@ -1031,13 +1087,16 @@ export function reviewRouteContract(route, options = {}) {
             : 'attachBffSessionHeaders/upstream-cookie behavior is branch-specific; no access-token cookie persistence inferred', sourceReferences: facts.cookies },
       errors: { policy: 'Preserve explicit wrapper/BFF status mapping; typed decoder failures fail closed. Listed codes include shared branches.', sourceReferences: facts.errors },
       dependencies: { owners: family.deps, privatePathReferences: facts.dependencies, note: 'Private version1 page envelopes are not a browser contract change; runtime/private-page acceptance is not established here.' },
-      gates: { featureFlags: [...family.flags, ...(rule.family === 'messaging' && path.startsWith('/api/admin/') ? ['VITAL_EDA_MESSAGE_HOLDS_ENABLED'] : []),
+      gates: { featureFlags: [...family.flags, ...(rule.family === 'patientDispute' && method === 'POST' ? ['VITAL_TRACE_DISPUTES_ENABLED'] : []),
+        ...(rule.family === 'messaging' && path.startsWith('/api/admin/') ? ['VITAL_EDA_MESSAGE_HOLDS_ENABLED'] : []),
         ...(rule.family === 'stream' ? [path.includes('/messages/') ? 'VITAL_EDA_MESSAGING_ENABLED' : 'VITAL_EDA_APPOINTMENT_ENABLED'] : []),
         ...(rule.family === 'completion' && path === '/api/patient/dashboard' ? ['VITAL_EDA_APPOINTMENT_ENABLED'] : [])],
         frontDoor: rule.family === 'readiness' ? 'not_applicable; internal Gateway readiness endpoint, not browser proxy admission'
           : frontDoor?.targetModeAccepted === false ? 'blocked_in_target_mode_even_with_owner_flags_enabled; review proxy before claiming route availability' : 'static routing admission only; live authorization not established',
         runtimeParity: 'unverified; coordinated Gateway/Auth/backend/provider/UI acceptance required' },
       bodyLimit: ['retired', 'worker', 'address', 'readiness'].includes(rule.family) ? 'not applicable' : rule.family === 'qr' && method === 'POST' ? '5MiB image; +64KiB envelope; readProfileQrUpload'
+        : rule.family === 'traceDisputeCallback' || (rule.family === 'patientDispute' && method === 'POST')
+          ? path.endsWith('/dispute-evidence') ? '14 MiB JSON evidence envelope' : '64 KiB JSON envelope'
         : rule.family === 'records' && path === '/api/patient/files' && method === 'POST' ? '10MiB file; 11MiB multipart envelope; readRecordsUpload'
           : facts.validators.some(item => item.source.startsWith('readProfileBody')) ? 'readProfileBody default65536 bytes; explicit call overrides are evidenced; not a global route limit'
             : 'not established for every wrapper branch; inspect request reader and upstream limits',

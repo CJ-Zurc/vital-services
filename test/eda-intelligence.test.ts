@@ -3,7 +3,7 @@ import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { intakeCrypto } from '../src/eda/modules/intelligence/crypto.js';
 import { intakeBrief } from '../src/eda/modules/intelligence/summary.js';
-import { safeCount,createIntelligence,dashboard } from '../src/eda/modules/intelligence/module.js';
+import { safeCount,createIntelligence,dashboard,patterns } from '../src/eda/modules/intelligence/module.js';
 import { derivedFeatures } from '../src/eda/modules/intelligence/worker.js';
 import { intakePayloadSchema,type Concept,type Analysis } from '../src/eda/modules/intelligence/contracts.js';
 import type { Actor } from '../src/eda/contracts/actor.js';
@@ -64,6 +64,6 @@ test('AI logout deletion is actor-bound even after patient feature is disabled',
   const deletion=calls.find(c=>c.sql.startsWith('DELETE'))!;assert.equal(deletion.values[0],actor.authId);assert.match(deletion.sql,/patientAuthId/);assert.ok(calls.some(c=>c.sql.includes('INSERT INTO ai_intake_sessions')));
 });
 test('AI dashboard hides cluster members, subthreshold cohort counts and unreviewed labels',async()=>{
-  const pool={query:async(sql:string)=>({rows:sql.includes('FROM ai_submissions')?Array.from({length:5},()=>({date:'2026-10-25',status:'completed',features:{symptoms:[{id:'1',name:'Example'}]}})):sql.includes('FROM ai_cluster_versions')?[{id:'v1',payload:{featureVersion:'v1',cohorts:[{cohort:'pediatric',status:'completed',count:4,noise:1}],clusters:[{id:'c1',count:4,suggestedLabel:'Unreviewed',members:['private-id']}]}}]:[]})} as unknown as Pool;
-  const result=await dashboard(pool,{from:'2026-10-25',to:'2026-10-25'});assert.doesNotMatch(JSON.stringify(result),/private-id|Unreviewed|members/);assert.equal(result.clusters!.cohorts[0].count,null);assert.equal(result.symptoms[0]!.percentage,1);
+  const pool={query:async(sql:string)=>({rows:sql.includes('FROM ai_submissions')?Array.from({length:5},()=>({date:'2026-10-25',status:'completed',features:{symptoms:[{id:'1',name:'Example'}]}})):sql.includes('FROM ai_cluster_versions')?[{id:'v1',createdAt:new Date('2026-10-25T00:00:00Z'),payload:{featureVersion:'v1',cohorts:[{cohort:'pediatric',status:'completed',count:4,noise:1}],clusters:[{id:'c1',count:4,suggestedLabel:'Unreviewed',members:['private-id']}]}}]:[]})} as unknown as Pool;
+  const result=await dashboard(pool,{from:'2026-10-25',to:'2026-10-25'});assert.doesNotMatch(JSON.stringify(result),/private-id|Unreviewed|members/);assert.equal(result.clusters,null);const report=await patterns(pool);assert.equal(report.snapshot!.cohorts[0].count,null);assert.doesNotMatch(JSON.stringify(report),/private-id|Unreviewed|members/);assert.equal(result.symptoms[0]!.percentage,1);
 });

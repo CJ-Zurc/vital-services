@@ -14,13 +14,14 @@ export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,
   async function lifecycle(){
     if(!owners.records)return{processed:0,blocked:"RECORDS_OWNER_UNAVAILABLE"};
     const candidates=(await core.query<{id:string}>(`SELECT a.id FROM appointments a LEFT JOIN schedules s ON s.id=a."scheduleSlotId"
-      WHERE NOT(a.\"consultationType\"='in_person' AND a.status='confirmed') AND a.status IN ('pending','approved','confirmed','pending_patient_confirmation') AND a."maintenanceDueAt"<=NOW() AND (
-        (a.status='confirmed' AND COALESCE(a."completionDeadlineAt",COALESCE(a."proposedEndAt",a."scheduledAt")+INTERVAL '24 hours')<=NOW()) OR
+      WHERE NOT(a.\"consultationType\"='in_person' AND a.status='confirmed') AND a.status IN ('pending','approved','confirmed','pending_patient_confirmation') AND a."reviewHold"=false AND a.status<>'in_review' AND a."maintenanceDueAt"<=NOW() AND (
+        (a.status='confirmed' AND COALESCE(a."completionDeadlineAt",COALESCE(a."proposedEndAt",a."scheduledAt")+INTERVAL '48 hours')<=NOW()) OR
         (a."expiryProcessedAt" IS NULL AND COALESCE((s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila',a."proposedEndAt",a."scheduledAt")<=NOW()))
       ORDER BY a."maintenanceDueAt",a.id LIMIT 20`)).rows;
     let processed=0;
     for(const candidate of candidates){const tx=await core.connect();try{
       await tx.query("BEGIN");const row=await lockAppointment(tx,candidate.id);
+      if(row.reviewHold||row.status==='in_review'){await tx.query("COMMIT");continue;}
       if(row.consultationType==='in_person'&&row.status==='confirmed'){await tx.query("COMMIT");continue;}
       await tx.query('UPDATE appointments SET "maintenanceDueAt"=$2 WHERE id=$1',[row.id,new Date(clock()+60000)]);
       const busy=await tx.query(`SELECT id FROM saga_operations WHERE "billingLineageId"=$1 AND status NOT IN ('completed','compensated','cancelled','failed') LIMIT 1`,[row.billingLineageId]);

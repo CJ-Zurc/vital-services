@@ -23,12 +23,13 @@ function sqlPool(run: (sql: string, args: unknown[]) => unknown[] | Promise<unkn
   const tx = { query: async (sql: string, args: unknown[] = []) => { calls.push({ sql, args }); return { rows: await run(sql, args) }; }, release() {} };
   return { pool: { ...tx, connect: async () => tx } as unknown as Pool, calls };
 }
+const overview={statusCounts:{pending:7},consultationCounts:{virtual:7,in_person:0},monthly:{from:'2026-10-01T00:00:00Z',to:'2026-11-01T00:00:00Z',asOf:'2026-10-16T00:00:00Z',completed:0,cancelled:0,noShow:0},doctorSpotlight:{leaders:[]}};
 function fixture() {
   const patientId = randomUUID();
   const db = sqlPool(sql => sql.includes('FROM vital_patients p') ? [{ userId: patientId }] : sql.includes('FROM vital_admins a') ? [{ userId: randomUUID() }]
     : sql.includes('AS patients') ? [{ patients: '2', doctors: '3' }] : []);
   const profile = createCompletionProfileOwner(db.pool);
-  const owners: CompletionOwners = { appointments: { patient: async () => ({ patientId, appointments: [], associations: [], statusCounts: {}, validate: async () => {} }), statusCounts: async () => ({ pending: 7 }),
+  const owners: CompletionOwners = { appointments: { patient: async () => ({ patientId, appointments: [], associations: [], statusCounts: {}, validate: async () => {} }), statusCounts: async () => ({ pending: 7 }), adminOverview:async()=>overview,
     exportSubmitted: async () => ({ data: [], meta: { nextCursor: null, lastCursor: null, hasMore: false, upperBound: null } }) },
     records: { patientSummary: async () => ({ documents: 4, files: 5 }) }, financial: { summary: async () => ({ paymentCounts: { paid: 1 }, paidVolume: 123.45 }),
       patientSummary: async () => ({ paid: 8, validate: async () => {} }) } };
@@ -39,7 +40,7 @@ test('completion roles, scope, resource and independent admin marker gate compos
   for (const invalid of [{ ...admin, role: 'patient' as const }, { ...admin, scopes: ['profile.admin.read'] }, { ...admin, resource: randomUUID() }])
     await assert.rejects(f.reads.adminDashboard(invalid), e => e instanceof DomainError && e.status === 403);
   const result = await f.reads.adminDashboard(admin);
-  assert.deepEqual(result, { summary: { accounts: 5, patients: 2, doctors: 3, paidVolume: 123.45 }, statusCounts: { pending: 7 }, paymentCounts: { paid: 1 } });
+  assert.deepEqual(result, {summary:{accounts:5,patients:2,doctors:3},...overview});
   const revoked = sqlPool(() => []);
   await assert.rejects(createCompletionReads(createCompletionProfileOwner(revoked.pool), f.owners).adminDashboard(admin), e => e instanceof DomainError && e.status === 403);
   assert.ok(f.calls.every(call => !/FROM payments|JOIN payments/.test(call.sql)));
@@ -176,4 +177,12 @@ test('completion router requires verified locals, gates absent owner and returns
     const response = await fetch(url + '/internal/v1/completion/consents', { method: 'POST', body: '{"accepted":true}', headers: { 'Content-Type': 'application/json' } });
     assert.equal(response.status, 201); assert.equal((await response.json()).contractVersion, 1);
   } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
+});
+
+test('admin dashboard works with Payment absent and never calls a configured failing financial owner',async()=>{
+ const f=fixture(),admin=actor('admin','completion.admin.dashboard');
+ const without=createCompletionReads(f.profile,{appointments:f.owners.appointments});
+ assert.deepEqual(await without.adminDashboard(admin),{summary:{accounts:5,patients:2,doctors:3},...overview});
+ f.owners.financial!.summary=async()=>{throw Error('PAYMENT_MUST_NOT_RUN');};
+ assert.deepEqual(await f.reads.adminDashboard(admin),{summary:{accounts:5,patients:2,doctors:3},...overview});
 });
