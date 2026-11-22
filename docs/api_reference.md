@@ -13,3 +13,7 @@ See [face-to-face booking](f2f-booking.md) for booking-only acceptance, doctor o
 
 
 GET /api/admin/analytics/patterns adds the admin-only pattern snapshot read. The admin dashboard operational DTO removes financial fields and adds mode counts, month-to-date outcomes and joint doctor leaders. See [dashboard redesign](dashboard-redesign.md).
+
+## Native TRACE disputes
+
+See [the implemented contract and rollout ledger](integrations/trace/patient-feedback/VITAL_TRACE_Implementation_Changes_and_Verification.md). All native cross-system delivery uses Gateway; callbacks enter after JSON parsing and the existing Web mTLS/signed assertion boundary. `VITAL_TRACE_DISPUTES_ENABLED` defaults off. Complete resumes original payment/clinical checks; refund issuance is separate.

@@ -23,13 +23,15 @@ export function appointmentExpired(row: { scheduledAt: Date; proposedEndAt?: Dat
   return (row.slotEndsAt ?? row.proposedEndAt ?? row.scheduledAt).getTime() <= now;
 }
 export function effectiveCompletionDeadline(row:{scheduledAt:Date;proposedEndAt:Date|null;completionDeadlineAt:Date|null}) {
-  return row.completionDeadlineAt??new Date((row.proposedEndAt??row.scheduledAt).getTime()+86_400_000);
+  return row.completionDeadlineAt??new Date((row.proposedEndAt??row.scheduledAt).getTime()+172_800_000);
 }
 export const reasonInput = z.object({ expectedVersion: versionSchema, reason: z.string().trim().min(1).max(2000) }).strict();
 export const acknowledgementInput = z.object({ expectedVersion: versionSchema }).strict();
 export const dateBlockInput = z.object({ startDate: dateOnly, endDate: dateOnly, weekday: z.number().int().min(0).max(6).nullable().default(null),
   confirmedAppointmentCount: z.number().int().nonnegative().optional() }).strict().refine(x => x.endDate >= x.startDate);
 export interface AppointmentRow {
+  resolutionMethod?:string|null; disputeRescheduleAvailable?:boolean;
+  disputeAuthorizationId?:string|null; disputeDecisionId?:string|null;
   id: string; doctorId: string; patientId: string; patientAuthId: string; doctorAuthId: string;
   status: string; version: number; billingLineageId: string; associationVersion: number;
   scheduledAt: Date; proposedEndAt: Date | null; slotEndsAt: Date | null; scheduleSlotId: string | null;
@@ -38,6 +40,21 @@ export interface AppointmentRow {
   doctorConfirmedAt: Date | null; patientConfirmedAt: Date | null; completionDeadlineAt: Date | null;
   paperworkLockedAt: Date | null; completedAt: Date | null;
   proposalRole: string | null;
+  traceTicketId?: string | null;
+  traceTicketNumber?: string | null;
+  traceDisputeSeq?: number | null;
+  traceCaseId?: string | null;
+  reviewHold?: boolean;
+  disputeReason?: string | null;
+  disputedAt?: Date | null;
+  activeDecisionId?: string | null;
+  proposedResolutionTag?: string | null;
+  proposedExplanation?: string | null;
+  acknowledgmentDeadlineAt?: Date | null;
+  disputeStage?: number;
+  disputeRejectionReason?: string | null;
+  accountingRef?: string | null;
+  accountingRefundIssuedAt?: Date | null;
 }
 export interface AppointmentCommand { operationId: string; requestHash: string }
 export interface ParticipantReceipt {
