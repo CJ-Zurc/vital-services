@@ -1,3 +1,4 @@
+import {directoryGeneration} from '../profile/doctor-directory.js';
 import { patientDoctorRatings } from './patient-ratings.js';
 import { isDeepStrictEqual } from 'node:util';
 import { appointmentPayloadCrypto } from './access-crypto.js';
@@ -24,7 +25,7 @@ interface SlotBooking {id:string;status:string;consultationType:string;patientId
 interface SlotRow {id:string;version:number;slotDate:string;startTime:string;endTime:string;consultationType:string;isPublished:boolean;appointments:SlotBooking[];pendingCount?:number;bookedCount?:number}
 interface CalendarFields {slotDate:string|null;startTime:string|null;endTime:string|null}
 interface RelatedRow extends CalendarFields {id:string;status:string;sourceAppointmentId:string|null;followUpOfAppointmentId:string|null;scheduledAt:Date;proposedEndAt:Date|null;updatedAt:Date;cancellationReason:string|null;statusLogs:{note:string|null;changedAt:string}[]}
-interface ReadRow extends AppointmentRow,CalendarFields {specialty:string|null;followUpOfAppointmentId:string|null;cancellationReason:string|null;rejectionReason:string|null;createdAt:Date;updatedAt:Date;autoCompletedAt:Date|null;chiefComplaint:string|null;opqrst:unknown;sessionStartedAt:Date|null;sessionEndedAt:Date|null;ownRating:number|null;ratingSubmittedAt:Date|null;ratingPaymentEligible:boolean}
+interface ReadRow extends AppointmentRow,CalendarFields {specialty:string|null;followUpOfAppointmentId:string|null;cancellationReason:string|null;rejectionReason:string|null;createdAt:Date;updatedAt:Date;autoCompletedAt:Date|null;chiefComplaint:string|null;opqrst:unknown;sessionStartedAt:Date|null;sessionEndedAt:Date|null;ownRating:number|null;ratingVersion?:number;ratingSubmittedAt:Date|null;ratingPaymentEligible:boolean}
 interface DoctorRow {id:string;authId:string;specialty:string|null;bio:string|null;education:string|null;availabilityType:string|null;virtualFee:string|null;inPersonFee:string|null;starRating:number;hospitals:string[]}
 interface DateBlockRow {id:string;version:number;startDate:string;endDate:string;weekday:number|null}
 interface LogRow {id:string;fromStatus:string|null;toStatus:string;changedByRole:string|null;note:string|null;changedAt:Date}
@@ -123,6 +124,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
       ad."acknowledgmentDeadlineAt",
       ad."createdAt" AS "disputedAt",
       (SELECT f."starRating" FROM feedback f WHERE f."appointmentId"=a.id AND f."patientId"=a."patientId") AS "ownRating",
+      (SELECT f."ratingVersion" FROM feedback f WHERE f."appointmentId"=a.id AND f."patientId"=a."patientId") AS "ratingVersion",
       (SELECT f."submittedAt" FROM feedback f WHERE f."appointmentId"=a.id AND f."patientId"=a."patientId") AS "ratingSubmittedAt",
       EXISTS(SELECT 1 FROM appointment_payment_projections pp WHERE pp."appointmentId"=a.id AND pp.status='paid' AND NOT pp."reviewRequired"
         AND pp."billingLineageId"=a."billingLineageId" AND pp."associationVersion"=a."associationVersion") AND NOT EXISTS(SELECT 1 FROM saga_operations sg WHERE sg."billingLineageId"=a."billingLineageId"
@@ -180,7 +182,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
         patientRescheduleCount:row.patientRescheduleCount,doctorRescheduleCount:row.doctorRescheduleCount,cancellationReason:restricted?reviewText(row.cancellationReason,knownIdentities).text:row.cancellationReason,rejectionReason:restricted?reviewText(row.rejectionReason,knownIdentities).text:row.rejectionReason,
         ehrCaseId:restricted?null:row.ehrCaseId,scheduledAt:row.scheduledAt,proposedEndAt:row.proposedEndAt,createdAt:row.createdAt,updatedAt:row.updatedAt,
         doctorConfirmedAt:row.doctorConfirmedAt,patientConfirmedAt:row.patientConfirmedAt,completionDeadlineAt:row.completionDeadlineAt,autoCompletedAt:row.autoCompletedAt,paperworkLockedAt:row.paperworkLockedAt,
-        rating:actor.role==='patient'&&row.status==='completed'&&row.ownRating!=null&&row.ownRating>=1&&row.ownRating<=5?{rating:row.ownRating,submittedAt:row.ratingSubmittedAt}:null,
+        rating:actor.role==='patient'&&row.status==='completed'&&row.ownRating!=null&&row.ownRating>=1&&row.ownRating<=5?{rating:row.ownRating,ratingVersion:row.ratingVersion??1,submittedAt:row.ratingSubmittedAt}:null,
         canRate:actor.role==='patient'&&row.status==='completed'&&row.ownRating==null&&(row.consultationType==='in_person'||row.ratingPaymentEligible===true),
         disputesEnabled:actor.role==='patient'&&process.env.VITAL_TRACE_DISPUTES_ENABLED==='true',
         reviewHold:row.reviewHold??false,
@@ -230,17 +232,30 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
     availability:(actor:Actor,id:string,input:unknown={})=>availability(actor,id,input),
     async discovery(actor:Actor,input:unknown={}){
       requireScope(actor,'appointments.discovery.read',actor.authId);await membership(pool,actor,'patient');
-      const f=z.object({specialty:z.string().trim().max(160).optional(),consultationType:z.enum(['virtual','in_person']).optional(),availableDate:dateOnly.optional(),departments:z.string().max(120).optional().transform(v=>v?z.array(z.uuid()).max(3).parse(v.split(',')):[]),availabilityFirst:z.enum(['true','false']).optional(),...readPageInput}).strict().parse(input);
-      const revision=await discoveryRevision(),page=prepareReadPage(actor,'doctor-discovery',{specialty:f.specialty??null,consultationType:f.consultationType??null,availableDate:f.availableDate??null,departments:f.departments,availabilityFirst:f.availabilityFirst??'false'},f,clock);
-      const doctors=await readCollectionPage<{id:string;specialty:string|null;departmentExternalId:string|null}>(pool,page,{sql:`SELECT d."userId" AS id,d.specialty,d.department_external_id AS "departmentExternalId",$3::text AS "discoveryRevision" FROM vital_doctors d JOIN vital_users u ON u.id=d."userId" AND u."authId"=d."authId"
+      const f=z.object({doctorId:z.uuid().optional(),q:z.string().trim().max(160).optional(),specialty:z.string().trim().max(160).optional(),consultationType:z.enum(['virtual','in_person']).optional(),availableDate:dateOnly.optional(),departments:z.string().max(120).optional().transform(v=>v?z.array(z.uuid()).max(3).parse(v.split(',')):[]),availabilityFirst:z.enum(['true','false']).optional(),...readPageInput}).strict().parse(input);
+      const generation=await directoryGeneration(pool);
+      const revision=await discoveryRevision(),page=prepareReadPage(actor,'doctor-discovery',{doctorId:f.doctorId??null,q:f.q??null,specialty:f.specialty??null,consultationType:f.consultationType??null,availableDate:f.availableDate??null,departments:f.departments,availabilityFirst:f.availabilityFirst??'false'},f,clock);
+      const pattern=f.q?'%'+f.q.replace(/[\\%_]/g,'\\$&')+'%':null;
+      const doctors=await readCollectionPage<{id:string;specialty:string|null;departmentExternalId:string|null}>(pool,page,{sql:`SELECT d."userId" AS id,d.specialty,d.department_external_id AS "departmentExternalId",$3::text AS "discoveryRevision",$6::text AS "directoryGeneration",
+        CASE WHEN next_slot.at IS NULL THEN '1' ELSE '0' END AS "availabilityRank",next_slot.at::text AS "nextAt",COALESCE(array_position($4::text[],d.department_external_id),4)::text AS "departmentRank"
+        FROM vital_doctors d JOIN vital_users u ON u.id=d."userId" AND u."authId"=d."authId"
+        LEFT JOIN doctor_directory_entries de ON de."doctorId"=d."userId" AND de.generation=$6 AND de."authId"=d."authId"
+        LEFT JOIN LATERAL (SELECT (s."slotDate"+s."startTime") AS at FROM schedules s WHERE s."doctorId"=d."userId" AND s."isPublished"
+         AND ($2::text IS NULL OR s."consultationType"::text IN ($2,'both')) AND ($9::date IS NULL OR s."slotDate"=$9)
+         AND (s."slotDate"+s."endTime"+CASE WHEN s."endTime"<=s."startTime" THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AT TIME ZONE 'Asia/Manila'>$7
+         AND ($8::boolean=false OR ((s."slotDate"+s."startTime") AT TIME ZONE 'Asia/Manila'>$7 AND ($9::date IS NOT NULL OR s."slotDate"<=($7::timestamptz AT TIME ZONE 'Asia/Manila')::date+30)))
+         AND NOT EXISTS(SELECT 1 FROM appointments a WHERE a."scheduleSlotId"=s.id AND a.status IN ('approved','confirmed')) ORDER BY s."slotDate",s."startTime",s.id LIMIT 1) next_slot ON TRUE
         WHERE d."isDoctorOnboardingComplete"=true AND u.role='doctor' AND ($1::text IS NULL OR d.specialty ILIKE '%'||$1||'%')
-        AND ($2::text IS NULL OR d."availabilityType"::text IN ($2,'both')) AND (cardinality($4::text[])=0 OR d.department_external_id=ANY($4::text[]))`,values:[f.specialty??null,f.consultationType??null,revision,f.departments],
-        order:[{key:'specialty',direction:'ASC',cast:'text'},{key:'id',direction:'ASC',cast:'text'}]});
+        AND ($2::text IS NULL OR d."availabilityType"::text IN ($2,'both')) AND (cardinality($4::text[])=0 OR d.department_external_id=ANY($4::text[]))
+        AND ($10::text IS NULL OR d."userId"=$10) AND ($9::date IS NULL OR next_slot.at IS NOT NULL)
+        AND ($5::text IS NULL OR de.name ILIKE $5 OR d.specialty ILIKE $5 OR EXISTS(SELECT 1 FROM hospital_affiliations h WHERE h."doctorId"=d."userId" AND h."hospitalName" ILIKE $5))`,
+        values:[f.specialty??null,f.consultationType??null,revision,f.departments,pattern,generation,new Date(page.at),f.availabilityFirst==='true',f.availableDate??null,f.doctorId??null],
+        order:f.availabilityFirst==='true'?[{key:'availabilityRank',direction:'ASC',cast:'text'},{key:'nextAt',direction:'ASC',cast:'timestamp'},{key:'departmentRank',direction:'ASC',cast:'text'},{key:'id',direction:'ASC',cast:'text'}]:[{key:'specialty',direction:'ASC',cast:'text'},{key:'id',direction:'ASC',cast:'text'}]});
       const results=[];
       for(const d of doctors.items){
         const doctor=await doctorDetails(d.id);
         const summary=(await pool.query<{count:string;average:string|null}>(`SELECT COUNT(*)::text AS count,AVG(f."starRating")::text AS average FROM feedback f
-          JOIN appointments a ON a.id=f."appointmentId" WHERE COALESCE(f."doctorId",a."doctorId")=$1 AND a.status='completed' AND f."starRating" BETWEEN 1 AND 5`,[d.id])).rows[0]!;
+          JOIN appointments a ON a.id=f."appointmentId" WHERE COALESCE(f."doctorId",a."doctorId")=$1 AND a.status='completed' AND f."ratingVersion"=2 AND f."starRating" BETWEEN 1 AND 5`,[d.id])).rows[0]!;
         const earliest=(await pool.query<SlotRow>(`SELECT s.id,s.version,s."slotDate"::text,s."startTime"::text,s."endTime"::text,s."consultationType",s."isPublished",'[]'::jsonb AS appointments
           FROM schedules s WHERE s."doctorId"=$1 AND s."isPublished" AND ($2::date IS NULL OR s."slotDate"=$2::date)
           AND ($3::text IS NULL OR s."consultationType"::text IN ($3,'both')) AND ($5::boolean=false OR ((s."slotDate"+s."startTime") AT TIME ZONE 'Asia/Manila'>$4::timestamptz AND ($2::date IS NOT NULL OR s."slotDate"<=($4::timestamptz AT TIME ZONE 'Asia/Manila')::date+30)))
@@ -252,7 +267,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
         results.push({...doctor,...(f.departments.length?{departmentExternalId:d.departmentExternalId}:{}),starRating:summary.average===null?0:Number(summary.average),reviewCount:z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).parse(summary.count),
           earliestSlot:first?{id:first.id,date:first.slotDate,startTime:first.startTime,endTime:first.endTime,endsNextDay:first.endsNextDay,consultationType:first.consultationType,consultationTypeLabel:first.consultationTypeLabel}:null});
       }
-      if(await discoveryRevision()!==revision)throw new DomainError(409,'APPOINTMENT_READ_SNAPSHOT_CHANGED','Discovery changed during composition.');
+      if(await discoveryRevision()!==revision||await directoryGeneration(pool)!==generation)throw new DomainError(409,'APPOINTMENT_READ_SNAPSHOT_CHANGED','Discovery changed during composition.');
       await membership(pool,actor,'patient');return {doctors:results,meta:doctors.meta};
     },
     async schedules(actor:Actor,input:unknown={}){requireScope(actor,'appointments.schedule.read',actor.authId);const d=await membership(pool,actor,'doctor');
@@ -269,14 +284,7 @@ export function createAppointmentReads(pool:Pool, owners:AppointmentReadOwners={
       await membership(pool,actor,'doctor');return{...result,items:result.items.map(item=>({...item,patientId:null}))};},
   };
   async function discoveryRevision(){
-    return(await pool.query<{revision:string}>(`SELECT md5(jsonb_build_array(
-      (SELECT COALESCE(string_agg(row_to_json(d)::text,',' ORDER BY d."userId"),'') FROM vital_doctors d),
-      (SELECT COALESCE(string_agg(u.id||':'||u.role::text||':'||u.version::text,',' ORDER BY u.id),'') FROM vital_users u),
-      (SELECT COALESCE(string_agg(s.id||':'||s.version::text,',' ORDER BY s.id),'') FROM schedules s),
-      (SELECT COALESCE(string_agg(row_to_json(b)::text,',' ORDER BY b.id),'') FROM doctor_date_blocks b),
-      (SELECT COALESCE(string_agg(row_to_json(f)::text,',' ORDER BY f.id),'') FROM feedback f),
-      (SELECT COALESCE(string_agg(a.id||':'||a.version::text,',' ORDER BY a.id),'') FROM appointments a)
-      )::text) AS revision`)).rows[0]!.revision;
+    return(await pool.query<{revision:string}>(`SELECT md5(jsonb_build_array(generation,"requestedVersion","calendarVersion")::text) AS revision FROM doctor_directory_state WHERE id=1`)).rows[0]!.revision;
   }
   async function doctorDetails(id:string){
     const doctor=(await pool.query<DoctorRow>(`SELECT d."userId" AS id,d."authId",d.specialty,d.bio,d.education,d."availabilityType",d."virtualFee"::text,d."inPersonFee"::text,d."starRating",

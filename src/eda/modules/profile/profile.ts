@@ -268,7 +268,6 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
       // The workflow binds the assigned specialty without writing it back.
       delete data.specialty;
       requiredText(80).parse(input.prcLicense === undefined ? doctor?.prcLicense : input.prcLicense);
-      requiredText(5000).parse(input.bio ?? doctor?.bio);
       z.enum(["virtual", "in_person", "both"]).parse(input.availabilityType ?? doctor?.availabilityType);
       data.termsAgreedAt = new Date();
     }
@@ -400,14 +399,18 @@ export function createProfileModule(db: CorePrismaClient, commandGuard?: Profile
         return tx.vitalUser.findUniqueOrThrow({ where: { id: user.id }, select: userSelect });
       });
     },
-    async adminDoctors(actor: Actor) {
-      ownRole(actor, "admin");
-      requireScope(actor, "profile.admin.read", actor.authId);
-      return db.$transaction(async (tx) => {
-        await requireProfileAdmin(tx, actor);
-        const items = await tx.vitalDoctor.findMany({ orderBy: [{ isDoctorOnboardingComplete: "desc" }, { userId: "asc" }], select: doctorSelect });
-        return { items, total: items.length };
-      }, { isolationLevel: "Serializable" });
+    async adminDoctors(actor: Actor,raw:unknown={}) {
+      ownRole(actor, "admin");requireScope(actor, "profile.admin.read", actor.authId);
+      const {page,pageSize,search,doctorId}=z.object({doctorId:z.uuid().optional(),page:z.coerce.number().int().min(1).max(100000).default(1),pageSize:z.coerce.number().int().min(1).max(50).default(10),search:z.string().trim().max(160).default('')}).strict().parse(raw);
+      return db.$transaction(async tx=>{
+        await requireProfileAdmin(tx,actor);
+        const state=await tx.doctorDirectoryState.findUnique({where:{id:1}});
+        if(!state?.generation)throw new DomainError(503,'DOCTOR_DIRECTORY_INITIALIZING','The doctor directory is preparing. Please retry shortly.');
+        const where:Prisma.VitalDoctorWhereInput={...(doctorId?{userId:doctorId}:{}),user:{role:'doctor'},...(search?{OR:[{specialty:{contains:search,mode:'insensitive'}},{prcLicense:{contains:search,mode:'insensitive'}},{directoryEntries:{some:{generation:state.generation,OR:[{name:{contains:search,mode:'insensitive'}},{email:{contains:search,mode:'insensitive'}}]}}}]}:{})};
+        const total=await tx.vitalDoctor.count({where});
+        const items=await tx.vitalDoctor.findMany({where,skip:(page-1)*pageSize,take:pageSize,orderBy:[{isDoctorOnboardingComplete:'desc'},{userId:'asc'}],select:doctorSelect});
+        return{items,total,page,pageSize};
+      },{isolationLevel:'RepeatableRead'});
     },
     async adminPatients(actor: Actor, input: unknown) {
       ownRole(actor, "admin");

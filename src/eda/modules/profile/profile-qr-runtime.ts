@@ -12,6 +12,6 @@ export function profileQrRuntime(databases: { corePool: Pool }, environment: Nod
     publicEndpoint: required("VITAL_PROFILE_QR_STORAGE_ENDPOINT"), bucket: required("VITAL_PROFILE_QR_STORAGE_BUCKET"),
     region: required("VITAL_PROFILE_QR_STORAGE_REGION"), accessKeyId: required("VITAL_PROFILE_QR_STORAGE_ACCESS_KEY"),
     secretAccessKey: required("VITAL_PROFILE_QR_STORAGE_SECRET_KEY"), quarantinePrefix: "quarantine/profile-qr/", finalPrefix: "profile-qr/final/" });
-  const scanner = createFileInspector(() => ({ socketPath: required("VITAL_PROFILE_QR_CLAMAV_SOCKET"), daemonConfigPath: required("VITAL_PROFILE_QR_CLAMAV_CONFIG"), deadlineMs: 15000, maxDatabaseAgeMs: 86400000 }));
+  const scanner = createFileInspector(() => ({ socketPath: required("VITAL_PROFILE_QR_CLAMAV_SOCKET"), daemonConfigPath: required("VITAL_PROFILE_QR_CLAMAV_CONFIG"), deadlineMs: 15000, maxDatabaseAgeMs: 48 * 3600000 }));
   return createProfileQrModule(createProfileQrRepository(databases.corePool), storage, scanner);
 }

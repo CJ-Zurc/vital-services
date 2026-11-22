@@ -66,9 +66,10 @@ function databaseStub() {
     return project(row, query.select);
   }
   const delegates = Object.fromEntries((["vitalUser", "vitalPatient", "vitalDoctor", "vitalAdmin", "profileWorkflow", "consentRecord"] as const).map((table) => [table, {
+    async count(){return state[table].length;},
     async findFirst(query: Query) { return project(find(table, query), query.select); },
     async findMany(query: Query) { return state[table].filter(row => Object.entries(query.where ?? {}).every(([key, value]) =>
-      value && typeof value === 'object' && 'in' in value ? (value.in as unknown[]).includes(row[key]) : row[key] === value)).map((row) => project(row, query.select)); },
+      key==='user'?state.vitalUser.some(u=>u.id===row.userId&&u.role===(value as Row).role):value && typeof value === 'object' && 'in' in value ? (value.in as unknown[]).includes(row[key]) : row[key] === value)).map((row) => project(row, query.select)); },
     async findUnique(query: Query) { reads.push({ table, query }); return project(find(table, query), query.select); },
     async findUniqueOrThrow(query: Query) {
       const row = project(find(table, query), query.select);
@@ -88,7 +89,7 @@ function databaseStub() {
       return project(row, query.select);
     },
   }]));
-  const tx = {
+  const tx = {doctorDirectoryState:{findUnique:async()=>({generation:"fixture"})},
     ...delegates,
     commandOperation: {
       async findUnique(query: Query) {
@@ -856,4 +857,17 @@ test("profile: patient monitoring summaries are bounded minimal and require curr
   });
   stub.rows().vitalAdmin.length = 0;
   await assert.rejects(profile.adminPatients(adminActor(), [otherAuthId]), (error: unknown) => error instanceof ProfileError && error.status === 403);
+});
+
+
+test('doctor onboarding needs credentials and signature but no Bio or Education and preserves stored values',async()=>{
+ const stub=databaseStub(),profile=createProfileModule(stub.db,permit);const doctor=actor('doctor');
+ await profile.materialize(doctor);
+ await profile.patchDoctor(doctor,{bio:'Legacy profile',education:'Legacy school'});
+ const stored=stub.rows().vitalDoctor[0]!;stored.specialty='Cardiology';stored.departmentExternalId='trace-cardio';stored.departmentName='Cardiology';
+ const guarded=createProfileModule(stub.db,createProfileCommandGuard()),workflowId=randomUUID();
+ const input={specialty:'Cardiology',prcLicense:'1234567',availabilityType:'in_person',isDoctorOnboardingComplete:true,terms_accepted:true};
+ await guarded.workflows.prepare(doctor,{workflowId,kind:'doctor.onboarding',input},metadata());
+ const result=(await guarded.workflows.commit(doctor,workflowId,{input,receipt:receipt('doctor.onboarding',workflowId,input)},metadata())).data as Row;
+ assert.equal(result.isDoctorOnboardingComplete,true);assert.equal(result.bio,'Legacy profile');assert.equal(result.education,'Legacy school');
 });

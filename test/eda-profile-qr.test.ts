@@ -61,7 +61,7 @@ function fixture(inspector?: FileInspector) {
   };
   const scanner: RecordsScanner = { async scan(bytes) {
     events.push("scan"); if (failScanner) throw new ArtifactError("SCANNER_UNAVAILABLE", true);
-    return { engine: "clamav", engineVersion: "1.4.3", databaseVersion: 28000, databaseDate: new Date(now - (stale ? 172800000 : 1000)).toISOString(),
+    return { engine: "clamav", engineVersion: "1.4.3", databaseVersion: 28000, databaseDate: new Date(now - (stale ? 176400000 : 1000)).toISOString(),
       scannedAt: new Date(now).toISOString(), contentHash: forged ? "0".repeat(64) : sha256(bytes), byteLength: bytes.length, verdict: "clean" };
   } };
   const module = () => createProfileQrModule(repository, storage, inspector??scanner, () => now);

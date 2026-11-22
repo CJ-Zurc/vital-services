@@ -8,7 +8,7 @@ import { appendSqlOutbox } from '../../infrastructure/outbox.js';
 import { lockAppointment, membership, appointmentOwn } from './appointment.js';
 import type { AppointmentCommand, AppointmentOwners } from './appointment-contracts.js';
 
-const feedbackInput = z.object({ expectedVersion: z.number().int().nonnegative(), rating: z.number().int().min(1).max(5) }).strict();
+import {feedbackInput,overallRating} from './rating-criteria.js';
 
 
 export function createAppointmentExtras(pool: Pool, owners: Pick<AppointmentOwners, 'financial'>, clock = Date.now) {
@@ -27,6 +27,7 @@ export function createAppointmentExtras(pool: Pool, owners: Pick<AppointmentOwne
       z.string().regex(/^[a-f0-9]{64}$/).parse(meta.requestHash);
       requireScope(actor, 'appointments.feedback', appointmentId);
       if (actor.role !== 'patient') throw new DomainError(403, 'APPOINTMENT_PATIENT_REQUIRED', 'Patient authority required.');
+      if(raw&&typeof raw==='object'&&'rating' in raw)throw new DomainError(400,'APPOINTMENT_RATING_FORMAT_RETIRED','Refresh and complete all four rating criteria.');
       const input = feedbackInput.parse(raw);
       const hash = requestHash('APPOINTMENT-EXTRA', 'feedback', { appointmentId, input, transportHash: meta.requestHash });
       return transaction(async tx => {
@@ -41,7 +42,7 @@ export function createAppointmentExtras(pool: Pool, owners: Pick<AppointmentOwne
           if (existing.status !== 'completed') throw new DomainError(409, 'COMMAND_PENDING', 'Command needs recovery.');
           const feedback = (await tx.query('SELECT * FROM feedback WHERE id=$1 AND "appointmentId"=$2 AND "patientId"=$3', [existing.result?.feedbackId, appointmentId, member.userId])).rows[0];
           if (!feedback) throw new DomainError(409, 'APPOINTMENT_FEEDBACK_CHANGED', 'Feedback no longer available.');
-          return { feedback: { id: feedback.id, appointmentId: feedback.appointmentId, starRating: feedback.starRating, submittedAt: feedback.submittedAt } };
+          return { feedback: { id: feedback.id, appointmentId: feedback.appointmentId, starRating: feedback.starRating, ratingVersion:feedback.ratingVersion, submittedAt: feedback.submittedAt } };
         }
         if (row.version !== input.expectedVersion) throw new DomainError(409, 'APPOINTMENT_VERSION_CONFLICT', 'Appointment changed.');
         if (row.status !== 'completed') throw new DomainError(400, 'APPOINTMENT_FEEDBACK_INELIGIBLE', 'Review is not available.');
@@ -53,17 +54,17 @@ export function createAppointmentExtras(pool: Pool, owners: Pick<AppointmentOwne
         if (!projection || projection.status !== 'paid' || projection.reviewRequired || projection.billingLineageId !== row.billingLineageId || projection.associationVersion !== row.associationVersion) throw new DomainError(409, 'APPOINTMENT_PAYMENT_UNVERIFIED', 'Verified payment required.');
         await owners.financial.verifyPaid(row, projection);
         }
-        const feedback = (await tx.query(`INSERT INTO feedback (id,"appointmentId","patientId","doctorId","starRating",feedback,"submittedAt")
-          VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT ("appointmentId") DO NOTHING RETURNING *`,
-        [randomUUID(), row.id, member.userId, row.doctorId, input.rating, null, new Date(clock())])).rows[0];
+        const feedback = (await tx.query(`INSERT INTO feedback (id,"appointmentId","patientId","doctorId","starRating",feedback,"submittedAt","ratingVersion","friendlinessAttitude",professionalism,explanation,"careServices")
+          VALUES ($1,$2,$3,$4,$5,$6,$7,2,$8,$9,$10,$11) ON CONFLICT ("appointmentId") DO NOTHING RETURNING *`,
+        [randomUUID(), row.id, member.userId, row.doctorId, overallRating(input), null, new Date(clock()), input.friendlinessAttitude,input.professionalism,input.explanation,input.careServices])).rows[0];
         if (!feedback) throw new DomainError(409, 'APPOINTMENT_ALREADY_RATED', 'This consultation already has a rating.');
         // Calendar locking also serializes ratings written for the same doctor.
-        await tx.query('UPDATE vital_doctors SET "starRating"=(SELECT COALESCE(AVG(f."starRating"),0) FROM feedback f JOIN appointments a ON a.id=f."appointmentId" WHERE f."doctorId"=$1 AND a.status=\'completed\' AND f.\"starRating\" BETWEEN 1 AND 5) WHERE "userId"=$1', [row.doctorId]);
+        await tx.query('UPDATE vital_doctors SET "starRating"=(SELECT COALESCE(AVG(f."starRating"),0) FROM feedback f JOIN appointments a ON a.id=f."appointmentId" WHERE f."doctorId"=$1 AND a.status=\'completed\' AND f.\"ratingVersion\"=2 AND f.\"starRating\" BETWEEN 1 AND 5) WHERE "userId"=$1', [row.doctorId]);
         await tx.query(`INSERT INTO command_operations (id,"actorId","operationId",action,"resourceId","requestHash",status,result,"createdAt","updatedAt")
           VALUES ($1,$2,$3,'appointment.feedback',$4,$5,'completed',$6::jsonb,NOW(),NOW())`, [randomUUID(), actor.authId, meta.operationId, row.id, hash, JSON.stringify({ feedbackId: feedback.id })]);
         await appendSqlOutbox(tx, { eventType: 'vital.audit.requested', producer: 'appointment', aggregateId: row.id,
           aggregateVersion: row.version, correlationId: actor.correlationId, data: { auditType: 'vital.appointment.feedback_saved', actorAuthId: actor.authId, resourceId: row.id, resourceType: 'appointment' } });
-        return { feedback: { id: feedback.id, appointmentId: feedback.appointmentId, starRating: feedback.starRating, submittedAt: feedback.submittedAt } };
+        return { feedback: { id: feedback.id, appointmentId: feedback.appointmentId, starRating: feedback.starRating, ratingVersion:feedback.ratingVersion, submittedAt: feedback.submittedAt } };
       });
     },
     async intakes(actor: Actor, patientId: string, raw: unknown) {

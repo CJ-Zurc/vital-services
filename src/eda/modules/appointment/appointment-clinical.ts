@@ -85,9 +85,9 @@ export async function adminRatings(tx: PoolClient, actor: Actor, doctorAuthId: s
   const doctor = (await tx.query('SELECT "userId" FROM vital_doctors WHERE "authId"=$1', [doctorAuthId])).rows[0];
   if (!doctor) throw new DomainError(404, 'DOCTOR_NOT_FOUND', 'Doctor not found.');
   const source = `FROM feedback f JOIN appointments a ON a.id=f."appointmentId" JOIN vital_patients p ON p."userId"=f."patientId"
-    WHERE COALESCE(f."doctorId",a."doctorId")=$1 AND a.status='completed' AND f."starRating" BETWEEN 1 AND 5`;
+    WHERE COALESCE(f."doctorId",a."doctorId")=$1 AND a.status='completed' AND f."ratingVersion"=2 AND f."starRating" BETWEEN 1 AND 5`;
   const summary = (await tx.query(`SELECT COUNT(*)::int AS total,COALESCE(AVG(f."starRating"),0)::float AS average ${source}`, [doctor.userId])).rows[0];
-  const items = (await tx.query(`SELECT f.id,f."appointmentId",p."authId" AS "patientAuthId",f."starRating" AS rating,f."submittedAt" ${source}
+  const items = (await tx.query(`SELECT f.id,f."appointmentId",p."authId" AS "patientAuthId",f."starRating" AS rating,f."friendlinessAttitude",f.professionalism,f.explanation,f."careServices",f."submittedAt" ${source}
     ORDER BY f."submittedAt" DESC,f.id DESC LIMIT $2 OFFSET $3`, [doctor.userId, pageSize, (page - 1) * pageSize])).rows;
   return { items, total: summary.total, average: summary.average, page, pageSize };
 }

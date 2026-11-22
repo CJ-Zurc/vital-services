@@ -17,7 +17,7 @@ import { RecordsArtifactWorker, type ArtifactJob, type ArtifactPrepared, type Ar
 const now = Date.parse("2026-10-13T09:00:00Z");
 const base: PrescriptionPdf = { accessCode: "RX-12345678", patientName: "Patient Example", doctorName: "Doctor Example", doctorLicense: "12345", issuedAt: new Date("2026-10-12T17:00:00Z"), lines: [{ medicineName: "Amoxicillin", dosageAmount: "500", dosageUnit: "mg", frequency: "Twice daily", duration: "7 days", route: "Oral", quantity: "14", instructions: "After meals" }] };
 async function png(): Promise<Buffer> { return sharp({ create: { width: 8, height: 8, channels: 3, background: "#ff0000" } }).png().toBuffer(); }
-const clamConfig = { socketPath: "/run/clamav/clamd.sock", daemonConfigPath: "/etc/clamav/clamd.conf", deadlineMs: 1000, maxDatabaseAgeMs: 86400000 };
+const clamConfig = { socketPath: "/run/clamav/clamd.sock", daemonConfigPath: "/etc/clamav/clamd.conf", deadlineMs: 1000, maxDatabaseAgeMs: 48 * 3600000 };
 const policy = "LocalSocket /run/clamav/clamd.sock\nAlertExceedsMax yes\nAlertEncrypted yes\nScanPDF yes\nScanArchive yes\nStreamMaxLength 11M\nMaxFileSize 11M\nMaxScanSize 50M\n";
 function protocolFixture(verdict = "stream: OK", version = "ClamAV 1.4.3/28000/Tue Oct 13 08:00:00 2026") {
   const requests: Buffer[] = [];
@@ -110,6 +110,8 @@ test("Records ClamAV fails closed for malware, skips, limits, errors and malform
   }
 });
 test("Records scanner rejects stale/future/malformed databases and unsafe daemon policies", async () => {
+  const withinWindow = await protocolFixture("stream: OK", "ClamAV 1.4.3/28000/Mon Oct 12 03:00:00 2026").scanner.scan(Buffer.from("test"));
+  verifyFileInspection(withinWindow, { contentHash: sha256(Buffer.from("test")), byteLength: 4 }, now, "clamav");
   for (const version of ["ClamAV 1.4.3/28000/Sun Oct 11 08:00:00 2026", "ClamAV 1.4.3/28000/Wed Oct 14 08:00:00 2026", "malformed"]) await assert.rejects(protocolFixture("stream: OK", version).scanner.scan(Buffer.from("test")), /SCANNER_DATABASE_STALE|SCANNER_VERSION_INVALID/);
   for (const unsafe of [policy + "TCPSocket 3310\n", policy.replace("AlertExceedsMax yes", "AlertExceedsMax no"), policy.replace("AlertEncrypted yes", "AlertEncrypted no"), policy.replace("StreamMaxLength 11M", "StreamMaxLength 1M"), policy.replace("MaxScanSize 50M", "MaxScanSize 1M")]) assert.throws(() => verifyClamAvPolicy(unsafe, clamConfig), /SCANNER_POLICY_UNVERIFIED/);
   assert.throws(() => new ClamAvScanner({ ...clamConfig, socketPath: "tcp://localhost:3310" }), /SCANNER_CONFIG_INVALID/);

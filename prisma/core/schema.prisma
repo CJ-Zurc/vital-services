@@ -190,6 +190,7 @@ model VitalDoctor {
   inPersonFee      Decimal?          @db.Decimal(10, 2)
   starRating       Float             @default(0)
   changedAt        DateTime?
+  directoryEntries DoctorDirectoryEntry[]
   bio              String?
   education        String?
   isDoctorOnboardingComplete Boolean @default(false)
@@ -637,7 +638,12 @@ model Feedback {
   patientId     String
   patient       VitalPatient @relation(fields: [patientId], references: [userId])
   doctorId      String?
-  starRating    Int
+  starRating    Float
+  ratingVersion Int          @default(1)
+  friendlinessAttitude Int?
+  professionalism Int?
+  explanation Int?
+  careServices Int?
   feedback      String?
   submittedAt   DateTime     @default(now())
 
@@ -1365,4 +1371,25 @@ model TraceDisputeEvidence {
   status String @default("quarantined")
   createdAt DateTime @default(now()) @db.Timestamptz
   @@map("trace_dispute_evidence")
+}
+
+model DoctorDirectoryState {
+  id Int @id
+  generation String?
+  requestedVersion BigInt @default(1)
+  publishedVersion BigInt @default(0)
+  calendarVersion BigInt @default(0)
+  refreshedAt DateTime?
+  @@map("doctor_directory_state")
+}
+model DoctorDirectoryEntry {
+  generation String
+  doctorId String
+  doctor VitalDoctor @relation(fields:[doctorId], references:[userId], onDelete:Cascade)
+  authId String
+  name String
+  email String?
+  @@id([generation, doctorId])
+  @@index([doctorId], map:"doctor_directory_member")
+  @@map("doctor_directory_entries")
 }
