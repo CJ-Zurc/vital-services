@@ -24,9 +24,12 @@ export function createMessagingRouter(runtime?: MessagingRuntime) {
   router.patch('/appointments/:id/messages/read', handle((req, a, meta) => runtime!.messages.read(a, id(req.params.id), command(meta), req.body)));
   router.use('/admin', (_req, _res, next) => next(runtime?.holds ? undefined : new DomainError(503, 'MESSAGE_HOLDS_DISABLED', 'Message holds are disabled.')));
   router.get('/admin/conversations', handle(async (req, a) => {
-    const query = z.object({ before: z.string().optional(), appointmentId: z.uuid().optional(), conversationId: z.uuid().optional(), hold: z.enum(['all', 'held', 'unheld']).optional() }).strict().parse(req.query);
+    const query = z.object({ before: z.string().optional(), appointmentId: z.uuid().optional(), conversationId: z.uuid().optional(),
+      participantAuthId: z.uuid().optional(), startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
+      hold: z.enum(['all', 'held', 'unheld']).optional() }).strict().parse(req.query);
     const before = messageCursor(query.before);
     const page = await runtime!.holds!.list(a, { appointmentId: query.appointmentId, conversationId: query.conversationId,
+      participantAuthId: query.participantAuthId, startDate: query.startDate, endDate: query.endDate,
       holdState: query.hold ?? 'all', ...(before ? { before: { createdAt: before.at.toISOString(), id: before.id } } : {}) });
     return { ...page, nextCursor: page.nextCursor ? Buffer.from(JSON.stringify({ at: page.nextCursor.createdAt, id: page.nextCursor.id })).toString('base64url') : null };
   }));

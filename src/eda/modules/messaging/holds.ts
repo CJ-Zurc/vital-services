@@ -16,8 +16,10 @@ export const messageHoldPlaceInput = z.object({ expectedVersion: z.number().int(
 export const messageHoldReleaseInput = z.object({ expectedVersion: z.number().int().nonnegative() }).strict();
 export const messageHoldListQuery = z.object({ limit: z.number().int().min(1).max(50).default(50),
   appointmentId: z.uuid().optional(), conversationId: z.uuid().optional(),
+  participantAuthId: z.uuid().optional(), startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
   holdState: z.enum(["all", "held", "unheld"]).default("all"),
-  before: z.object({ createdAt: z.iso.datetime(), id: z.uuid() }).strict().optional() }).strict();
+  before: z.object({ createdAt: z.iso.datetime(), id: z.uuid() }).strict().optional() }).strict()
+  .refine(value => !value.startDate || !value.endDate || value.startDate <= value.endDate, { message: "Start date must not follow end date." });
 export type MessageHoldPlaceInput = z.infer<typeof messageHoldPlaceInput>;
 export type MessageHoldReleaseInput = z.infer<typeof messageHoldReleaseInput>;
 export type MessageHoldListQuery = z.input<typeof messageHoldListQuery>;
@@ -26,6 +28,7 @@ export interface MessageHoldMetadata {
   id: string; appointmentId: string; patientId: string; doctorId: string; status: string;
   scheduledAt: string; createdAt: string; lastMessageAt: string | null; legalHoldAt: string | null;
   reasonCode: typeof holdReasonCodes[number] | null; reference: string | null; version: number;
+  patientAuthId?: string | null; doctorAuthId?: string | null;
 }
 export interface MessageHoldPage { conversations: MessageHoldMetadata[]; nextCursor: { createdAt: string; id: string } | null }
 export interface MessagingConversation {
@@ -122,19 +125,27 @@ export function createMessageHolds(pool: Pool, environment: NodeJS.ProcessEnv = 
           holdId: string | null; protectedReference: Parameters<typeof crypto.decrypt>[0] | null;
         };
         const rows = (await tx.query<Row>(`SELECT c.id,c."appointmentId",a."patientId",a."doctorId",a.status,a."scheduledAt",
+          patient."authId" AS "patientAuthId",doctor."authId" AS "doctorAuthId",
           c."createdAt",c."legalHoldAt",c.version,h.id AS "holdId",h."reasonCode",h."protectedReference",
           (SELECT MAX(m."createdAt") FROM appointment_messages m WHERE m."conversationId"=c.id) AS "lastMessageAt"
           FROM message_conversations c JOIN appointments a ON a.id=c."appointmentId"
+          LEFT JOIN vital_users patient ON patient.id=a."patientId"
+          LEFT JOIN vital_users doctor ON doctor.id=a."doctorId"
           LEFT JOIN message_legal_holds h ON h."conversationId"=c.id AND h."releasedAt" IS NULL
           WHERE ($1::text IS NULL OR c."appointmentId"=$1) AND ($2::text IS NULL OR c.id=$2)
           AND ($3='all' OR ($3='held' AND c."legalHoldAt" IS NOT NULL) OR ($3='unheld' AND c."legalHoldAt" IS NULL))
           AND ($4::timestamp IS NULL OR (c."createdAt",c.id)<($4::timestamp,$5::text))
+          AND ($7::text IS NULL OR patient."authId"=$7 OR doctor."authId"=$7)
+          AND ($8::date IS NULL OR a."scheduledAt">=(($8::date::timestamp AT TIME ZONE 'Asia/Manila') AT TIME ZONE 'UTC'))
+          AND ($9::date IS NULL OR a."scheduledAt"<((($9::date+1)::timestamp AT TIME ZONE 'Asia/Manila') AT TIME ZONE 'UTC'))
           ORDER BY c."createdAt" DESC,c.id DESC LIMIT $6`,
         [input.appointmentId ?? null, input.conversationId ?? null, input.holdState,
-          input.before?.createdAt ?? null, input.before?.id ?? null, input.limit + 1])).rows;
+          input.before?.createdAt ?? null, input.before?.id ?? null, input.limit + 1,
+          input.participantAuthId ?? null, input.startDate ?? null, input.endDate ?? null])).rows;
         const page = rows.slice(0, input.limit);
         const conversations = page.map(row => ({ id: row.id, appointmentId: row.appointmentId, patientId: row.patientId,
-          doctorId: row.doctorId, status: row.status, scheduledAt: row.scheduledAt.toISOString(), createdAt: row.createdAt.toISOString(),
+          doctorId: row.doctorId, patientAuthId: row.patientAuthId ?? null, doctorAuthId: row.doctorAuthId ?? null,
+          status: row.status, scheduledAt: row.scheduledAt.toISOString(), createdAt: row.createdAt.toISOString(),
           lastMessageAt: row.lastMessageAt?.toISOString() ?? null, legalHoldAt: row.legalHoldAt?.toISOString() ?? null,
           reasonCode: row.reasonCode ?? null, reference: row.protectedReference && row.holdId
             ? crypto.decrypt({ ...row.protectedReference, id: row.holdId }, "messaging-hold:" + row.id) : null, version: row.version }));
