@@ -1,3 +1,4 @@
+import {randomUUID} from "node:crypto";
 import { episodeEvidence } from '../src/eda/modules/records/episode-evidence.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,11 +25,15 @@ function harness(){
  const now=Date.parse('2026-10-28T02:00:00Z');
  const row={id:'62d63529-bec8-4b76-b50f-f96670002fb6',patientId:'patient',doctorId:'doctor',patientAuthId:'33333333-3333-4333-8333-333333333333',doctorAuthId:'44444444-4444-4444-8444-444444444444',version:2,status:'confirmed',scheduledAt:new Date(now),proposedEndAt:new Date(now+3600000),slotEndsAt:null,completionDeadlineAt:null,doctorConfirmedAt:null,paperworkLockedAt:null,billingLineageId:'lineage',associationVersion:1} as AppointmentRow;
  const a={appointmentId:row.id,patientId:row.patientId,doctorId:row.doctorId,reference:'7K4M9Q2R',generation:1,attempts:0,consumedAt:null,grantedAt:null,grantUntil:null,revokedAt:null,digest:null as string|null,ciphertext:null as unknown};
- const secret=accessCrypto(env).issue(accessBinding(a as never));Object.assign(a,secret);const code=accessCrypto(env).retrieve(a.ciphertext,accessBinding(a as never));let committed=false;const attempts:string[]=[];
- const db={async query(sql:string,args:unknown[]=[]){if(sql.includes("kind='reissue'")&&sql.includes('COUNT(*)'))return{rows:[{n:attempts.filter(x=>x==='reissue').length}]};if(sql.includes('INSERT INTO appointment_access_attempts'))attempts.push(sql.includes("'reissue'")?'reissue':'redeem');if(sql.startsWith('UPDATE appointment_access SET \"patientId\"'))Object.assign(a,{patientId:args[1],doctorId:args[2],generation:args[3],digest:args[4],ciphertext:JSON.parse(String(args[5])),attempts:0});if(sql==='COMMIT')committed=true;if(sql.includes('SELECT * FROM appointment_access'))return{rows:[structuredClone(a)]};if(sql.includes('SELECT accepted'))return{rows:[{accepted:true}]};if(sql.includes('SELECT 1 FROM appointment_payment'))return{rows:[{}],rowCount:1};if(sql.includes('SELECT * FROM appointment_payment'))return{rows:[{paymentId:'payment',sourceVersion:1,status:'paid',reviewRequired:false,billingLineageId:'lineage',associationVersion:1}],rowCount:1};if(sql.includes('FILTER(WHERE'))return{rows:[{doctor:attempts.filter(x=>x==='redeem').length,booking:attempts.filter(x=>x==='redeem').length}]};if(sql.includes('attempts=attempts+1'))a.attempts++;if(sql.includes('"consumedAt"=NOW()'))Object.assign(a,{consumedAt:new Date(now),grantedAt:new Date(now)});return{rows:[],rowCount:1};},release(){}};
+ const secret=accessCrypto(env).issue(accessBinding(a as never));Object.assign(a,secret);const code=accessCrypto(env).retrieve(a.ciphertext,accessBinding(a as never));let committed=false;const attempts:string[]=[];const commands=new Map<string,unknown>();const pending={clinical:false};
+ const db={async query(sql:string,args:unknown[]=[]){if(sql.startsWith('SELECT action,'))return{rows:commands.has(String(args[1]))?[commands.get(String(args[1]))]:[],rowCount:commands.has(String(args[1]))?1:0};
+ if(sql.startsWith('INSERT INTO command_operations'))commands.set(String(args[2]),{action:'appointment.access.reissue',resourceId:args[3],requestHash:args[4],result:JSON.parse(String(args[5]))});
+ if(sql.startsWith('SELECT id FROM records_workflows'))return{rows:pending.clinical?[{id:'pending'}]:[],rowCount:pending.clinical?1:0};
+ if(sql.startsWith('UPDATE appointment_access SET "grantedAt"=NULL'))a.grantedAt=null;
+if(sql.includes("kind='reissue'")&&sql.includes('COUNT(*)'))return{rows:[{n:attempts.filter(x=>x==='reissue').length}]};if(sql.includes('INSERT INTO appointment_access_attempts'))attempts.push(sql.includes("'reissue'")?'reissue':'redeem');if(sql.startsWith('UPDATE appointment_access SET \"patientId\"'))Object.assign(a,{patientId:args[1],doctorId:args[2],consumedAt:null,generation:args[3],digest:args[4],ciphertext:JSON.parse(String(args[5])),attempts:0});if(sql==='COMMIT')committed=true;if(sql.includes('SELECT * FROM appointment_access'))return{rows:[structuredClone(a)]};if(sql.includes('SELECT accepted'))return{rows:[{accepted:true}]};if(sql.includes('SELECT 1 FROM appointment_payment'))return{rows:[{}],rowCount:1};if(sql.includes('SELECT * FROM appointment_payment'))return{rows:[{paymentId:'payment',sourceVersion:1,status:'paid',reviewRequired:false,billingLineageId:'lineage',associationVersion:1}],rowCount:1};if(sql.includes('FILTER(WHERE'))return{rows:[{doctor:attempts.filter(x=>x==='redeem').length,booking:attempts.filter(x=>x==='redeem').length}]};if(sql.includes('attempts=attempts+1'))a.attempts++;if(sql.includes('"consumedAt"=NOW()'))Object.assign(a,{consumedAt:new Date(now),grantedAt:new Date(now)});return{rows:[],rowCount:1};},release(){}};
  const pool={connect:async()=>db} as unknown as Pool;
  const actor={authId:row.doctorAuthId,correlationId:'55555555-5555-4555-8555-555555555555',role:'doctor',scopes:['appointments.access.redeem'],resource:row.id} as Actor;
- return{service:createAppointmentAccess(pool,async()=>row,env,()=>now,{verifyPaid:async()=>{}}),row,a,actor,code,committed:()=>committed};
+ return{service:createAppointmentAccess(pool,async()=>row,env,()=>now,{verifyPaid:async()=>{}}),row,a,actor,code,pending,committed:()=>committed};
 }
 test('incorrect attempts are committed and the fifth locks the generation',async()=>{const h=harness();const wrong=h.code==='000000'?'111111':'000000';for(let i=0;i<5;i++){const result=await h.service.execute(h.actor,h.row.id,'redeem',{code:wrong,generation:1,expectedVersion:2});assert.equal(result.state,i===4?'locked':'review_only');}assert.equal(h.a.attempts,5);assert.equal(h.committed(),true);await assert.rejects(()=>h.service.execute(h.actor,h.row.id,'redeem',{code:h.code,generation:1,expectedVersion:2}),{code:'APPOINTMENT_CODE_LOCKED'});});
 test('a successful redemption consumes the code and prevents replay',async()=>{const h=harness();assert.equal((await h.service.execute(h.actor,h.row.id,'redeem',{code:h.code,generation:1,expectedVersion:2})).state,'unlocked');await assert.rejects(()=>h.service.execute(h.actor,h.row.id,'redeem',{code:h.code,generation:1,expectedVersion:2}),{code:'APPOINTMENT_CODE_ALREADY_USED'});});
@@ -63,8 +68,26 @@ test('patient retrieval and reissue are private; old generations fail and reissu
  const h=harness(),patient={...h.actor,role:'patient' as const,authId:h.row.patientAuthId,scopes:['appointments.access.code']};
  assert.equal((await h.service.execute(patient,h.row.id,'code')).code,h.code);
  await assert.rejects(()=>h.service.execute({...h.actor,scopes:['appointments.access.code']},h.row.id,'code'),{code:'APPOINTMENT_ACCESS_PATIENT_REQUIRED'});
- for(let i=0;i<3;i++){const next=await h.service.execute({...patient,scopes:['appointments.access.reissue']},h.row.id,'reissue');assert.equal(next.generation,i+2);assert.match(String(next.code),/^\d{6}$/);}
- await assert.rejects(()=>h.service.execute({...patient,scopes:['appointments.access.reissue']},h.row.id,'reissue'),{code:'APPOINTMENT_CODE_REISSUE_LIMIT'});
+ for(let i=0;i<3;i++){const next=await h.service.execute({...patient,scopes:['appointments.access.reissue']},h.row.id,'reissue',{expectedVersion:h.row.version,generation:h.a.generation},{operationId:randomUUID(),requestHash:'a'.repeat(64)});assert.equal(next.generation,i+2);assert.match(String(next.code),/^\d{6}$/);}
+ await assert.rejects(()=>h.service.execute({...patient,scopes:['appointments.access.reissue']},h.row.id,'reissue',{expectedVersion:h.row.version,generation:h.a.generation},{operationId:randomUUID(),requestHash:'a'.repeat(64)}),{code:'APPOINTMENT_CODE_REISSUE_LIMIT'});
  await assert.rejects(()=>h.service.execute(h.actor,h.row.id,'redeem',{code:h.code,generation:1,expectedVersion:2}),{code:'APPOINTMENT_CODE_STALE'});
  const state=await h.service.execute({...h.actor,scopes:['appointments.access.read']},h.row.id,'read');assert.ok(!('code' in state));assert.ok(!JSON.stringify(state).includes('ciphertext'));assert.ok(!JSON.stringify(state).includes('digest'));
+});
+
+test("redeemed code replacement relocks the grant and matching retries cannot rotate it again",async()=>{
+ const h=harness();await h.service.execute(h.actor,h.row.id,"redeem",{code:h.code,generation:1,expectedVersion:2});
+ const patient={...h.actor,role:"patient" as const,authId:h.row.patientAuthId,scopes:["appointments.access.reissue"]},input={generation:1,expectedVersion:2},meta={operationId:randomUUID(),requestHash:"a".repeat(64)};
+ const replaced=await h.service.execute(patient,h.row.id,"reissue",input,meta);
+ assert.equal(h.a.grantedAt,null);assert.equal(h.a.consumedAt,null);assert.equal(replaced.generation,2);
+ assert.deepEqual(await h.service.execute(patient,h.row.id,"reissue",input,meta),replaced);
+ await assert.rejects(()=>h.service.execute(patient,h.row.id,"reissue",input,{...meta,requestHash:"b".repeat(64)}),{code:"COMMAND_REPLAY_CONFLICT"});
+ await assert.rejects(()=>h.service.execute(h.actor,h.row.id,"redeem",{code:h.code,generation:1,expectedVersion:2}),{code:"APPOINTMENT_CODE_STALE"});
+ const unlocked=await h.service.execute(h.actor,h.row.id,"redeem",{code:replaced.code,generation:2,expectedVersion:2});assert.equal(unlocked.state,"unlocked");
+});
+test("replacement rejects stale inputs, prepared clinical work, withdrawal and closed windows",async()=>{
+ const h=harness(),patient={...h.actor,role:"patient" as const,authId:h.row.patientAuthId,scopes:["appointments.access.reissue"]},meta={operationId:randomUUID(),requestHash:"a".repeat(64)};
+ await assert.rejects(()=>h.service.execute(patient,h.row.id,"reissue",{generation:2,expectedVersion:2},meta),{code:"APPOINTMENT_CODE_STALE"});
+ h.pending.clinical=true;await assert.rejects(()=>h.service.execute(patient,h.row.id,"reissue",{generation:1,expectedVersion:2},meta),{code:"RECORDS_APPOINTMENT_TRANSITION_PENDING"});
+ h.pending.clinical=false;Object.assign(h.a,{revokedAt:new Date()});
+ await assert.rejects(()=>h.service.execute(patient,h.row.id,"reissue",{generation:1,expectedVersion:2},meta),{code:"APPOINTMENT_ACCESS_INELIGIBLE"});
 });

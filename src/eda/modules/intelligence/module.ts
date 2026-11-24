@@ -1,3 +1,4 @@
+import {reportingBucket} from "./reporting-buckets.js";
 import { accessRow,knownReviewIdentities } from '../appointment/appointment-access.js';
 import { restrictedBrief } from '../appointment/appointment-summary.js';
 import { appointmentPayloadCrypto } from '../appointment/access-crypto.js';
@@ -45,19 +46,7 @@ export function createIntelligence(pool:Pool,environment:NodeJS.ProcessEnv=proce
         if(action==='admin/dashboard')return dashboard(pool,input);
         if(action==='admin/patterns')return patterns(pool);
         if(action==='admin/refresh'){await pool.query("UPDATE ai_jobs SET status='pending',attempts=0,\"availableAt\"=NOW() WHERE kind='submission' AND status='failed' AND \"resourceId\" IN (SELECT id::text FROM ai_submissions WHERE \"expiresAt\">NOW())");await pool.query("INSERT INTO ai_jobs(id,kind,\"resourceId\",\"sourceVersion\") VALUES($1,'clusters','refresh',$2) ON CONFLICT DO NOTHING",[randomUUID(),Math.floor(Date.now()/60000)]);return{status:'queued'};}
-        if(action==='admin/clusters/label'){
-          const v=z.object({versionId:z.string().max(96),clusterId:z.string().max(96),label:z.string().trim().min(1).max(600)}).strict().parse(raw);
-          // Labels describe features only; never accept disease/outbreak claims as cluster labels.
-          if(/diagnos|outbreak|epidemic|disease/i.test(v.label))fail(400,'AI_CLUSTER_LABEL_INVALID');
-          const version=(await pool.query(`SELECT payload FROM ai_cluster_versions WHERE id=$1 AND "expiresAt">NOW()
-            AND id=(SELECT id FROM ai_cluster_versions WHERE "expiresAt">NOW() ORDER BY "createdAt" DESC,id DESC LIMIT 1)`,[v.versionId])).rows[0];
-          if(!version)fail(409,'AI_CLUSTER_SNAPSHOT_CHANGED');
-          const cluster=version?.payload?.clusters?.find((c:{id:string})=>c.id===v.clusterId);if(!cluster)fail(404,'AI_CLUSTER_NOT_FOUND');if(v.label!==cluster.suggestedLabel)fail(400,'AI_CLUSTER_LABEL_INVALID');
-          const saved=await pool.query(`INSERT INTO ai_cluster_labels("versionId","clusterId",label,"reviewerAuthId")
-            SELECT $1,$2,$3,$4 WHERE $1=(SELECT id FROM ai_cluster_versions WHERE "expiresAt">NOW() ORDER BY "createdAt" DESC,id DESC LIMIT 1)
-            ON CONFLICT("versionId","clusterId") DO UPDATE SET label=EXCLUDED.label,"reviewerAuthId"=EXCLUDED."reviewerAuthId","reviewedAt"=NOW() RETURNING "clusterId"`,[v.versionId,v.clusterId,v.label,actor.authId]);
-          if(!saved.rowCount)fail(409,'AI_CLUSTER_SNAPSHOT_CHANGED');return{status:'reviewed'};
-        }
+        if(action==='admin/clusters/label')fail(410,'AI_CLUSTER_LABEL_RETIRED');
         fail(404,'AI_ACTION_UNKNOWN');
       }
       if(action==='brief/read'||action==='brief/approve'){
@@ -153,20 +142,30 @@ export async function dashboard(pool:Pool,input:Record<string,unknown>){
   for(const r of rows){const d=days.get(r.date)??{submissions:0,analyzed:0};d.submissions++;days.set(r.date,d);if(r.status==='failed')failed++;if(r.status!=='completed')continue;analyzed++;d.analyzed++;
     const list=r.features?.symptoms??[];if(!list.length)noPositive++;for(const c of list){const item=symptoms.get(c.id)??{id:c.id,name:c.name,count:0};item.count++;symptoms.set(c.id,item);}}
   for(let time=Date.parse(start+'T00:00:00Z');time<=Date.parse(end+'T00:00:00Z');time+=86400000){const date=new Date(time).toISOString().slice(0,10);if(!days.has(date))days.set(date,{submissions:0,analyzed:0});}
+  const interval=z.enum(['daily','weekly','monthly']).parse(input.interval??'daily');
+  const buckets=new Map<string,{submissions:number;analyzed:number}>();
+  for(const [date,value] of [...days].sort(([a],[b])=>a.localeCompare(b))){
+   const key=reportingBucket(date,interval,start),bucket=buckets.get(key)??{submissions:0,analyzed:0};
+   bucket.submissions+=value.submissions;bucket.analyzed+=value.analyzed;buckets.set(key,bucket);
+  }
   const denominator=safeCount(analyzed);
-  return{contractVersion:2,range:{from:start,to:end},population:'reported booking complaints; latest reviewed information',suppressionThreshold:5,
+  return{contractVersion:2,interval,series:[...buckets].map(([date,d])=>({date,submissions:safeCount(d.submissions),analyzed:safeCount(d.analyzed)})),range:{from:start,to:end},population:'reported booking complaints; latest reviewed information',suppressionThreshold:5,
     totals:{submissions:safeCount(rows.length),analyzed:denominator,failed:safeCount(failed),noPositive:safeCount(noPositive),coverage:denominator!==null&&safeCount(rows.length)!==null&&rows.length?analyzed/rows.length:null},
     symptoms:[...symptoms.values()].sort((a,b)=>b.count-a.count||a.id.localeCompare(b.id)).map(c=>({...c,count:safeCount(c.count),percentage:safeCount(c.count)!==null&&denominator?c.count/denominator:null})),
     daily:[...days].sort(([a],[b])=>a.localeCompare(b)).map(([date,d])=>({date,submissions:safeCount(d.submissions),analyzed:safeCount(d.analyzed)})),
     clusters:null};
 }
 
+export function patternSnapshot(cluster:{id:string;createdAt:Date|string;payload:{cohorts:{cohort:string;status:string;count:number;noise:number}[];clusters:{id:string;count:number;suggestedLabel:string}[]}}){
+ const cohorts=cluster.payload.cohorts.map(c=>{
+  const groups=cluster.payload.clusters.filter(g=>g.id.startsWith(c.cohort+'-'));
+  const grouped=groups.reduce((n,g)=>n+g.count,0),hiddenGroup=groups.some(g=>safeCount(g.count)===null);
+  return{cohort:c.cohort,status:c.status,count:safeCount(c.noise)===null||hiddenGroup?null:safeCount(c.count),noise:safeCount(c.noise),
+   groups:groups.sort((a,b)=>b.count-a.count||a.id.localeCompare(b.id)).map(g=>({id:g.id,label:safeCount(g.count)===null?null:g.suggestedLabel,count:safeCount(g.count),percentage:hiddenGroup||!grouped?null:g.count/grouped}))};
+ });
+ return{version:cluster.id,generatedAt:new Date(cluster.createdAt).toISOString(),windowDays:90,capPerCohort:2000,cohorts};
+}
 export async function patterns(pool:Pool){
-  const cluster=(await pool.query('SELECT id,payload,"createdAt" FROM ai_cluster_versions WHERE "expiresAt">NOW() ORDER BY "createdAt" DESC,id DESC LIMIT 1')).rows[0];
-  if(!cluster)return{contractVersion:1,snapshot:null};
-  const labels=(await pool.query('SELECT "clusterId",label FROM ai_cluster_labels WHERE "versionId"=$1',[cluster.id])).rows;
-  return{contractVersion:1,snapshot:{version:cluster.id,generatedAt:new Date(cluster.createdAt).toISOString(),windowDays:90,capPerCohort:2000,
-    cohorts:cluster.payload.cohorts.map((c:{cohort:string;status:string;count:number;noise:number})=>({cohort:c.cohort,status:c.status,count:safeCount(c.count),noise:safeCount(c.noise)})),
-    clusters:cluster.payload.clusters.map((c:{id:string;count:number;suggestedLabel:string})=>({id:c.id,count:safeCount(c.count),suggestedLabel:c.count>=5?c.suggestedLabel:null,
-      label:c.count>=5?labels.find(l=>l.clusterId===c.id)?.label??null:null,reviewed:labels.some(l=>l.clusterId===c.id)}))}};
+ const cluster=(await pool.query('SELECT id,payload,"createdAt" FROM ai_cluster_versions WHERE "expiresAt">NOW() ORDER BY "createdAt" DESC,id DESC LIMIT 1')).rows[0];
+ return{contractVersion:2,snapshot:cluster?patternSnapshot(cluster):null};
 }

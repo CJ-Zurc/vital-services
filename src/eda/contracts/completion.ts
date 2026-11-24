@@ -1,3 +1,4 @@
+import type {ReportRange,CollectionsReport,SatisfactionReport,SpecialtyReport} from "./admin-reporting.js";
 import { z } from 'zod';
 import { DomainError, requireScope, type Actor } from './actor.js';
 import type { AppointmentReadSnapshot } from '../modules/appointment/appointment-reads.js';
@@ -21,6 +22,8 @@ export interface AdminAppointmentOverview {
 }
 
 export interface CompletionAppointmentOwner {
+  satisfaction?(actor:Actor,range:ReportRange):Promise<SatisfactionReport>;
+  specialties?(actor:Actor,range:ReportRange):Promise<SpecialtyReport>;
   adminOverview(actor: Actor): Promise<AdminAppointmentOverview>;
   patient(actor: Actor): Promise<{ patientId: string; appointments: AppointmentReadSnapshot[]; statusCounts: Record<string, number>;
     associations: CompletionAssociation[]; validate(): Promise<void> }>;
@@ -36,6 +39,7 @@ export interface CompletionAssociation { id: string; billingLineageId: string; a
   paymentVersion?: number | null }
 
 export interface CompletionFinancialOwner {
+  collections?(actor:Actor,range:ReportRange):Promise<CollectionsReport>;
   summary(actor: Actor): Promise<{ paymentCounts: Record<string, number>; paidVolume: number }>;
   patientSummary(actor: Actor, patientId: string, associations: CompletionAssociation[]): Promise<{ paid: number; validate(): Promise<void> }>;
 }

@@ -1,3 +1,4 @@
+import {createCollectionsRead} from "./payment-collections.js";
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import { DomainError, type Actor } from '../../contracts/actor.js';
@@ -15,6 +16,7 @@ interface FinancialAssociation { id: string; version: number; appointmentId: str
 
 export function createPaymentCompletionOwner(integrationsPool: Pool, authority?: CompletionPaymentAuthority): CompletionFinancialOwner {
   return {
+    collections:createCollectionsRead(integrationsPool,authority),
     async summary(actor) {
       completionRole(actor, 'admin', 'completion.admin.dashboard');
       if (!authority) completionUnavailable('PAYMENT_AUTHORITY');

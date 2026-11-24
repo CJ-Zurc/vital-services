@@ -57,7 +57,7 @@ export async function appointmentAccessState(db:DB,row:AppointmentRow,now=Date.n
 export function createAppointmentAccess(pool:Pool,read:(db:DB,id:string,lock?:boolean)=>Promise<AppointmentRow>,environment:NodeJS.ProcessEnv=process.env,clock=Date.now,financial?:AppointmentOwners['financial']){
  return{async execute(actor:Actor,id:string,action:'read'|'code'|'reissue'|'withdraw'|'redeem',raw:unknown={},meta?:AppointmentCommand){
   z.uuid().parse(id);requireScope(actor,'appointments.access.'+action,id);
-  const input=action==='redeem'?z.object({expectedVersion:z.number().int().nonnegative(),generation:z.number().int().positive(),code:z.string().regex(/^\d{6}$/)}).strict().parse(raw):z.object({}).strict().parse(raw);
+  const input=action==='reissue'?z.object({expectedVersion:z.number().int().nonnegative(),generation:z.number().int().positive()}).strict().parse(raw):action==='redeem'?z.object({expectedVersion:z.number().int().nonnegative(),generation:z.number().int().positive(),code:z.string().regex(/^\d{6}$/)}).strict().parse(raw):z.object({}).strict().parse(raw);
   const db=await pool.connect();try{await db.query('BEGIN');
    const row=await read(db,id,true);
    if(row.consultationType==="in_person")deny(409,"IN_PERSON_BOOKING_ONLY");
@@ -80,16 +80,29 @@ export function createAppointmentAccess(pool:Pool,read:(db:DB,id:string,lock?:bo
    if(!consent?.accepted||a.revokedAt||!['approved','confirmed'].includes(row.status))deny(403,'APPOINTMENT_ACCESS_INELIGIBLE');
    if(action==='code'||action==='reissue'){
     if(actor.role!=='patient')deny(403,'APPOINTMENT_ACCESS_PATIENT_REQUIRED');
-    if(a.consumedAt||a.grantedAt||effectiveCompletionDeadline(row).getTime()<=clock())deny(409,'APPOINTMENT_ACCESS_ALREADY_USED');
+    if(action==='code'&&(a.consumedAt||a.grantedAt)||effectiveCompletionDeadline(row).getTime()<=clock())deny(409,'APPOINTMENT_ACCESS_ALREADY_USED');
     let replay=false;
     if(action==='reissue'&&meta){
-      const old=(await db.query('SELECT action,"resourceId",result FROM command_operations WHERE "actorId"=$1 AND "operationId"=$2',[actor.authId,meta.operationId])).rows[0];
-      if(old){if(old.action!=='appointment.access.reissue'||old.resourceId!==id)deny(409,'COMMAND_REPLAY_CONFLICT');if(old.result?.generation!==a.generation)deny(409,'APPOINTMENT_CODE_STALE');replay=true;}
+      const old=(await db.query('SELECT action,"resourceId","requestHash",result FROM command_operations WHERE "actorId"=$1 AND "operationId"=$2',[actor.authId,meta.operationId])).rows[0];
+      if(old){if(old.action!=='appointment.access.reissue'||old.resourceId!==id||old.requestHash!==meta.requestHash)deny(409,'COMMAND_REPLAY_CONFLICT');if(old.result?.generation!==a.generation)deny(409,'APPOINTMENT_CODE_STALE');replay=true;}
     }
     if(action==='reissue'&&!replay){
+     if(!meta)deny(400,'APPOINTMENT_CODE_OPERATION_REQUIRED');
+     z.uuid().parse(meta.operationId);z.string().regex(/^[a-f0-9]{64}$/).parse(meta.requestHash);
+     if(!('expectedVersion' in input)||input.expectedVersion!==row.version||!('generation' in input)||input.generation!==a.generation)deny(409,'APPOINTMENT_CODE_STALE');
+     if(row.paperworkLockedAt||row.doctorConfirmedAt||row.reviewHold)deny(409,'APPOINTMENT_ACCESS_INELIGIBLE');
+     await assertRecordsIdle(db,row);
+     if((await db.query(`SELECT id FROM records_workflows WHERE "appointmentId"=$1 AND state='prepared' AND "expiresAt">NOW() LIMIT 1`,[id])).rowCount)deny(409,'RECORDS_APPOINTMENT_TRANSITION_PENDING');
+     if(a.grantedAt||a.consumedAt){
+      const end=row.slotEndsAt??row.proposedEndAt??row.scheduledAt;
+      if(clock()<row.scheduledAt.getTime()-1800000||clock()>end.getTime()+7200000||a.grantUntil&&a.grantUntil.getTime()<=clock())deny(403,'APPOINTMENT_CODE_OUTSIDE_WINDOW');
+      await currentPaid(db,row,financial);
+     }
+
      const count=(await db.query(`SELECT COUNT(*)::int AS n FROM appointment_access_attempts WHERE "appointmentId"=$1 AND kind='reissue' AND "createdAt">NOW()-INTERVAL '1 hour'`,[id])).rows[0].n;
      if(count>=3)deny(429,'APPOINTMENT_CODE_REISSUE_LIMIT');
      await db.query(`INSERT INTO appointment_access_attempts("appointmentId","doctorId",kind) VALUES($1,$2,'reissue')`,[id,row.doctorId]);await issueAppointmentCode(db,row,environment);
+     await db.query('UPDATE appointment_access SET "grantedAt"=NULL WHERE "appointmentId"=$1',[id]);
     }
     if(action==='reissue'&&!replay)await changed('code_reissued');
     const current=(await accessRow(db,id))!;
@@ -103,6 +116,7 @@ export function createAppointmentAccess(pool:Pool,read:(db:DB,id:string,lock?:bo
    await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['appointment-access-doctor:'+row.doctorId]);
    if(input.expectedVersion!==row.version||input.generation!==a.generation)deny(409,'APPOINTMENT_CODE_STALE');
    if(a.consumedAt)deny(409,'APPOINTMENT_CODE_ALREADY_USED');
+   if(a.grantUntil&&a.grantUntil.getTime()<=clock())deny(403,'APPOINTMENT_CODE_OUTSIDE_WINDOW');
    if(a.attempts>=5)deny(423,'APPOINTMENT_CODE_LOCKED');
    const end=row.slotEndsAt??row.proposedEndAt??row.scheduledAt;
    if(clock()<row.scheduledAt.getTime()-1800000||clock()>end.getTime()+7200000)deny(403,'APPOINTMENT_CODE_OUTSIDE_WINDOW');
@@ -117,7 +131,7 @@ export function createAppointmentAccess(pool:Pool,read:(db:DB,id:string,lock?:bo
     if(a.attempts+1>=5)await securityIntent(db,actor,'code_locked',id);
     await db.query('UPDATE appointment_access SET attempts=attempts+1 WHERE "appointmentId"=$1',[id]);await db.query('COMMIT');return{state:a.attempts+1>=5?'locked':'review_only',error:'APPOINTMENT_CODE_INCORRECT',attemptsRemaining:4-a.attempts};
    }
-   await db.query('UPDATE appointment_access SET "consumedAt"=NOW(),"grantedAt"=NOW(),"grantUntil"=$2,digest=NULL,ciphertext=NULL WHERE "appointmentId"=$1',[id,effectiveCompletionDeadline(row)]);
+   await db.query('UPDATE appointment_access SET "consumedAt"=NOW(),"grantedAt"=NOW(),"grantUntil"=$2,digest=NULL,ciphertext=NULL WHERE "appointmentId"=$1',[id,a.grantUntil&&a.grantUntil.getTime()<effectiveCompletionDeadline(row).getTime()?a.grantUntil:effectiveCompletionDeadline(row)]);
    await changed('redeemed');await db.query('COMMIT');return{state:'unlocked'};
   }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
  }};
