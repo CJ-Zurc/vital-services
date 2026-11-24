@@ -1,5 +1,8 @@
 # Historical VITAL–TRACE Google Forms implementation ledger
 
+> [!NOTE]
+> **Superceded / Historical**: This document records the legacy Google Forms bridge. For the active, in-system native dispute resolution architecture, refer to [VITAL_TRACE_Implementation_Changes_and_Verification.md](patient-feedback/VITAL_TRACE_Implementation_Changes_and_Verification.md). Native in-system dispute resolution communicates with TRACE via `/api/telemedicine/*` and `/api/integrations/v1/vital-disputes/*`.
+
 Historical as of 20 November 2026. The [current VITAL–TRACE revision for TRACE review](patient-feedback/VITAL_Feedback_on_TRACE_Integration_Plan.md) proposes patient reporting inside VITAL, TRACE Admin approval, Gateway transport, patient-visible progress, and creator acknowledgment. Use that proposal for the next contract discussion.
 
 The sections below preserve the earlier Google Forms implementation and its original verification claims. Their form configuration, direct-service transport, sync-watermark rules, and enablement steps describe the previous design. The replacement is awaiting agreement and implementation. Keep `VITAL_TRACE_DISPUTES_ENABLED=false` until the replacement flow and paired acceptance checks are ready.
