@@ -6,13 +6,19 @@ Updated 22 November 2026. Source implementation on isolated feature worktrees; d
 
 | Repository | Branch | Starting remote tip | Delivered Revision |
 |---|---|---|---|
-| VITAL Services | `feat/trace-in-system-implementation` | `ac69f18` | `ac69f18` (clean) |
-| VITAL Web | `feat/trace-in-system-implementation` | `81c0585` | `81c0585` (clean) |
+| VITAL Services | `feat/trace-in-system-implementation` | `ac69f18` | `abf03b6` (trace integration doc sync) |
+| VITAL Web | `feat/trace-in-system-implementation` | `81c0585` | `8118e80` (dispute follow-up and links) |
 | TRACE Backend | `feat/vital-dispute-in-trace-implementation` | `fea6ae2` | `5186957` (unified telemedicine architecture) |
 | TRACE Frontend | `feat/vital-dispute-in-trace-implementation` | `0fa0ff4` | `324a5ab` (remodeled telemedicine hub and queue) |
-| BGH API Gateway | `dev-remo` | `2fb33e4` | `246735c` (cross-system telemedicine RBAC) |
+| BGH API Gateway | `dev-remo` | `2fb33e4` | `ccc8915` (cross-system telemedicine RBAC) |
 
-Origin was fetched before setup. Existing implementation branches were preserved without rebasing. Gateway's cleanup checkout was not changed. Publication is limited to the feature branches listed above; see their commit history for the delivered revision. Deployment remains disabled pending the checks below.
+Origin was fetched before setup. Existing implementation branches were preserved without rebasing. Gateway's changes were delivered directly on `dev-remo`. Publication is limited to the feature branches listed above; see their commit history for the delivered revision. Deployment remains disabled pending the checks below.
+
+## Role & Boundary Separation
+
+- **VITAL Administrators:** Retain read-only tracking, inquiry, and monitoring oversight from `/admin/dashboard/disputes` with authorized cross-system deep-links into TRACE. VITAL Admin session tokens are permitted Gateway transit to `/trace/api/telemedicine/*` for inspection, but do not possess local TRACE staff operational identities.
+- **TRACE Administrators:** Retain exclusive operational adjudication authority. Only verified TRACE staff/administrators can triage disputes, approve cases into operational work tickets, reject cases with mandatory patient-visible reasons, assign categories/departments, and confirm accounting refunds.
+- **Clinical Taxonomy Access:** `/trace/api/departments` and `/trace/api/categories` are strictly preserved and accessible to all authenticated VITAL accounts (`"vital" in user_systems`) for doctor discovery and appointment booking.
 
 ## Changes by owner
 
