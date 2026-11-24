@@ -4,12 +4,13 @@ Updated 22 November 2026. Source implementation on isolated feature worktrees; d
 
 ## Branches and baseline
 
-| Repository | Branch | Starting remote tip |
-|---|---|---|
-| VITAL Services | `feat/trace-in-system-implementation` | `ac69f18` |
-| VITAL Web | `feat/trace-in-system-implementation` | `81c0585` |
-| TRACE Backend | `feat/vital-dispute-in-trace-implementation` | `fea6ae2` |
-| BGH API Gateway | `feat/gateway/vital-dispute-integration` | Latest fetched `origin/development`, `2fb33e4` |
+| Repository | Branch | Starting remote tip | Delivered Revision |
+|---|---|---|---|
+| VITAL Services | `feat/trace-in-system-implementation` | `ac69f18` | `ac69f18` (clean) |
+| VITAL Web | `feat/trace-in-system-implementation` | `81c0585` | `81c0585` (clean) |
+| TRACE Backend | `feat/vital-dispute-in-trace-implementation` | `fea6ae2` | `5186957` (unified telemedicine architecture) |
+| TRACE Frontend | `feat/vital-dispute-in-trace-implementation` | `0fa0ff4` | `324a5ab` (remodeled telemedicine hub and queue) |
+| BGH API Gateway | `dev-remo` | `2fb33e4` | `246735c` (cross-system telemedicine RBAC) |
 
 Origin was fetched before setup. Existing implementation branches were preserved without rebasing. Gateway's cleanup checkout was not changed. Publication is limited to the feature branches listed above; see their commit history for the delivered revision. Deployment remains disabled pending the checks below.
 
@@ -23,7 +24,7 @@ External refund receipts are reconciled by Payment with a stable case operation,
 
 **Web:** Replaces synchronous best-effort TRACE calls with authenticated owner BFF commands and typed decoding. Native routes are included in actual proxy/session policy. Mutations enforce same-origin requests. Patient inputs cannot supply a foreign case, reporter or staff category. The tracker polls owner state and distinguishes delivery retry, pending patient response, Acknowledged and Automatically Resolved. Rejection displays the Admin reason and BGH contact modal. Optional report evidence uses new, report-owned uploads. An Admin follow-up page is available at `/admin/dashboard/disputes`. Web has no operational database, storage or provider credentials.
 
-**TRACE Backend:** Provides versioned native intake for patients without TRACE staff accounts, preserving distinct Auth and VITAL identifiers. Approval creates one operational ticket; the approving TRACE Admin is the initial assignee. The case retains the effective patient creator without inventing a TRACE-local user. Rejection records an action before ticket creation. Staff updates move approval to investigation; only Admin can finalize a proposal. Patient rejection records an Auth-attributed ticket timeline action, reopens the ticket, clears completion/proposal/deadline and returns Stage 3. Ordinary ticket resolution/reopening cannot bypass the native cycle. Native automatic resolution uses VITAL timeout confirmation and commits its state and outbox together. Accounting and doctor restrictions apply to dispute/ticket lists, detail, comments, attachments and history exports. Accounting has a separate financial projection.
+**TRACE Backend:** Provides versioned native intake for patients without TRACE staff accounts, preserving distinct Auth and VITAL identifiers. Unified architecture is centralized under `app/modules/telemedicine/` (`router.py`, `service.py`, `repository.py`, `schemas.py`) mounted at `/api/telemedicine` (with tags `["Telemedicine"]`), while `app/modules/patient_form/` is retained as a zero-downtime backward-compatibility shim layer. Approval creates one operational ticket; the approving TRACE Admin is the initial assignee. The case retains the effective patient creator without inventing a TRACE-local user. Rejection records an action before ticket creation. Staff updates move approval to investigation; only Admin can finalize a proposal. Patient rejection records an Auth-attributed ticket timeline action, reopens the ticket, clears completion/proposal/deadline and returns Stage 3. Ordinary ticket resolution/reopening cannot bypass the native cycle. Native automatic resolution uses VITAL timeout confirmation and commits its state and outbox together. Accounting and doctor restrictions apply to dispute/ticket lists, detail, comments, attachments and history exports. Accounting has a separate financial projection.
 
 **Gateway:** Exact POST integration allowlists, separate directional service keys, bounded bodies/responses and fresh verified downstream service context. Caller cookies, Authorization and identity/service headers are not forwarded. Ordinary TRACE staff authentication remains unchanged. TRACE callbacks target Web, then use the existing private Web certificate and signed assertion to Services.
 
@@ -68,7 +69,7 @@ All native requests have `contract_version: 1`; IDs are UUIDs and timestamps are
 
 Service callers send only their directional `X-Dispute-Service-Key`. Gateway validates it against the exact route direction and injects `X-Gateway-Secret`, `X-Gateway-Dispute-Service` and the target-specific `X-Gateway-Dispute-Key`. Downstream adapters verify both trust keys and the service identity. Do not reuse patient sessions or inject staff impersonation. Web delegates as a dedicated configured service actor using its existing mTLS certificate and asymmetric request-bound assertion. The prior direct native TRACE-to-Services transport is retired. The private `POST /internal/v1/appointments/appeals/refund-confirmed` alias uses the same signed assertion and native event schema; it is not a public/shared-key bypass.
 
-TRACE staff continue to use existing authenticated `/api/disputes/{case_id}/approve`, `/reject`, `/resolve-tag` and `/confirm-refund` routes through Gateway. New staff reads are `/api/disputes/{case_id}/actions`, `/api/disputes/{case_id}/evidence`, and Accounting `/api/disputes/financial`. The latter exposes `can_confirm_refund` after approval and confirmed resolution. Staff can record first human acknowledgment at `/api/disputes/{case_id}/acknowledge-intake`; approval/rejection also records it. The one-business-day target starts at trusted VITAL submission receipt and includes delivery and triage waiting. Native patient actions use VITAL BFF, not the legacy TRACE acknowledgment endpoint.
+TRACE staff access unified dispute and patient form workflows under `/api/telemedicine/*` (e.g. `/api/telemedicine/disputes`, `/api/telemedicine/disputes/{case_id}/approve`, `/reject`, `/resolve-tag`, `/confirm-refund`, `/actions`, `/evidence`, and `/financial`), while legacy `/api/disputes/*` and `/api/patient-forms/*` paths are fully retained through backward-compatibility router shims. Accounting `/api/telemedicine/disputes/financial` exposes `can_confirm_refund` after approval and confirmed resolution. Staff can record first human acknowledgment at `/api/telemedicine/disputes/{case_id}/acknowledge-intake`; approval/rejection also records it. The one-business-day target starts at trusted VITAL submission receipt and includes delivery and triage waiting. Native patient actions use VITAL BFF, not the legacy TRACE acknowledgment endpoint. Gateway also permits VITAL system tokens cross-system access to `/trace/api/telemedicine/*`, `/trace/api/categories`, and `/trace/api/departments` to facilitate deep-linked administrative navigation.
 
 ## Event contract and ordering
 
