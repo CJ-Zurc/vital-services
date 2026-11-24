@@ -35,7 +35,7 @@ test('S6 reschedule allowances preserve historical usage and enforce role plus c
 
 function clinicalFixture(){
   const id=randomUUID(),doctorId=randomUUID(),patientId=randomUUID(),doctorAuthId=randomUUID(),patientAuthId=randomUUID();
-  const row={id,doctorId,patientId,doctorAuthId,patientAuthId,status:'confirmed',version:0,billingLineageId:randomUUID(),scheduledAt:new Date(now+3600000),proposedEndAt:new Date(now+7200000),paperworkLockedAt:null,doctorConfirmedAt:null} as AppointmentRow;
+  const row={id,doctorId,patientId,doctorAuthId,patientAuthId,status:'confirmed',consultationType:'virtual',version:0,billingLineageId:randomUUID(),scheduledAt:new Date(now+3600000),proposedEndAt:new Date(now+7200000),paperworkLockedAt:null,doctorConfirmedAt:null} as AppointmentRow;
   const actor:Actor={authId:doctorAuthId,role:'doctor',resource:id,scopes:['appointments.intake.read','appointments.intake.write'],serviceId:'vital-web',isSuperAdmin:false,correlationId:randomUUID()};
   let current:string|null=null,processing=false,command:any=null;
   const history:any[]=[],events:any[]=[],calls:{sql:string;args:unknown[]}[]=[];
@@ -74,7 +74,8 @@ test('S6 complaint corrections deny another doctor stale versions workflows and 
   const f=clinicalFixture();await assert.rejects(updateComplaint(f.tx,{...f.actor,authId:randomUUID()},f.id,meta(),input,now),{code:'APPOINTMENT_OWNER_DENIED'});
   await assert.rejects(updateComplaint(f.tx,f.actor,f.id,meta(),{...input,expectedVersion:1},now),{code:'COMPLAINT_EDIT_CLOSED'});
   f.processing();await assert.rejects(updateComplaint(f.tx,f.actor,f.id,meta(),input,now),{code:'APPOINTMENT_PROCESSING'});
-  for(const status of ['completed','cancelled','rescheduled'])assert.equal(complaintEditable({...f.row,status},now),false);
+  assert.equal(complaintEditable({...f.row,consultationType:'in_person'},now),false);
+  for(const status of ['pending','approved','completed','cancelled','rescheduled'])assert.equal(complaintEditable({...f.row,status},now),false);
   assert.equal(complaintEditable({...f.row,paperworkLockedAt:new Date(now)},now),false);
   assert.equal(complaintEditable({...f.row,status:'pending',sourceAppointmentId:randomUUID()},now),false);
   assert.equal(complaintEditable(f.row,f.row.proposedEndAt!.getTime()+2*86400000),false);

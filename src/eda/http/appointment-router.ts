@@ -6,7 +6,7 @@ import type { createAppointmentModule } from "../modules/appointment/appointment
 import type { createAppointmentSaga } from "../modules/appointment/appointment-saga.js";
 import type { AppointmentReads } from '../modules/appointment/appointment-reads.js';
 
-export interface AppointmentRuntime {bookingAcknowledgment?: ReturnType<typeof import("../modules/appointment/booking-acknowledgment.js").createBookingAcknowledgments>;module:ReturnType<typeof createAppointmentModule>;saga:ReturnType<typeof createAppointmentSaga>;reads:AppointmentReads;listRequests:AppointmentReads['streamRequests'];resume:(actor:Actor,id:string,meta:AppointmentCommand,body:unknown)=>Promise<unknown>;maintenanceTick:()=>Promise<unknown>}
+export interface AppointmentRuntime {ehrLifecycle?: import("../modules/appointment/ehr-lifecycle.js").EhrLifecycle;bookingAcknowledgment?: ReturnType<typeof import("../modules/appointment/booking-acknowledgment.js").createBookingAcknowledgments>;module:ReturnType<typeof createAppointmentModule>;saga:ReturnType<typeof createAppointmentSaga>;reads:AppointmentReads;listRequests:AppointmentReads['streamRequests'];resume:(actor:Actor,id:string,meta:AppointmentCommand,body:unknown)=>Promise<unknown>;maintenanceTick:()=>Promise<unknown>}
 type Handler=RequestHandler<Record<string,string>,unknown,unknown,Record<string,unknown>,{actor?:Actor;command?:AppointmentCommand}>;
 export function createAppointmentRouters(runtime?:AppointmentRuntime){
   const appointments=Router(),schedules=Router(),blocks=Router();
@@ -42,6 +42,12 @@ export function createAppointmentRouters(runtime?:AppointmentRuntime){
   appointments.post('/:id/approve-in-person',handle((actor,id,meta,input)=>runtime!.module.approveInPerson(actor,id,command(meta),input)));
   appointments.post('/:id/follow-up-in-person',handle((actor,id,meta,input)=>runtime!.module.followUpInPerson(actor,id,command(meta),input)));
   appointments.post('/:id/no-show',handle((actor,id,meta,input)=>runtime!.module.noShow(actor,id,command(meta),input)));
+  const ehr=()=>{if(!runtime?.ehrLifecycle)throw new DomainError(503,'EHR_LIFECYCLE_DISABLED','EHR lifecycle integration is disabled.');return runtime.ehrLifecycle;};
+  appointments.post('/:id/ehr/readiness',handle((actor,id,_meta,input)=>ehr().checkReady(actor,id,input)));
+  appointments.post('/:id/ehr/retry',handle((actor,id)=>ehr().retry(actor,id)));
+  appointments.get('/:id/ehr/status',handle((actor,id)=>ehr().status(actor,id)));
+  appointments.get('/:id/ehr/final-diagnosis',handle((actor,id)=>ehr().clinical(actor,id,{})));
+  appointments.post('/:id/ehr/final-diagnosis',handle((actor,id,meta,input)=>ehr().clinical(actor,id,input,command(meta).operationId)));
   appointments.get('/:id',handle((actor,id)=>runtime!.module.read(actor,id)));
   appointments.post('/:id/reject',handle((actor,id,meta,input)=>runtime!.module.reject(actor,id,command(meta),input)));
   appointments.post('/:id/reschedule',handle((actor,id,meta,input)=>runtime!.module.propose(actor,id,command(meta),input)));

@@ -12,7 +12,7 @@ import { appointmentOwn, lockAppointment, membership, readAppointment } from './
 import { effectiveCompletionDeadline, type AppointmentCommand, type AppointmentRow } from './appointment-contracts.js';
 
 export function complaintEditable(row: AppointmentRow, now: number) {
-  return ['pending', 'approved', 'confirmed'].includes(row.status) && !(row.sourceAppointmentId && row.status === 'pending') && !row.paperworkLockedAt && !row.doctorConfirmedAt &&
+  return row.consultationType === 'virtual' && row.status === 'confirmed' && !row.paperworkLockedAt && !row.doctorConfirmedAt &&
     now < effectiveCompletionDeadline({ ...row, proposedEndAt: row.slotEndsAt ?? row.proposedEndAt }).getTime();
 }
 

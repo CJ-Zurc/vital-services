@@ -826,6 +826,9 @@ model SagaOperation {
 }
 
 model AppointmentWorkflow {
+  ehrFollowUpId String? @db.Uuid
+  ehrPlanStartedAt DateTime? @db.Timestamptz(6)
+  ehrFollowUpInstructions Json?
   videoSelectionHash String?
   videoTargetVersion Int?
   videoProcessingState String @default("pending")
@@ -1392,4 +1395,18 @@ model DoctorDirectoryEntry {
   @@id([generation, doctorId])
   @@index([doctorId], map:"doctor_directory_member")
   @@map("doctor_directory_entries")
+}
+
+model AppointmentEhrLifecycle {
+  appointmentId String @id
+  diagnosisId String @db.Uuid
+  state String
+  payload Json?
+  receipt Json?
+  attempts Int @default(0)
+  lastError String?
+  syncedAt DateTime? @db.Timestamptz(6)
+  availableAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @db.Timestamptz(6)
+  @@map("appointment_ehr_lifecycle")
 }
