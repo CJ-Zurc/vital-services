@@ -34,11 +34,11 @@ export function createAppointmentMaintenance(core:Pool,owners:AppointmentOwners,
         const projection=(await tx.query('SELECT * FROM appointment_payment_projections WHERE "appointmentId"=$1',[row.id])).rows[0];
         if(!projection||projection.status!=='paid'||projection.reviewRequired||projection.billingLineageId!==row.billingLineageId||projection.associationVersion!==row.associationVersion){await tx.query("COMMIT");continue;}
         await owners.financial.verifyPaid(row,projection);
-        try{await owners.records.apply(tx,row,"complete",{operationId,beforeState:row.status,afterState:"completed",effectiveAt:effectiveCompletionDeadline(row),financialEvidence:projection});}
-        catch(error){if(error instanceof DomainError&&error.code==='RECORD_SNAPSHOT_REQUIRED'){
-          await tx.query('UPDATE appointments SET "recordsBlockCode"=\'RECORD_SNAPSHOT_REQUIRED\' WHERE id=$1',[row.id]);await tx.query("COMMIT");continue;}throw error;}
+        try{if(owners.ehrLifecycle)await owners.ehrLifecycle.ready(tx,row);await owners.records.apply(tx,row,"complete",{operationId,beforeState:row.status,afterState:"completed",effectiveAt:effectiveCompletionDeadline(row),financialEvidence:projection});}
+        catch(error){if(error instanceof DomainError&&['RECORD_SNAPSHOT_REQUIRED','EHR_FINAL_DIAGNOSIS_REQUIRED','EHR_LIFECYCLE_UNAVAILABLE'].includes(error.code)){
+          await tx.query('UPDATE appointments SET "recordsBlockCode"=$2 WHERE id=$1',[row.id,error.code]);await tx.query("COMMIT");continue;}throw error;}
         await tx.query('UPDATE appointments SET "completedAt"=$2,"autoCompletedAt"=$2,"paperworkLockedAt"=COALESCE("paperworkLockedAt",$2) WHERE id=$1',[row.id,new Date(clock())]);
-        const receipt=await appointmentTransition(tx,row,'completed',null,operationId,operationId);logId=receipt.logId;committedAt=receipt.changedAt;kind='complete';
+        const receipt=await appointmentTransition(tx,row,'completed',null,operationId,operationId);logId=receipt.logId;committedAt=receipt.changedAt;kind='complete';if(owners.ehrLifecycle)await owners.ehrLifecycle.enqueue(tx,row);
       }else if(['pending','approved','confirmed','pending_patient_confirmation'].includes(row.status)&&appointmentExpired(row,clock())){
         await owners.records.apply(tx,row,"expire",{operationId,beforeState:row.status,afterState:row.sourceAppointmentId?'rejected':row.status,effectiveAt:new Date(clock())});committedAt=new Date(clock());logId=randomUUID();kind='expire';
         const prior=row.status;

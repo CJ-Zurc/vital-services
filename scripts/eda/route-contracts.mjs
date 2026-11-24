@@ -13,6 +13,13 @@ const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIO
 const hash = text => createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex');
 // A review snapshot, not a parity certificate. Changes require a fresh source review.
 const reviewedHashes = Object.freeze({
+  'lib/eda/onboarding-prefill.ts': '5d2a0e2f1bd5b22aac0eba5103f3926e9173c0b25d7a1504eaaea2c79ae5a54b',
+  'app/api/patient/profile/onboarding-prefill/route.ts': 'b1270e2f40208b9713f1d4a3d557cf829affec7315d13ca53f5b3cada2181cba',
+  'tests/ehr-lifecycle.test.ts': '847343ac18ba9c4536365b3f60cf51e8aaf2acc0efe263dedf93243721fd6043',
+  'app/api/doctor/appointments/[appointmentId]/ehr/final-diagnosis/route.ts': '594f402c74314f494f1e68bd2b952bd6b1bbb05d050772fa98f3834fc72fe70c',
+  'app/api/doctor/appointments/[appointmentId]/ehr/status/route.ts': 'e359968bda4348f05038d5236345d2370cec6f732537389150b168d476567b00',
+  'app/api/doctor/appointments/[appointmentId]/ehr/retry/route.ts': '45e5d443d9eddd41625ab6084d28ca02c451f2ff30dc039b7e9efd4850d532f9',
+  'app/api/patient/appointments/[appointmentId]/ehr/status/route.ts': 'e359968bda4348f05038d5236345d2370cec6f732537389150b168d476567b00',
   'lib/eda/doctor-directory-query.ts': '0c2f63a398048517fd2b34df015c6e257cb97479d8a3944eb5d45581de325540',
   'lib/rating-criteria.ts': 'f70fe4f727c8c442639ea451eb2cd930e5dc22e7064b5724c37c8f2d924919d1',
   'lib/eda/admin-doctors-bff.ts': '09b1ae0e44153fa728b5e42df717a6eae8f63616539c19a03e4e237e5e95808e',
@@ -222,7 +229,7 @@ const reviewedHashes = Object.freeze({
   'lib/auth-errors.ts': 'a81541a86b92d8d06daa8db996e0f914dbb9c4124accc2699189b28ab5519e92',
   'lib/auth-profile-format.ts': '7b747465ce29a41dabd9cfb06927e90a1eeca55c66d8f9fe1ec28510d0a6f27d',
   'lib/auth-profiles.ts': '18895c3529df3855d7abf045bd9d9434ca7b40eb6166b84a2be5016ab5492dbf',
-  'lib/auth.ts': '711c1c9d4c1f39fb89aa3ead9150e3df3818100dd31c6fcc72231ba634bf941c',
+  'lib/auth.ts': '993a96f81d94673a3b13920c8e93c89232fc96c73220bde26807984ae160e7c3',
   'lib/client-session.ts': '5420c3c0ea2dc383f0de4e8a5138d9cba71e87364cfeae4920d183b3dfdf1b3d',
   'lib/cn.ts': 'e05155c088aebc65066f00d1d3bcf556509d157e15c62c99ba391e58b28692e6',
   'lib/cookies.ts': 'ca53e11a9b83c462fecd2ee4eae8d2a4d41edccbde507f96af689645d9e9e359',
@@ -231,12 +238,12 @@ const reviewedHashes = Object.freeze({
   'lib/doctor-record-snapshot.ts': '2ba93c05d22b00b4e7738d97b10156156a7761c9076184642efd994fca66144e',
   'lib/document-records.ts': 'ff94579da0c31e404de591f0648b509129b519a1cd47a05c87a727d520c28e2a',
   'lib/e2e-test-support.ts': 'b88ec8a7e3f6f5e9c7ac42219c116a9fb9e722b3c6515fc80e5dee1f49fa09d9',
-  'lib/eda/appointment-bff.ts': '74f0ea24f70b7d70e4f923afc4072ff7974c456a0bac7f5c8e05428a71a83fef',
-  'lib/eda/appointment-compatibility.ts': 'e440b57b6724e2042529202c0abb495c277c48a6beeea27d2a0644f3be46eeec',
+  'lib/eda/appointment-bff.ts': '83188d2be7a5b650f7610cd5a738f1cb62026e06aff6925b16fad67e53a64a7e',
+  'lib/eda/appointment-compatibility.ts': '908172f26f54e2db6a9f046fd1283e83aa42e18a31efeb813b6e73d2db0fc8bd',
   'lib/eda/appointment-extras-bff.ts': '273b95acec463155adf255144a1a4bbb78f805e4ce368d26d2fe6d4a2f0ac5ab',
-  'lib/eda/appointment-paths.ts': '491f5da49d106e1298c924b30d694e7bcb77936cb7afdf87576aeb786732c370',
-  'lib/eda/appointment-read-bff.ts': '778383b8d68b5d845a6bbb12dd9bbde6d407dbbf5a34b688eb82ed679c3b7fea',
-  'lib/eda/appointment-read-dto.ts': '1f690808600844150761f734d80f8bbe24d238bef8886ad505858604811adb83',
+  'lib/eda/appointment-paths.ts': '4a58a3816d3d5c075f3800ba40691af0e77468f222bbdafd936cb7329735bdd8',
+  'lib/eda/appointment-read-bff.ts': 'b54f7bfb2bc0b79dca5e6b4c2a3f4944151368a94ba0df32f1cced33227b0ad5',
+  'lib/eda/appointment-read-dto.ts': '3ece74b3f898063eba42dd26c5220d6c3b24f1487df87095e39687a1e9102cbc',
   'lib/eda/candidate.ts': '94f79ef985d6ff3301f3c902871b912d77229039bcbcc8d8ea56c7625b649115',
   'lib/eda/completion-bff.ts': 'd2b77078636a1d65a7d75fcabf9e50ed735423379ad95410b8ca9496fce276e4',
   'lib/eda/completion-consent-list.ts': '7dad713da1ae78a1d6efeaf2ea8722ef9ce4c8443db4e3201e61382185996175',
@@ -252,7 +259,7 @@ const reviewedHashes = Object.freeze({
   'lib/eda/messaging.ts': '7c1ab289d88e0548965842dee4681b18eb6811afa30e3a5805e826fcddb3c722',
   'app/api/webhooks/paymongo/route.ts': '5fafa793573492d260e044bd08538aa6319b0a14c99ab97ef88f6876af62e6df',
   'tests/paymongo-webhook.test.ts': '34a99551283f302c713ba57ab2b16ddda5d0b82011a4496e854950e7a5d2cb7a',
-  'lib/eda/mode-policy.ts': 'fd673266f91204f33d8499a7cef2d799898b4c9071e7e9fcb3aacb9efc7360cd',
+  'lib/eda/mode-policy.ts': '5921c7199d805316fe318ef5e23fa962c3672150a465810a2729f82c32dff793',
   'lib/eda/patient-onboarding.ts': 'bf14670643dc52a6693e4bb8ea452b247b43834246196f28554d9686673e092d',
   'lib/eda/patient-record-notice.ts': '966b336c56669936b94c6470a6598802335f0509f562e2373142f841a97db35c',
   'lib/eda/patient-workflow.ts': '81de5bf45249c1d71da5f7df9fda58866fcbd3a998cc5ca50e4b01b277533f4b',
@@ -294,7 +301,7 @@ const reviewedHashes = Object.freeze({
   'lib/ehr-biometric.ts': 'ba0188af749c9f22b46aefb9d6807d2497459f3f73f73d0dc99338226babfaf6',
   'lib/ehr-integration.ts': '42653855fc0680810d0e7db09338f615de7a51bb586a937b69bc9bc06b333231',
   'lib/env.ts': '0731baabb0d884e77bde3c9f00e3a15597c8f78bbf86db7a19343053a1b5be70',
-  'lib/errors.ts': 'bde8cf5b78f753b03c49d369f7a301f6eb25c83219d4161e97ddd2a8c24fbb24',
+  'lib/errors.ts': '4338d92157e0a95d8e21c7e9d9584bdbfd03cfdbcb2a4b4491892870dbc7762a',
   'lib/form-validation.ts': '9f7ae3115b8c8d8f2fd5d9920eb57fe434c967f3993813bb26d5ba9a1e3469c5',
   'lib/gateway-actor.ts': '620521eeac45bd4b96ed0512b214bf46dc730d83aac4258a10fad6041c651cbe',
   'lib/gateway.ts': '1d580fa61e5e33d53b8f704c02810eda5fe7104da29d504d77eb6a32fb71cf19',
@@ -330,7 +337,7 @@ const reviewedHashes = Object.freeze({
   'tests/doctor-date-blocks.test.ts': '4991273d672bb454e2ff719137231b358fbd5a271d1d58d76f2444627abc61fd',
   'tests/doctor-record-snapshot.test.ts': '25eb2b06571fbd9469fdb75ce877b4f52cd592277f05f725fbb3b0c6f40f7f01',
   'tests/eda-appointment-compatibility.test.ts': '360d89257aca3d2d55440fb0ac186cb244ca61ff1fe05789bd4126d442f3f065',
-  'tests/eda-appointment-reads.test.ts': '69afdc8dd05d7b804d00ada4e27735fad9e07c7e14835a53ff324768ee3bba97',
+  'tests/eda-appointment-reads.test.ts': 'd9b2aa2004e77d624e0120d57d1b015c8fa5dfc2be0ce57aed4ea1b0b504007f',
   'tests/eda-appointment.test.ts': '2e92827a36d16fcb68129d68cabef52a41c3d7a1a07810ec330e0f0879927008',
   'tests/eda-completion-aggregates.test.ts': '1c3a55ed763cf52404322c82e64f193e08caffc796f69182cb30d7efb75247ea',
   'tests/eda-completion-qr.test.ts': '02849b3e114d33737274beeaebfac7f75d22e30a35fa6f87e68388f0050abd5b',
@@ -379,6 +386,9 @@ const reviewedHashes = Object.freeze({
 });
 
 const families = {
+  onboardingPrefill: {owner:'EHR patient self demographics through Web BFF',entry:'lib/eda/onboarding-prefill.ts',dispatch:'onboardingPrefill',files:['lib/auth.ts'],tests:['ehr-lifecycle.test.ts'],
+    request:'authenticated patient self only, no query, limited demographics before agreement/onboarding',response:'found/profile allowlist; genuine404 no match; errors fail closed',statuses:[200,400,401,403,503],deps:['Gateway authenticated EHR patient-self'],flags:['VITAL_EDA_ENABLED']},
+
   patientDispute: {
     owner: 'Services Appointment; TRACE owns case decisions',
     entry: 'lib/eda/dispute-bff.ts', dispatch: 'disputeBff',
@@ -681,6 +691,11 @@ GET /integrations/v1/patients
 GET /integrations/v1/appointments
 GET /integrations/v1/patient/appointments
 POST /integrations/v1/patient/bootstrap`);
+add('onboardingPrefill','GET /api/patient/profile/onboarding-prefill');
+add('appointment',`GET,POST /api/doctor/appointments/[appointmentId]/ehr/final-diagnosis
+GET /api/doctor/appointments/[appointmentId]/ehr/status
+POST /api/doctor/appointments/[appointmentId]/ehr/retry
+GET /api/patient/appointments/[appointmentId]/ehr/status`);
 add('profile', `
 GET /api/doctor/profile
 PATCH /api/doctor/profile targetDoctorUpdate
@@ -1091,7 +1106,7 @@ export function reviewRouteContract(route, options = {}) {
             : 'attachBffSessionHeaders/upstream-cookie behavior is branch-specific; no access-token cookie persistence inferred', sourceReferences: facts.cookies },
       errors: { policy: 'Preserve explicit wrapper/BFF status mapping; typed decoder failures fail closed. Listed codes include shared branches.', sourceReferences: facts.errors },
       dependencies: { owners: family.deps, privatePathReferences: facts.dependencies, note: 'Private version1 page envelopes are not a browser contract change; runtime/private-page acceptance is not established here.' },
-      gates: { featureFlags: [...family.flags, ...(rule.family === 'patientDispute' && method === 'POST' ? ['VITAL_TRACE_DISPUTES_ENABLED'] : []),
+      gates: { featureFlags: [...family.flags, ...(rule.family==='appointment'&&path.includes('/ehr/')?['VITAL_EHR_LIFECYCLE_ENABLED']:[]), ...(rule.family === 'patientDispute' && method === 'POST' ? ['VITAL_TRACE_DISPUTES_ENABLED'] : []),
         ...(rule.family === 'messaging' && path.startsWith('/api/admin/') ? ['VITAL_EDA_MESSAGE_HOLDS_ENABLED'] : []),
         ...(rule.family === 'stream' ? [path.includes('/messages/') ? 'VITAL_EDA_MESSAGING_ENABLED' : 'VITAL_EDA_APPOINTMENT_ENABLED'] : []),
         ...(rule.family === 'completion' && path === '/api/patient/dashboard' ? ['VITAL_EDA_APPOINTMENT_ENABLED'] : [])],
