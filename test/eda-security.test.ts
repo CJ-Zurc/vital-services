@@ -57,3 +57,14 @@ test("EDA signing-key overlap accepts only configured keys and rejects a retired
   assert.throws(() => verify(signed(), { config: { ...overlap, previousKeys: undefined } }));
   assert.throws(() => verify(signed(), { config: { ...overlap, previousKeys: {} } }));
 });
+
+
+test('doctor directory assertions bind every query byte and reject page or search substitution',()=>{
+ const queryPath='/internal/v1/profile/admin/doctors?page=3&pageSize=10&search=Ana+Santos';
+ const admin={...actor,role:'admin',scopes:['profile.admin.read'],resource:actor.authId};
+ const token=signed({actor:admin,action:'GET '+queryPath,requestHash:requestHash('GET',queryPath,null)});
+ const input={token,peerAuthorized:true,peerName:'vital-web',method:'GET',path:queryPath,body:null,config,now};
+ assert.deepEqual(verifyActorAssertion(input),admin);
+ for(const changed of [queryPath.replace('page=3','page=4'),queryPath.replace('Ana+Santos','Other'),'/internal/v1/profile/admin/doctors'])
+  assert.throws(()=>verifyActorAssertion({...input,path:changed}),{code:'INVALID_ACTOR_ASSERTION'});
+});

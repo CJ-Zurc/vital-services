@@ -465,3 +465,26 @@ test('pending face-to-face read reveals its mode for acceptance while keeping pa
   assert.equal(row.patientId,null);
   assert.equal(row.access.identityUnlocked,false);
 });
+
+
+test('virtual completion checks diagnosis before local freeze and enqueues closure in its transaction',async()=>{
+  const f=fixture();Object.assign(f.state().row,{status:'confirmed',scheduledAt:new Date(f.now-1000),patientConfirmedAt:new Date(f.now-500),ehrCaseId:randomUUID()});
+  const order:string[]=[];
+  const lifecycle={ready:async()=>{order.push('diagnosis');return randomUUID();},enqueue:async(tx:unknown,row:AppointmentRow)=>{assert.equal(tx,f.tx);assert.equal(row.status,'completed');order.push('closure_intent');}} as unknown as import('../src/eda/modules/appointment/ehr-lifecycle.js').EhrLifecycle;
+  const owners={...f.owners,ehrLifecycle:lifecycle,records:{...f.owners.records,beforeDoctorAcknowledgement:async()=>{order.push('freeze');}}};
+  const result=await createAppointmentModule(f.pool,owners,()=>f.now).complete(f.actor('complete'),f.id,f.meta(),{expectedVersion:0});
+  assert.equal(result.status,'completed');assert.deepEqual(order,['diagnosis','freeze','closure_intent']);
+});
+test('missing virtual final diagnosis leaves appointment and completion events unchanged',async()=>{
+  const f=fixture();Object.assign(f.state().row,{status:'confirmed',scheduledAt:new Date(f.now-1000)});const before=structuredClone(f.state());
+  const ehrLifecycle={ready:async()=>{throw new DomainError(409,'EHR_FINAL_DIAGNOSIS_REQUIRED','Required');}} as unknown as import('../src/eda/modules/appointment/ehr-lifecycle.js').EhrLifecycle;
+  await assert.rejects(createAppointmentModule(f.pool,{...f.owners,ehrLifecycle},()=>f.now).complete(f.actor('complete'),f.id,f.meta(),{expectedVersion:0}),{code:'EHR_FINAL_DIAGNOSIS_REQUIRED'});
+  assert.deepEqual(f.state(),before);assert.deepEqual(f.effects,[]);
+});
+
+test('patient may acknowledge a virtual visit before the doctor records a final diagnosis',async()=>{
+  const f=fixture();Object.assign(f.state().row,{status:'confirmed',scheduledAt:new Date(f.now-1000)});
+  const ehrLifecycle={ready:async()=>{throw Error('Patient-first acknowledgment must not require a final diagnosis');}} as unknown as import('../src/eda/modules/appointment/ehr-lifecycle.js').EhrLifecycle;
+  const result=await createAppointmentModule(f.pool,{...f.owners,ehrLifecycle},()=>f.now).complete(f.actor('complete','patient'),f.id,f.meta(),{expectedVersion:0});
+  assert.equal(result.status,'confirmed');assert.ok(f.state().row.patientConfirmedAt);assert.equal(f.state().row.doctorConfirmedAt,null);
+});

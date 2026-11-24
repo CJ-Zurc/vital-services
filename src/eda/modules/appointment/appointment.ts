@@ -1,3 +1,4 @@
+import {appointmentPayloadCrypto} from './access-crypto.js';
 import { disputeRescheduleGrant } from './dispute-reschedule.js';
 import { submitNativeDispute, respondNativeDispute } from './native-dispute.js';
 import { saveBookingAcknowledgment } from './booking-acknowledgment.js';
@@ -58,7 +59,7 @@ function rejectGeneratedSelection(body:unknown){
   return body;
 }
 const preparedInput = z.object({ workflowId: z.uuid(), appointmentId: z.uuid(), expectedVersion: versionSchema,
-  handoffText:z.string().trim().min(1).max(2000).optional(),kind: z.enum(["approve","follow-up"]),consultationType:z.enum(["virtual","in_person"]).optional(),confirmConflicts:z.boolean().optional(),
+  instructions:z.string().trim().max(4000).optional(),handoffText:z.string().trim().min(1).max(2000).optional(),kind: z.enum(["approve","follow-up"]),consultationType:z.enum(["virtual","in_person"]).optional(),confirmConflicts:z.boolean().optional(),
   ...videoSelection.shape,
   slotDate:scheduleInput.shape.slotDate.optional(),startTime:scheduleInput.shape.startTime.optional(),endTime:scheduleInput.shape.endTime.optional() }).strict();
 const commitInput = z.object({ inputHash: z.string().regex(/^[a-f0-9]{64}$/), receipt: z.object({
@@ -409,7 +410,8 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       const type=input.kind==='follow-up'?input.consultationType:row.consultationType;
       if(type==='virtual'?!Boolean(selection.meetingUrl):Boolean(selection.meetingUrl))fail(400,'APPOINTMENT_MEETING_SELECTION_INVALID');
       const abandoned=(await tx.query(`UPDATE appointment_workflows SET state='abandoned',"updatedAt"=NOW() WHERE "appointmentId"=$1 AND state='prepared'
-        AND "externalStartedAt" IS NULL AND "expiresAt"<=NOW() RETURNING "targetAppointmentId"`,[row.id])).rows;
+        AND "externalStartedAt" IS NULL AND "expiresAt"<=NOW() AND ($2::boolean=false OR "ehrPlanStartedAt" IS NULL) RETURNING id,"targetAppointmentId","ehrFollowUpId"`,[row.id,Boolean(owners.ehrLifecycle)])).rows;
+      for(const old of abandoned){if(old.ehrFollowUpId&&owners.ehrLifecycle)await owners.ehrLifecycle.cancelFollowUp(row,old.id,old.ehrFollowUpId);}
       for(const old of abandoned)if(old.targetAppointmentId&&old.targetAppointmentId!==row.id){
         const draft=await readAppointment(tx,old.targetAppointmentId,true);
         if(draft.status==='pending')await appointmentTransition(tx,draft,'rejected',actor,meta.operationId,actor.correlationId,'workflow_abandoned');
@@ -417,7 +419,9 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       let target=row;
       if(input.kind==="follow-up"){
         if(input.confirmConflicts!==undefined)fail(400,'APPOINTMENT_WORKFLOW_FIELDS_INVALID');
+        if(owners.ehrLifecycle&&input.consultationType==='virtual'&&row.consultationType!=='virtual')fail(409,'EHR_VIRTUAL_SOURCE_REQUIRED');
         if(row.status!=="completed"||!input.consultationType||!input.slotDate||!input.startTime||!input.endTime)fail(409,"FOLLOW_UP_SOURCE_INVALID");
+        if(owners.ehrLifecycle&&input.consultationType==='virtual')await owners.ehrLifecycle.requireClosedSource(tx,row);
         const existing=await tx.query(`SELECT id FROM appointments WHERE "followUpOfAppointmentId"=$1 AND status NOT IN ('cancelled','rejected') LIMIT 1`,[row.id]);
         if(existing.rows.length)fail(409,"FOLLOW_UP_ALREADY_EXISTS");
         const doctor=(await tx.query('SELECT "availabilityType","virtualFee"::text,"inPersonFee"::text FROM vital_doctors WHERE "userId"=$1',[row.doctorId])).rows[0];
@@ -459,7 +463,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       }
       const inputHash=requestHash("APPOINTMENT-WORKFLOW",input.kind,{id:row.id,targetId:target.id,version:row.version,scheduledAt:target.scheduledAt.toISOString(),videoSelectionHash:selectedHash});
       await tx.query(`INSERT INTO appointment_workflows (id,"appointmentId","actorAuthId",kind,"inputHash","expectedVersion","prepareOperationId","expiresAt","createdAt","updatedAt") VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())`,[input.workflowId,row.id,actor.authId,input.kind,inputHash,row.version,meta.operationId,new Date(clock()+300000)]);
-      await tx.query('UPDATE appointment_workflows SET "targetAppointmentId"=$2 WHERE id=$1::uuid',[input.workflowId,target.id]);
+      await tx.query('UPDATE appointment_workflows SET "targetAppointmentId"=$2,"ehrFollowUpInstructions"=$3::jsonb WHERE id=$1::uuid',[input.workflowId,target.id,input.instructions?JSON.stringify(appointmentPayloadCrypto().encrypt(input.instructions,'ehr-follow-up:'+input.workflowId)):null]);
       await tx.query(`UPDATE appointment_workflows SET "videoSelectionHash"=$2,"videoTargetVersion"=$3,"videoCorrelationId"=$4 WHERE id=$1::uuid`,[input.workflowId,selectedHash,target.version,actor.correlationId]);
       return{workflowId:input.workflowId,inputHash,appointmentId:row.id,targetAppointmentId:target.id,expectedVersion:row.version,operationStatus:"prepared"};});
       const receipt=await requireOwner(owners.video,'video').prepareWorkflow(result.workflowId,selection);
@@ -467,7 +471,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       const changed=await pool.query(`UPDATE appointment_workflows SET "videoReceipt"=$2::jsonb,"videoProcessingState"='prepared',"updatedAt"=NOW() WHERE id=$1::uuid AND state='prepared' AND "videoSelectionHash"=$3`,[result.workflowId,JSON.stringify(receipt),selectedHash]);
       if(changed.rowCount!==1){const prior=(await pool.query('SELECT state,"videoReceipt" FROM appointment_workflows WHERE id=$1::uuid',[result.workflowId])).rows[0];if(!prior||prior.state!=='committed'||!isDeepStrictEqual(prior.videoReceipt,receipt))fail(409,'APPOINTMENT_VIDEO_PREPARATION_CHANGED');}
       return result;},
-    async workflow(actor:Actor,id:string){requireScope(actor,"appointments.workflow.read",id);await membership(pool,actor,"doctor");const row=(await pool.query('SELECT id,"appointmentId","targetAppointmentId",kind,"inputHash",state,"expectedVersion","expiresAt","externalStartedAt",receipt,"videoProcessingState","videoReceipt" FROM appointment_workflows WHERE id=$1::uuid AND "actorAuthId"=$2',[id,actor.authId])).rows[0];if(!row)fail(404,"APPOINTMENT_WORKFLOW_NOT_FOUND");
+    async workflow(actor:Actor,id:string){requireScope(actor,"appointments.workflow.read",id);await membership(pool,actor,"doctor");const row=(await pool.query('SELECT id,"appointmentId","targetAppointmentId",kind,"inputHash",state,"expectedVersion","expiresAt","externalStartedAt",receipt,"videoProcessingState","videoReceipt","ehrFollowUpId","ehrFollowUpInstructions" FROM appointment_workflows WHERE id=$1::uuid AND "actorAuthId"=$2',[id,actor.authId])).rows[0];if(!row)fail(404,"APPOINTMENT_WORKFLOW_NOT_FOUND");
       const appointment=await readAppointment(pool,row.appointmentId);appointmentOwn(actor,appointment);
       if(row.state==='prepared'){
         if(row.videoProcessingState!=='prepared'||!row.videoReceipt)fail(409,'APPOINTMENT_VIDEO_PREPARATION_PENDING');
@@ -484,8 +488,17 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
             if(recovered.patientId!==patient.ehrPatientId||recovered.doctorAuthId!==appointment.doctorAuthId)fail(409,"EHR_RECOVERY_RECEIPT_INVALID");
             row.receipt={ehrPatientId:recovered.patientId,ehrCaseId:recovered.caseId,externalSystemRef:recovered.externalSystemRef,requestHash:row.inputHash};
           }
-        }else row.ehrTransport={patientId:patient.ehrPatientId,appointmentId:target.id,scheduledAt:target.scheduledAt.toISOString(),chiefComplaint:handoff};
-      }return row;},
+        }else {
+          if(row.kind==='follow-up'&&owners.ehrLifecycle){
+            const started=await pool.query(`UPDATE appointment_workflows SET \"ehrPlanStartedAt\"=COALESCE(\"ehrPlanStartedAt\",NOW()) WHERE id=$1::uuid AND state='prepared' AND \"externalStartedAt\" IS NULL AND \"expiresAt\">NOW()`,[row.id]);
+            if(!started.rowCount)fail(409,'APPOINTMENT_WORKFLOW_STALE');
+            row.ehrFollowUpId=await owners.ehrLifecycle.followUp(appointment,row.id,target.scheduledAt,row.ehrFollowUpInstructions);
+            const attached=await pool.query('UPDATE appointment_workflows SET "ehrFollowUpId"=$2 WHERE id=$1::uuid AND state=\'prepared\' AND "externalStartedAt" IS NULL',[row.id,row.ehrFollowUpId]);
+            if(!attached.rowCount){await owners.ehrLifecycle.cancelFollowUp(appointment,row.id,row.ehrFollowUpId);fail(409,'APPOINTMENT_WORKFLOW_STALE');}
+          }
+          row.ehrTransport={patientId:patient.ehrPatientId,appointmentId:target.id,scheduledAt:target.scheduledAt.toISOString(),chiefComplaint:handoff,...(row.ehrFollowUpId?{followUpId:row.ehrFollowUpId}:{})};
+        }
+      }delete row.ehrFollowUpInstructions;return row;},
     async startExternal(actor:Actor,id:string,meta:AppointmentCommand,body:unknown){const input=z.object({inputHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict().parse(body);
       return mutate(actor,"workflow.external-start",id,meta,input,async tx=>{await membership(tx,actor,"doctor");const workflow=(await tx.query('SELECT * FROM appointment_workflows WHERE id=$1::uuid AND "actorAuthId"=$2 FOR UPDATE',[id,actor.authId])).rows[0];
         if(!workflow||workflow.state!=='prepared'||workflow.inputHash!==input.inputHash||workflow.expiresAt.getTime()<=clock())fail(409,"APPOINTMENT_WORKFLOW_STALE");
@@ -550,6 +563,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       if(row.reviewHold)fail(409,"APPOINTMENT_UNDER_DISPUTE_HOLD");
       await financial.verifyPaid(row,projection);
       if(effectiveCompletionDeadline(row).getTime()<=clock())fail(409,"APPOINTMENT_COMPLETION_DEADLINE");
+      if(owners.ehrLifecycle&&(actor.role==='doctor'||row.doctorConfirmedAt))await owners.ehrLifecycle.ready(tx,row);
       const deadline=row.completionDeadlineAt??new Date(clock()+172800000);
       const context={operationId:meta.operationId,beforeState:row.status,afterState:"confirmed",effectiveAt:new Date(clock()),financialEvidence:projection};
       if(actor.role==="doctor"){
@@ -558,7 +572,7 @@ export function createAppointmentModule(pool: Pool, owners: AppointmentOwners = 
       }else row.patientConfirmedAt??=new Date(clock());
       if(row.doctorConfirmedAt&&row.patientConfirmedAt)await records.apply(tx,row,"complete",{...context,afterState:"completed"});
       await tx.query('UPDATE appointments SET "doctorConfirmedAt"=$2,"patientConfirmedAt"=$3,"completionDeadlineAt"=$4,"paperworkLockedAt"=CASE WHEN $2::timestamp IS NOT NULL THEN COALESCE("paperworkLockedAt",$2) ELSE "paperworkLockedAt" END,version=version+1,"updatedAt"=NOW() WHERE id=$1',[id,row.doctorConfirmedAt,row.patientConfirmedAt,deadline]);row.version++;
-      if(row.doctorConfirmedAt&&row.patientConfirmedAt){await tx.query('UPDATE appointments SET "completedAt"=$2 WHERE id=$1',[id,new Date(clock())]);const receipt=await appointmentTransition(tx,row,"completed",actor,meta.operationId,actor.correlationId);await billingIntent(tx,row,actor,meta.operationId,receipt,"complete");}
+      if(row.doctorConfirmedAt&&row.patientConfirmedAt){await tx.query('UPDATE appointments SET "completedAt"=$2 WHERE id=$1',[id,new Date(clock())]);const receipt=await appointmentTransition(tx,row,"completed",actor,meta.operationId,actor.correlationId);await billingIntent(tx,row,actor,meta.operationId,receipt,"complete");if(owners.ehrLifecycle)await owners.ehrLifecycle.enqueue(tx,row);}
       else{
         await appendSqlOutbox(tx,{producer:"appointment",eventType:"vital.appointment.completion_acknowledged",aggregateId:row.id,aggregateVersion:row.version,correlationId:actor.correlationId,causationId:meta.operationId,data:appointmentFactData(row,actor.authId,meta.operationId)});
         await appendSqlOutbox(tx,{producer:"appointment",eventType:"vital.audit.requested",aggregateId:row.id,aggregateVersion:row.version,correlationId:actor.correlationId,causationId:meta.operationId,

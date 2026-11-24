@@ -37,3 +37,14 @@ Mocked browser journeys at 390px and 1440px passed for pagination, name search/r
 
 
 Manage Doctors opens **View Ratings** in an accessible modal rather than expanding the table row. The modal keeps aggregate/criterion details and bounded pagination, resets to page one on reopening, aborts outstanding reads when closed, supports Escape/close, and returns focus to its trigger. Mocked desktop/mobile checks verified these behaviors and unchanged underlying row heights.
+
+
+## Doctor-directory 403 regression — 23 November 2026
+
+Web transport previously admitted only the literal /internal/v1/profile/admin/doctors path, so adding the pagination query returned 403 EDA_ACTION_DENIED before Services received a request. GET admission now validates the exact pathname and bounded page/pageSize/search/optional private doctorId parameters. Unknown and duplicate parameters remain denied. Public composition shares the validation but rejects the private doctorId filter. POST/PATCH still require their original exact query-free paths. Role, scope, actor resource, expiry, mTLS, current Core membership and whole-query signature binding remain enforced.
+
+The regression test composes the BFF and real Profile client with real transport authorization/signing, replacing only HTTPS exchange and Auth enrichment. This closes the earlier test gap caused by mocking transport.send. Services assertion checks verify that changing page/search after signing fails. No database migration is added; the earlier directory migration, runtime grants and initialized worker remain prerequisites. Source/mocked checks do not establish live deployment acceptance.
+
+Verification: 79 focused Web regressions and 14 Services security/paired-route checks passed, along with both TypeScript checks and the Web BFF ownership check. Desktop (1440px) and mobile (390px) browser fixtures verified initial directory loading, bounded pagination, search resetting to page one, no horizontal overflow, and removal of the public Book Appointment button while login/registration remain available. Browser APIs and identity guards were mocked; real transport authorization/signing was covered separately. No live Auth/PostgreSQL or deployed-endpoint acceptance, migration, commit, push or deployment was performed.
+
+The Web production build passed with the fetched baseline's locked Next.js 16.4.5 dependencies, including all 164 pages. Package manifests and lockfiles were unchanged by this fix. The final transport and paired-route reruns passed after strengthening exact query-value assertions.

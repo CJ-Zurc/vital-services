@@ -20,13 +20,13 @@ function fixture(count = 1) {
     patientLastReadAt: Date | null; doctorLastReadAt: Date | null; version: number };
   type Hold = { id: string; conversationId: string; placedAt: Date; releasedAt: Date | null; reasonCode: string; protectedReference: object };
   type Command = { action: string; resourceId: string; requestHash: string; status: string; result: object };
-  type Appointment = { id: string; doctorId: string; patientId: string; status: string; completedAt: Date | null;
+  type Appointment = { id: string; doctorId: string; patientId: string; patientAuthId: string; doctorAuthId: string; status: string; completedAt: Date | null;
     updatedAt: Date; scheduledAt: Date };
   const conversations: Conversation[] = Array.from({ length: count }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`, appointmentId: randomUUID(),
     createdAt: old, legalHoldAt: null, purgedAt: null, patientLastReadAt: old, doctorLastReadAt: old, version: 0,
   }));
-  const appointments: Appointment[] = conversations.map(c => ({ id: c.appointmentId, doctorId, patientId,
+  const appointments: Appointment[] = conversations.map(c => ({ id: c.appointmentId, doctorId, patientId, patientAuthId: randomUUID(), doctorAuthId: randomUUID(),
     status: "completed", completedAt: old, updatedAt: old, scheduledAt: old }));
   const messages = conversations.map(c => ({ conversationId: c.id, createdAt: old }));
   const initial = { conversations, appointments, messages, holds: [] as Hold[], commands: {} as Record<string, Command>,
@@ -82,6 +82,12 @@ function fixture(count = 1) {
       const filtered = state.conversations.filter(c => (!args[0] || c.appointmentId === args[0]) && (!args[1] || c.id === args[1]) &&
         (args[2] === "all" || (args[2] === "held" ? !!c.legalHoldAt : !c.legalHoldAt)) &&
         (!args[3] || c.createdAt < new Date(String(args[3])) || c.createdAt.getTime() === new Date(String(args[3])).getTime() && c.id < String(args[4])))
+        .filter(c => {
+          const a = state.appointments.find(a => a.id === c.appointmentId)!;
+          return (!args[6] || a.patientAuthId === args[6] || a.doctorAuthId === args[6]) &&
+            (!args[7] || a.scheduledAt >= new Date(args[7] + "T00:00:00+08:00")) &&
+            (!args[8] || a.scheduledAt.getTime() < new Date(args[8] + "T00:00:00+08:00").getTime() + 86_400_000);
+        })
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id)).slice(0, Number(args[5]));
       return reply(filtered.map(c => {
         const a = state.appointments.find(a => a.id === c.appointmentId)!, h = state.holds.find(h => h.conversationId === c.id && !h.releasedAt);
@@ -208,6 +214,29 @@ test("Messaging hold list has bounded stable tie pagination and exact metadata f
   assert.equal(messageHoldListQuery.safeParse({ limit: 51 }).success, false);
   assert.equal(messageHoldPlaceInput.safeParse({ expectedVersion: 0, reasonCode: "investigation", reference: "Clinical narrative text" }).success, false);
   assert.equal(messageHoldPlaceInput.safeParse({ expectedVersion: 0, reasonCode: "investigation", reference: "x".repeat(97) }).success, false);
+});
+
+test("Messaging hold search applies participant and inclusive Philippine appointment dates before pagination", async () => {
+  const f = fixture(4), actor = f.delegation("admin.list");
+  const [first, second, third, fourth] = f.state().appointments;
+  second!.patientAuthId = first!.patientAuthId;
+  third!.doctorAuthId = first!.patientAuthId;
+  first!.scheduledAt = new Date("2026-11-23T00:00:00+08:00");
+  second!.scheduledAt = new Date("2026-11-23T23:59:59+08:00");
+  third!.scheduledAt = new Date("2026-11-24T00:00:00+08:00");
+  fourth!.scheduledAt = first!.scheduledAt;
+  const filter = { participantAuthId: first!.patientAuthId, startDate: "2026-11-23", endDate: "2026-11-23", limit: 1 };
+  const page = await f.holds.list(actor, filter);
+  assert.equal(page.conversations.length, 1);
+  assert.ok(page.nextCursor);
+  const next = await f.holds.list(actor, { ...filter, before: page.nextCursor! });
+  assert.equal(next.conversations.length, 1);
+  assert.equal(next.nextCursor, null);
+  assert.deepEqual(new Set([...page.conversations, ...next.conversations].map(c => c.appointmentId)), new Set([first!.id, second!.id]));
+  const doctor = await f.holds.list(actor, { participantAuthId: third!.doctorAuthId, startDate: "2026-11-24" });
+  assert.equal(doctor.conversations[0]!.appointmentId, third!.id);
+  assert.equal(messageHoldListQuery.safeParse({ startDate: "2026-02-30" }).success, false);
+  assert.equal(messageHoldListQuery.safeParse({ startDate: "2026-11-24", endDate: "2026-11-23" }).success, false);
 });
 
 test("Messaging hold outbox failure rolls back mutation, history, and command result", async () => {

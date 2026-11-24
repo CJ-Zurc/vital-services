@@ -66,3 +66,6 @@ See [the implemented contract and rollout ledger](integrations/trace/patient-fee
 
 
 See [doctor profiles, criterion ratings and directory pagination](doctor-profiles-ratings-pagination.md) for updated forms, rating eligibility, the trusted search projection, worker configuration and paired rollout.
+
+
+See [EHR lifecycle integration](ehr-lifecycle-integration.md) for the new scoped routes, Core migration, worker delivery/recovery, signing/key configuration and paired rollout.
