@@ -34,6 +34,11 @@ export function createCompletionRouter(reads?: CompletionReads) {
     res.status(status).json({ success: true, contractVersion: 1, data });
   };
   router.get('/patient/dashboard', handle(actor => reads!.patientDashboard(actor)));
+  for(const kind of ["collections","satisfaction","specialties"] as const)router.get('/admin/dashboard/'+kind,handle((actor,req)=>{
+    const query=new URL(req.originalUrl,"https://internal.invalid").searchParams;
+    if([...query.keys()].some(key=>!["from","to","interval"].includes(key)||query.getAll(key).length!==1))throw new DomainError(400,"REPORT_QUERY_INVALID","Invalid reporting query.");
+    return reads!.adminReport(actor,kind,Object.fromEntries(query));
+  }));
   router.get('/admin/dashboard', handle(actor => reads!.adminDashboard(actor)));
   router.get('/consents', handle((actor, req) => {
     const query = new URL(req.originalUrl, 'https://internal.invalid').searchParams;

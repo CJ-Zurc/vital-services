@@ -120,7 +120,7 @@ export function createMessagingModule(pool: Pool, environment: NodeJS.ProcessEnv
         const previous = found ? (await tx.query<Message>('SELECT * FROM appointment_messages WHERE "conversationId"=$1 AND "senderUserId"=$2 AND "clientMessageId"=$3', [found.id, member.userId, input.clientMessageId])).rows[0] : undefined;
         if (previous) {
           if (crypto.decrypt(previous, id) !== input.content) denied(409, 'MESSAGE_REPLAY_CONFLICT', 'This message retry ID was already used.');
-          return { result: { message: publicMessage(previous, id,actor.role==='doctor'&&!(await appointmentAccessState(tx,await readAppointment(tx,id),clock())).identityUnlocked), created: false }, journal: { messageId: previous.id } };
+          return { result: { message: publicMessage(previous, id,actor.role==='doctor'&&!(await appointmentAccessState(tx,await readAppointment(tx,id),clock())).identityUnlocked,await knownReviewIdentities(tx,id)), created: false }, journal: { messageId: previous.id } };
         }
         if (old) denied(409, 'MESSAGE_REPLAY_UNAVAILABLE', 'The original message is no longer available.');
         if (context.processing) denied(409, 'APPOINTMENT_TRANSITION_PENDING', 'This conversation is temporarily read-only.');
@@ -134,7 +134,7 @@ export function createMessagingModule(pool: Pool, environment: NodeJS.ProcessEnv
           encrypted.ciphertext, encrypted.nonce, encrypted.authTag, encrypted.keyVersion, new Date(clock())])).rows[0]!;
         found = (await tx.query<Conversation>('UPDATE message_conversations SET version=version+1 WHERE id=$1 RETURNING *', [found.id])).rows[0]!;
         await signal(tx, actor, id, found, 'message', meta.operationId);
-        return { result: { message: publicMessage(message, id,actor.role==='doctor'&&!(await appointmentAccessState(tx,await readAppointment(tx,id),clock())).identityUnlocked), created: true }, journal: { messageId } };
+        return { result: { message: publicMessage(message, id,actor.role==='doctor'&&!(await appointmentAccessState(tx,await readAppointment(tx,id),clock())).identityUnlocked,await knownReviewIdentities(tx,id)), created: true }, journal: { messageId } };
       });
     },
     async read(actor: Actor, id: string, meta: AppointmentCommand, body: unknown) {

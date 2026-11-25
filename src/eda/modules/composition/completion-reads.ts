@@ -1,3 +1,4 @@
+import {reportRange} from "../../contracts/admin-reporting.js";
 import { DomainError, type Actor } from '../../contracts/actor.js';
 import { authorizeExport, completionCount, completionRole, completionUnavailable, type CompletionOwners, type ExportQuery } from '../../contracts/completion.js';
 import type { createCompletionProfileOwner } from '../profile/profile-completion.js';
@@ -31,6 +32,12 @@ export function createCompletionReads(profile: ReturnType<typeof createCompletio
       const overview = await owners.appointments.adminOverview(actor);
       await profile.admin(actor);
       return { summary: accounts, ...overview };
+    },
+    async adminReport(actor:Actor,kind:"collections"|"satisfaction"|"specialties",raw:unknown){
+      completionRole(actor,"admin","completion.admin."+kind);await profile.admin(actor);const range=reportRange(raw);
+      const read=kind==="collections"?owners.financial?.collections:owners.appointments?.[kind];
+      if(!read)completionUnavailable(kind==="collections"?"PAYMENT":"APPOINTMENT");
+      const result=await read(actor,range);await profile.admin(actor);return result;
     },
     consents: profile.consents,
     consentStatus: profile.consentStatus,

@@ -1,3 +1,4 @@
+import {createAppointmentAdminReporting} from "./appointment-admin-reporting.js";
 import { createAdminAppointmentOverview } from './appointment-admin-overview.js';
 import { appointmentAccessState } from './appointment-access.js';
 import type { Pool } from 'pg';
@@ -21,6 +22,7 @@ export function createAppointmentCompletionOwner(pool: Pool, _reads: Pick<Appoin
   owners: AppointmentReadOwners = {}, clock = Date.now): CompletionAppointmentOwner {
   const profile = createCompletionProfileOwner(pool);
   return {
+    ...createAppointmentAdminReporting(pool),
     adminOverview: createAdminAppointmentOverview(pool,clock),
     async patient(actor) {
       completionRole(actor, 'patient', 'completion.patient.dashboard');

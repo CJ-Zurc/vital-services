@@ -44,3 +44,4 @@ See [doctor profiles, criterion ratings and directory pagination](doctor-profile
 
 
 See [EHR lifecycle integration](ehr-lifecycle-integration.md) for the new scoped routes, Core migration, worker delivery/recovery, signing/key configuration and paired rollout.
+\n\nSee [capstone dashboard and portal refinements](capstone-dashboard-experience.md) for interval-aware reporting, Dashboard tabs, code replacement, loading states, and verification limits.\n

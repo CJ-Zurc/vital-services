@@ -1,3 +1,4 @@
+import { appointmentPayloadCrypto } from "../src/eda/modules/appointment/access-crypto.js";
 import { accessFixtureSql } from './fixtures/appointment-access.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -13,7 +14,7 @@ import { consumeMessagingEvent } from '../src/eda/workers/messaging.js';
 
 const environment = { MESSAGE_ENCRYPTION_KEYS: JSON.stringify({ 1: Buffer.alloc(32, 7).toString('base64') }), MESSAGE_ACTIVE_KEY_VERSION: '1' };
 const isStatus = (status: number) => (error: unknown) => error instanceof DomainError && error.status === status;
-function fixture() {
+function fixture(maskNames = false) {
   const id = randomUUID(), patientId = randomUUID(), doctorId = randomUUID(), authId = randomUUID(), doctorAuthId = randomUUID();
   let now = Date.parse('2026-10-17T00:00:00Z');
   type Appointment = MessagingAppointment & { patientAuthId: string; doctorAuthId: string; version: number; billingLineageId: string; scheduledAt: Date; specialty: string | null };
@@ -27,7 +28,7 @@ function fixture() {
   const calls: string[] = [];
   const queries: { sql: string; args: unknown[] }[] = [];
   const tx = { async query(sql: string, args: unknown[] = []) {
-    const privacy=accessFixtureSql(sql,args,state.row);if(privacy)return privacy;
+    const privacy=accessFixtureSql(sql,args,state.row);if(privacy){if(maskNames&&sql.startsWith("SELECT * FROM appointment_access"))Object.assign(privacy.rows[0],{identityValues:appointmentPayloadCrypto().encrypt(["Jane Example"],"appointment-identities:"+id)});return privacy;}
     calls.push(sql); queries.push({ sql, args: structuredClone(args) });
     const result = (rows: Stored[] = [], rowCount = rows.length) => ({ rows: structuredClone(rows), rowCount });
     if (sql.startsWith('BEGIN')) { previous = structuredClone(state); return result(); }
@@ -428,4 +429,14 @@ test('EDA Messaging owner rechecks the scheduled deadline after waiting for life
   assert.equal(f.calls.find(sql => sql.startsWith('BEGIN')), 'BEGIN ISOLATION LEVEL READ COMMITTED');
   assert.equal(f.state().conversation, null); assert.equal(f.state().messages.length, 0); assert.equal(f.state().commands.size, 0);
   assert.equal(f.state().events.length, 0); assert.equal(f.state().signals.length, 0);
+});
+
+test("doctor send and same-ID replay use the same name-masked text as history before redemption", async()=>{
+ const f=fixture(true),meta=f.meta(),input={content:"Jane Example has masakit na ulo",clientMessageId:randomUUID()};
+ const sent=await f.module.send(f.actor("send","doctor"),f.id,meta,input);
+ assert.equal(sent.message.content,"[Patient] has masakit na ulo");
+ const history=await f.module.history(f.actor("history","doctor"),f.id);
+ assert.equal(history.messages[0].content,sent.message.content);
+ const retry=await f.module.send(f.actor("send","doctor"),f.id,meta,input);
+ assert.equal(retry.created,false);assert.equal(retry.message.content,sent.message.content);
 });
